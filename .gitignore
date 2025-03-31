@@ -175,4 +175,4 @@ cython_debug/
 
 
 # Configuration files
-ExpenseTracker/config/*
+ExpenseTracker/config/*.json

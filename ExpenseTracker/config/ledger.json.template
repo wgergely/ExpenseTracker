@@ -1,0 +1,20 @@
+{
+  "id": "<SPREADSHEET_ID>",
+  "sheet": "<SHEET_NAME>",
+  "header": {
+    "ID": "int",
+    "Date":	"date",
+    "Original Description": "string",
+    "Split Type": "string",
+    "Category": "string",
+    "$€£": "float",
+    "£££": "float",
+    "£/€": "float",
+    "€€€": "float",
+    "Comments": "string",
+    "Reference": "string",
+    "Tax Classification": "string",
+    "Tax Year": "string",
+    "Account Name": "string"
+  }
+}
