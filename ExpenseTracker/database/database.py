@@ -144,7 +144,7 @@ class LocalCacheManager:
         """
         Creates or replaces the local cache database. A meta table is initialized to
         track whether the cache is valid, when data was last synced, and error details.
-        The transactions table is not created until data is actually pulled.
+        The transaction table is not created until data is actually pulled.
         """
         if DB_PATH.exists():
             logging.info('Deleting the existing DB file to create a new one.')

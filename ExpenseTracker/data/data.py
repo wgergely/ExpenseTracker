@@ -217,24 +217,3 @@ def get_expenses_summary(years_back: int = 5) -> pd.DataFrame:
     df_raw = load_transactions()
     df_prep = prepare_expenses_dataframe(df_raw, years_back=years_back)
     return get_monthly_expenses(df_prep)
-
-
-def example_usage():
-    """
-    A simple demonstration of how you might use these functions together.
-    This is not called automatically; you can remove or adapt it for your application.
-    """
-    # Load raw transactions from the DB
-    df_all = load_transactions()
-    # Filter for last 5 years, excluding Income/Transfers/etc.
-    df_expenses = prepare_expenses_dataframe(df_all, years_back=5)
-
-    # Get monthly expense summary
-    monthly_df = get_monthly_expenses(df_expenses)
-    print("Monthly Expense Summary (Last 5 Years):")
-    print(monthly_df)
-
-    # Pick a specific month, e.g. '2023-08', and get category breakdown
-    cat_breakdown = get_category_breakdown(df_expenses, '2023-08')
-    print("\nCategory Breakdown for 2023-08:")
-    print(cat_breakdown)
