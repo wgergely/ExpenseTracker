@@ -2,12 +2,18 @@
 MonthlyExpenseView Module
 
 This module provides a custom QTableView (MonthlyExpenseView) for displaying monthly expense data
-with a chart-like appearance. Double-clicking a row opens a popup that lists all transactions for
-the selected category using the new data layout from the model.
+with a chart-like appearance. Double-clicking any row opens a popup dialog that displays the
+transaction data for the selected category using the bespoke TransactionsModel and TransactionsView.
 """
 
+import logging
+
+import pandas as pd
 from PySide6 import QtCore, QtWidgets, QtGui
-from .model import TransactionsRole, MonthlyExpenseModel
+
+from .model import MonthlyExpenseModel
+from .model import TransactionsModel
+from ..ui import ui
 
 
 class AlignmentDelegate(QtWidgets.QStyledItemDelegate):
@@ -52,9 +58,9 @@ class MonthlyExpenseView(QtWidgets.QTableView):
     """
     MonthlyExpenseView is a custom QTableView for displaying monthly expense data.
 
-    It hides headers, enforces single row selection without outlines, and uses custom delegates
-    for a chart-like appearance. Double-clicking any row opens a popup listing transactions for
-    the selected category.
+    It hides headers, enforces single row selection, and uses custom delegates for a
+    chart-like appearance. A double-click on any row opens a popup dialog displaying the
+    transactions for the selected category using the bespoke transactions model/view.
     """
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -74,6 +80,8 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         self.setFocusPolicy(QtCore.Qt.NoFocus)
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
+
+        ui.set_stylesheet(self)
 
         self._init_delegates()
         self._connect_signals()
@@ -106,54 +114,43 @@ class MonthlyExpenseView(QtWidgets.QTableView):
     def handle_double_click(self, index: QtCore.QModelIndex) -> None:
         """
         Slot called on double-clicking a row.
-        Opens a popup dialog listing all transactions for the selected category.
+        Opens a popup dialog displaying transaction details for the selected category
+        using the bespoke TransactionsModel and TransactionsView.
         """
         if not index.isValid():
             return
+
         model = self.model()
         row = index.row()
-        # Retrieve transactions using the custom TransactionsRole from column 2.
-        idx = model.index(row, 2)
-        transactions = idx.data(TransactionsRole)
+
+        # Extract transactions for the selected category from the model's data.
+        try:
+            transactions = model.data_df.iloc[row]['transactions']
+        except (IndexError, KeyError) as ex:
+            logging.error(f"Error retrieving transactions for row {row}: {ex}")
+            return
+
         if not transactions:
             return
 
-        # Load ledger.json config to determine which transaction keys to display.
-        from ..database.database import load_config
-        config = load_config()
-        mapping = config.get('data_header_mapping', {})
-        # Define display keys (fallback defaults).
-        display_keys = {
-            'date': 'date',
-            'description': 'description',
-            'amount': 'amount',
-            'account': 'account'
-        }
-        # If mapping is provided, assume the keys defined in the config are the desired ones.
-        for key in display_keys:
-            if key in mapping:
-                display_keys[key] = key
+        # Create a DataFrame from the list of transaction dictionaries.
+        df_transactions = pd.DataFrame(transactions)
+        if df_transactions.empty:
+            return
 
-        # Create a popup dialog.
+        # Create a new TransactionsModel using the transaction DataFrame.
+        tx_model = TransactionsModel(df_transactions)
+
+        # Create and configure the popup dialog.
         dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle('Transactions')
+        dialog.setWindowTitle("Transactions")
+        dialog.setMinimumSize(800, 600)
         layout = QtWidgets.QVBoxLayout(dialog)
-        list_widget = QtWidgets.QListWidget(dialog)
-        layout.addWidget(list_widget)
 
-        # Populate the list with transaction details.
-        for tx in transactions:
-            # tx is expected to be a dictionary.
-            date_val = tx.get(display_keys['date'], '')
-            desc_val = tx.get(display_keys['description'], '')
-            amount_val = tx.get(display_keys['amount'], 0)
-            account_val = tx.get(display_keys['account'], '')
-            try:
-                amount_str = f'€{float(amount_val):.2f}'
-            except (ValueError, TypeError):
-                amount_str = ''
-            item_text = f"{date_val} | {desc_val} | {amount_str} | {account_val}"
-            list_widget.addItem(QtWidgets.QListWidgetItem(item_text))
+        # Create a TransactionsView and set its model.
+        tx_view = TransactionsView(dialog)
+        tx_view.setModel(tx_model)
+        layout.addWidget(tx_view)
 
         dialog.exec()
 
@@ -166,7 +163,7 @@ class TransactionsView(QtWidgets.QTableView):
     """
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
+        super().__init__(parent=parent)
         self._init_view()
 
     def _init_view(self) -> None:
