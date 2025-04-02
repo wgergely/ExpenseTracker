@@ -1,21 +1,19 @@
-# ExpensesTracker/lib/google/service.py
 """
 Google Sheets Service Module.
 
 Provides functions to load ledger configuration, authenticate with Google Sheets,
-and retrieve a specified worksheet as a NumPy array.
+and retrieve the specified worksheet as a pandas DataFrame.
 """
 
-import os
 import json
 import logging
+import os
 import socket
 import ssl
 import time
+from typing import Dict, Optional
 
-import numpy as np
-from typing import Dict, Any, Optional
-
+import pandas as pd
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -30,7 +28,8 @@ LEDGER_CONFIG_PATH = os.path.normpath(os.path.join(
     'ledger.json'
 ))
 
-def load_ledger_config(path: Optional[str] = None) -> Dict[str, str]:
+
+def load_config(path: Optional[str] = None) -> Dict[str, str]:
     """
     Loads the ledger configuration from a JSON file containing:
     {
@@ -46,9 +45,7 @@ def load_ledger_config(path: Optional[str] = None) -> Dict[str, str]:
 
     Raises:
         RuntimeError: If the file is missing, malformed, or lacks required fields.
-
     """
-
     if path is None:
         path = LEDGER_CONFIG_PATH
 
@@ -88,10 +85,8 @@ def create_sheets_service(force: bool = False):
         force: If True, forces new OAuth credentials instead of using cached credentials.
 
     Returns:
-        A Sheets API service client (googleapiclient.discovery.Resource).
-
+        A Sheets API service client.
     """
-
     creds = auth.authenticate(force=force)
     return build('sheets', 'v4', credentials=creds)
 
@@ -106,9 +101,7 @@ def verify_sheet_access(service, spreadsheet_id: str) -> None:
 
     Raises:
         RuntimeError: If the spreadsheet cannot be found or access is denied.
-
     """
-
     try:
         service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         logging.info(f'Access confirmed for spreadsheet "{spreadsheet_id}".')
@@ -130,21 +123,26 @@ def verify_sheet_access(service, spreadsheet_id: str) -> None:
 
 
 def fetch_sheet(
-    service,
-    spreadsheet_id: str,
-    worksheet_name: str,
-    max_attempts: int = 3,
-    wait_seconds: float = 2.0
-) -> np.ndarray:
+        service,
+        spreadsheet_id: str,
+        worksheet_name: str,
+        max_attempts: int = 3,
+        wait_seconds: float = 2.0
+) -> pd.DataFrame:
     """
-    Retrieves data from a specified worksheet as a NumPy array, retrying on network
-    and timeout errors. Returns numeric columns as unformatted floats rather than
-    strings with currency symbols.
-    """
-    import logging, time, socket, ssl
-    import numpy as np
-    from googleapiclient.errors import HttpError
+    Retrieves data from a specified worksheet as a pandas DataFrame.
+    The first row is assumed to be the header.
 
+    Args:
+        service: The Sheets API service client.
+        spreadsheet_id: The unique ID of the spreadsheet.
+        worksheet_name: The name of the worksheet.
+        max_attempts: Maximum number of fetch attempts.
+        wait_seconds: Seconds to wait between retries.
+
+    Returns:
+        A pandas DataFrame containing the worksheet data.
+    """
     range_name = f'{worksheet_name}!A:Z'
     attempt = 0
 
@@ -154,23 +152,26 @@ def fetch_sheet(
             result = service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                valueRenderOption='UNFORMATTED_VALUE'  # <--- KEY ARGUMENT
+                valueRenderOption='UNFORMATTED_VALUE'
             ).execute()
 
             rows = result.get('values', [])
             if not rows:
                 logging.warning(
-                    f'No data found in "{worksheet_name}". Returning an empty array.'
+                    f'No data found in "{worksheet_name}". Returning an empty DataFrame.'
                 )
-                return np.array([], dtype=object)
+                return pd.DataFrame()
 
-            data_array = np.array(rows, dtype=object)
+            # Assume the first row contains headers.
+            if len(rows) == 1:
+                df = pd.DataFrame(columns=rows[0])
+            else:
+                df = pd.DataFrame(rows[1:], columns=rows[0])
             logging.info(
-                f'Fetched {data_array.shape[0]} rows and {data_array.shape[1]} columns '
-                f'from "{worksheet_name}" on attempt {attempt} of {max_attempts} '
-                f'using UNFORMATTED_VALUE.'
+                f'Fetched {df.shape[0]} rows and {df.shape[1]} columns from "{worksheet_name}" '
+                f'on attempt {attempt} of {max_attempts} using UNFORMATTED_VALUE.'
             )
-            return data_array
+            return df
 
         except HttpError as http_err:
             msg = (
@@ -181,18 +182,16 @@ def fetch_sheet(
             raise RuntimeError(msg) from http_err
 
         except (socket.timeout, ssl.SSLError, TimeoutError) as to_err:
-            msg = (
+            logging.warning(
                 f'Timeout or SSL error on attempt {attempt} of {max_attempts} while fetching '
                 f'sheet "{worksheet_name}". Details: {to_err}'
             )
-            logging.warning(msg)
 
         except (ConnectionError, socket.gaierror, OSError) as conn_err:
-            msg = (
+            logging.warning(
                 f'Connection error on attempt {attempt} of {max_attempts} while fetching '
                 f'sheet "{worksheet_name}". Details: {conn_err}'
             )
-            logging.warning(msg)
 
         if attempt < max_attempts:
             logging.info(f'Retrying in {wait_seconds} seconds...')
@@ -204,27 +203,17 @@ def fetch_sheet(
             )
 
 
-def get_ledger_data(force: bool = False) -> np.ndarray:
+def get_data(force: bool = False) -> pd.DataFrame:
     """
-    Retrieves ledger data as a NumPy array using the configuration in ledger.json.
-
-    This function loads ledger.json to get the spreadsheet ID and worksheet name,
-    authenticates the user, optionally, forcing re-auth, verifies read access,
-    and fetches the data as a 2D NumPy array.
+    Retrieves ledger data as a pandas DataFrame using the configuration in ledger.json.
 
     Args:
         force: If True, forces new OAuth credentials.
 
     Returns:
-        A 2D NumPy array containing the ledger data.
-
-    Raises:
-        RuntimeError: If ledger.json is missing or invalid, credentials can't be obtained,
-            or access to the spreadsheet is denied.
-
+        A pandas DataFrame containing the ledger data.
     """
-
-    config = load_ledger_config()
+    config = load_config()
     spreadsheet_id = config['id']
     worksheet_name = config['sheet']
 

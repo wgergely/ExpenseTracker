@@ -1,0 +1,236 @@
+/* Material Design Dark Theme - Qt Style Sheet */
+/* Global base style for all widgets */
+QWidget {
+    background-color: #121212;
+    color: #E0E0E0;
+    font-family: 'Roboto', 'Segoe UI', 'Helvetica Neue', 'Arial', sans-serif;
+    font-size: 10pt;
+}
+QWidget:disabled {
+    color: #616161;  /* Disabled text (low opacity white) */
+}
+/* Remove default focus outline (we'll use custom borders) */
+*:focus {
+    outline: none;
+}
+/* Selection highlight for text (in any widget that supports selection) */
+QWidget {
+    selection-background-color: #BB86FC;
+    selection-color: #121212;
+}
+
+/* --- Buttons (QPushButton, QToolButton) --- */
+QPushButton, QToolButton {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+    border: 1px solid #2C2C2C;
+    border-radius: 4px;
+    padding: 4px 12px;          /* inner padding for a larger click target */
+}
+QPushButton:hover, QToolButton:hover {
+    background-color: #373737;  /* slightly lighter on hover */
+}
+QPushButton:pressed, QToolButton:pressed {
+    background-color: #1E1E1E;  /* darker when pressed */
+}
+QPushButton:focus, QToolButton:focus {
+    border: 1px solid #BB86FC;  /* purple focus outline */
+}
+
+/* --- Labels (QLabel) --- */
+/* Labels use the global font and color; ensure background is transparent */
+QLabel {
+    background-color: transparent;
+    color: #E0E0E0;
+}
+
+/* --- Text Input Fields --- */
+/* This styles QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDateEdit, etc. */
+QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+    border: 1px solid #2C2C2C;
+    border-radius: 4px;
+    padding: 4px 8px;
+    selection-background-color: #BB86FC;  /* text selection highlight */
+    selection-color: #121212;
+}
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QAbstractSpinBox:focus {
+    border: 1px solid #BB86FC;           /* highlight border on focus */
+}
+/* Placeholder text in inputs (if supported by Qt version) */
+QLineEdit, QAbstractSpinBox {
+    placeholder-text-color: #B0B0B0;     /* subtle gray for placeholder/hint */
+}
+
+/* --- Combo Boxes (QComboBox) --- */
+QComboBox {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+    border: 1px solid #2C2C2C;
+    border-radius: 4px;
+    padding: 4px 8px;
+    padding-right: 30px;  /* extra space for the dropdown arrow */
+}
+QComboBox:focus {
+    border: 1px solid #BB86FC;
+}
+/* Dropdown button (right side of QComboBox) */
+QComboBox::drop-down {
+    border: none;
+    background: transparent;
+}
+/* Dropdown arrow icon */
+QComboBox::down-arrow {
+    /* Use an inline triangle for the arrow (white).
+       Alternatively, an image icon can be used:
+       e.g., image: url(':/icons/down-arrow.png');
+    */
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #E0E0E0;  /* creates a ▼ shape */
+}
+/* Popup list view of the combo box */
+QComboBox QAbstractItemView {
+    background-color: #2C2C2C;
+    border: 1px solid #2C2C2C;
+    selection-background-color: #BB86FC;
+    selection-color: #121212;
+}
+
+/* --- Checkboxes & RadioButtons --- */
+QCheckBox, QRadioButton {
+    color: #E0E0E0;
+    spacing: 6px;  /* space between checkbox/radio and its label */
+}
+/* Indicator (the square checkbox or circle radio) */
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #E0E0E0;
+    background-color: #121212;
+}
+QCheckBox::indicator { border-radius: 3px;  }   /* square with slight rounding */
+QRadioButton::indicator { border-radius: 8px; } /* fully round for radio */
+/* Checked state styling */
+QCheckBox::indicator:checked {
+    background-color: #BB86FC;
+    border: 2px solid #BB86FC;
+}
+QRadioButton::indicator:checked {
+    background-color: #BB86FC;
+    border: 2px solid #BB86FC;
+}
+
+/* --- Menus (QMenuBar and QMenu) --- */
+QMenuBar {
+    background-color: #121212;
+    color: #E0E0E0;
+    border-bottom: 1px solid #2C2C2C;  /* separator line below the menu bar */
+}
+QMenuBar::item {
+    background: transparent;
+    color: #E0E0E0;
+    padding: 4px 8px;
+}
+QMenuBar::item:selected {
+    background: #1E1E1E;  /* hover highlight on menu bar items */
+    color: #E0E0E0;
+}
+QMenuBar::item:pressed {
+    background: #1E1E1E;
+    color: #E0E0E0;
+}
+QMenu {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
+    border: 1px solid #2C2C2C;
+}
+QMenu::item {
+    padding: 4px 24px;
+    background-color: transparent;
+}
+QMenu::item:selected {
+    background-color: #BB86FC;
+    color: #121212;
+}
+QMenu::separator {
+    height: 1px;
+    background: #2C2C2C;
+    margin: 4px 0;
+}
+
+/* --- Tooltips --- */
+QToolTip {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+    border: 1px solid #E0E0E0;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+/* --- Status Bar --- */
+QStatusBar {
+    background-color: #121212;
+    color: #E0E0E0;
+    border-top: 1px solid #2C2C2C;
+}
+
+/* --- Scroll Bars --- */
+QScrollBar:vertical {
+    background-color: #121212;
+    width: 12px;
+    margin: 0;
+}
+QScrollBar:horizontal {
+    background-color: #121212;
+    height: 12px;
+    margin: 0;
+}
+QScrollBar::handle {
+    background-color: #2C2C2C;
+    border-radius: 6px;
+}
+QScrollBar::handle:hover {
+    background-color: #BB86FC;
+}
+/* Hide scroll bar arrows and unused track space */
+QScrollBar::add-line, QScrollBar::sub-line,
+QScrollBar::add-page, QScrollBar::sub-page,
+QScrollBar::up-arrow, QScrollBar::down-arrow {
+    background: none;
+    border: none;
+    width: 0;
+    height: 0;
+}
+
+/* --- Progress Bar --- */
+QProgressBar {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+    text-align: center;
+    border: 1px solid #2C2C2C;
+    border-radius: 4px;
+}
+QProgressBar::chunk {
+    background-color: #BB86FC;
+    border-radius: 4px;
+}
+
+/* --- Sliders (QSlider) --- */
+QSlider::groove:horizontal, QSlider::groove:vertical {
+    background-color: #B0B0B0;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal, QSlider::handle:vertical {
+    background-color: #BB86FC;
+    border: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+}
+/* Position the vertical slider handle correctly */
+QSlider::handle:horizontal { margin: -5px 0; }
+QSlider::handle:vertical   { margin: 0 -5px; }

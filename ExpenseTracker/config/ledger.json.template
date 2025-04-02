@@ -1,5 +1,5 @@
 {
-  "id": "<SPREADSHEET_ID>",
+  "id": "<LEDGER_ID>",
   "sheet": "<SHEET_NAME>",
   "header": {
     "ID": "int",
@@ -7,7 +7,7 @@
     "Original Description": "string",
     "Split Type": "string",
     "Category": "string",
-    "$€£": "float",
+    "$€£": "string",
     "£££": "float",
     "£/€": "float",
     "€€€": "float",
@@ -16,5 +16,104 @@
     "Tax Classification": "string",
     "Tax Year": "string",
     "Account Name": "string"
+  },
+  "data_header_mapping": {
+    "date": "Date",
+    "amount": "€€€",
+    "description": "Original Description",
+    "category": "Category",
+    "account": "Account Name"
+  },
+  "categories": {
+    "Cash": {
+      "display_name": "Cash",
+      "color": "#BB86FC",
+      "description": "Cash transactions",
+      "excluded": false
+    },
+    "Charitable Giving": {
+      "display_name": "Charitable Giving",
+      "color": "#BB86FC",
+      "description": "Charitable donations",
+      "excluded": false
+    },
+    "Family": {
+      "display_name": "Family",
+      "color": "#BB86FC",
+      "description": "Family expenses",
+      "excluded": false
+    },
+    "Fees & Fines": {
+      "display_name": "Fees & Fines",
+      "color": "#BB86FC",
+      "description": "Fees and fines",
+      "excluded": false
+    },
+    "Food & Groceries": {
+      "display_name": "Food & Groceries",
+      "color": "#BB86FC",
+      "description": "Food and grocery expenses",
+      "excluded": false
+    },
+    "Income": {
+      "display_name": "Income",
+      "color": "#BB86FC",
+      "description": "Income transactions",
+      "excluded": true
+    },
+    "Leisure & Entertainment": {
+      "display_name": "Leisure & Entertainment",
+      "color": "#BB86FC",
+      "description": "Leisure and entertainment expenses",
+      "excluded": false
+    },
+    "Rent & Rates": {
+      "display_name": "Rent & Rates",
+      "color": "#BB86FC",
+      "description": "Rent and rates expenses",
+      "excluded": false
+    },
+    "Shopping & Merchandise": {
+      "display_name": "Shopping & Merchandise",
+      "color": "#BB86FC",
+      "description": "Shopping and merchandise expenses",
+      "excluded": false
+    },
+    "Services & Subscriptions": {
+      "display_name": "Services & Subscriptions",
+      "color": "#BB86FC",
+      "description": "Services and subscriptions expenses",
+      "excluded": false
+    },
+    "Miscellaneous": {
+      "display_name": "Miscellaneous",
+      "color": "#BB86FC",
+      "description": "Miscellaneous expenses",
+      "excluded": false
+    },
+    "Tax & Social Security": {
+      "display_name": "Tax & Social Security",
+      "color": "#BB86FC",
+      "description": "Tax and social security expenses",
+      "excluded": true
+    },
+    "Transfers": {
+      "display_name": "Transfers",
+      "color": "#BB86FC",
+      "description": "Transfer transactions",
+      "excluded": true
+    },
+    "Transport & Travel": {
+      "display_name": "Transport & Travel",
+      "color": "#BB86FC",
+      "description": "Transport and travel expenses",
+      "excluded": false
+    },
+    "Health": {
+      "display_name": "Health",
+      "color": "#BB86FC",
+      "description": "Health expenses",
+      "excluded": false
+    }
   }
 }

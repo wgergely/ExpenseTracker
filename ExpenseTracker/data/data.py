@@ -2,79 +2,34 @@
 Data Analytics API Module
 
 This module provides a high-level interface for loading transaction data from the local
-cache database, filtering and preparing it for analysis, and retrieving
-monthly or category-based expenditure summaries. The goal is to enable a future UI front-end
-to query spending trends easily.
+cache database, filtering and preparing it for analysis, and retrieving expenditure summaries.
 
-We focus on the last 5 years of data and use only the "€€€" (Eur) column for amounts.
-Categories such as "Transfers", "Income", and "Tax & Social Security" are excluded from
-expense calculations. Everything else is considered part of personal expenses.
-
+Examples:
+    >>> df = get_monthly_expenses("2023-06")
 """
 
-import logging
-import sqlite3
 import datetime
-from typing import Optional
+import logging
+
 import pandas as pd
 
-from ..database.database import DB_PATH, LocalCacheManager
+from ..database.database import load_config, get_cached_data
 
 logging.basicConfig(level=logging.INFO)
 
 
-# Categories that should be excluded from expense analytics
-# (e.g. "Transfers", "Income", "Tax & Social Security")
-EXCLUDED_CATEGORIES = {
-    "Transfers",
-    "Income",
-    "Tax & Social Security"
-}
-
-def load_transactions() -> pd.DataFrame:
-    """
-    Loads all rows from the 'transactions' table in the local cache database into a pandas
-    DataFrame. The DataFrame will contain columns matching the ledger definition, e.g.:
-        remote_id, Date, Original_Description, Category, €€€, etc.
-
-    If the local cache DB is invalid or missing, returns an empty DataFrame.
-
-    Returns:
-        A pandas DataFrame with all columns from the transactions table.
-    """
-    if not LocalCacheManager.verify_db():
-        logging.warning("Local cache DB is invalid or missing. Returning an empty DataFrame.")
-        return pd.DataFrame()
-
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        df = pd.read_sql_query("SELECT * FROM transactions", conn)
-    except sqlite3.Error as ex:
-        logging.error(f"Error reading from local DB: {ex}")
-        return pd.DataFrame()
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-    logging.info(f"Loaded {len(df)} rows from the 'transactions' table.")
-    return df
-
-
-def prepare_expenses_dataframe(
-    df: pd.DataFrame,
-    years_back: int = 5
-) -> pd.DataFrame:
+def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.DataFrame:
     """
     Prepares a DataFrame for expense analytics by:
-      - Ensuring a 'date' column is parsed as datetime.
-      - Filtering out rows older than 'years_back' years from today.
-      - Excluding categories that are not relevant to personal expenses (Transfers, Income, Tax, etc.).
-      - Renaming the '€€€' column to 'amount' for clarity.
-      - Dropping rows without a valid date or amount.
+      - Renaming columns based on the ledger.json "data_header_mapping" configuration.
+      - Parsing the date column as datetime.
+      - Filtering out rows older than 'years_back' years.
+      - Excluding rows with categories marked as excluded in the config.
+      - Converting the amount column to numeric and dropping invalid rows.
 
     Args:
-        df: The raw DataFrame loaded from the local DB.
-        years_back: How many years of data to keep, counting from today's date. Defaults to 5.
+        df: The raw DataFrame loaded from the cache.
+        years_back: Number of years of data to retain. Default is 5.
 
     Returns:
         A DataFrame containing only the relevant rows and columns for expense analytics.
@@ -82,138 +37,115 @@ def prepare_expenses_dataframe(
     if df.empty:
         return df
 
-    # Standardize column names to lowercase for convenience
-    df.columns = [c.lower() for c in df.columns]
-
-    # Convert 'date' to datetime. Some rows might be invalid or empty. We'll coerce them to NaT.
-    if 'date' not in df.columns:
-        logging.warning("No 'date' column found in DataFrame; returning empty.")
+    # Load configuration to get header mapping and category exclusions.
+    config = load_config()
+    mapping = config.get('data_header_mapping', {})
+    if not mapping:
+        logging.error('No data_header_mapping found in config; returning empty DataFrame.')
         return pd.DataFrame()
 
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    # Ensure required analytic fields are defined in the config.
+    analytics_required = {"date", "amount", "category"}
+    missing_required = analytics_required - set(mapping.keys())
+    if missing_required:
+        logging.error("Config missing required analytic fields: " + ", ".join(missing_required))
+        return pd.DataFrame()
 
-    # Filter out rows with no valid date
+    # Build a source-to-destination renaming map.
+    rename_map = {source: dest for dest, source in mapping.items()}
+    missing_sources = [src for src in rename_map if src not in df.columns]
+    if missing_sources:
+        logging.error(
+            f"Missing required source columns in data. Expected source columns (from config): {list(mapping.values())}; "
+            f"missing: {missing_sources}; found columns: {list(df.columns)}"
+        )
+        return pd.DataFrame()
+    df.rename(columns=rename_map, inplace=True)
+
+    # Verify that the required analytic columns exist after renaming.
+    for col in analytics_required:
+        if col not in df.columns:
+            logging.warning(f"No '{col}' column found after renaming; returning empty DataFrame.")
+            return pd.DataFrame()
+
+    try:
+        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    except Exception as ex:
+        logging.error(f'Error parsing dates: {ex}')
+        return pd.DataFrame()
     df = df.dropna(subset=['date'])
 
-    # Compute a cutoff date for 'years_back'
     today = datetime.datetime.utcnow().date()
-    cutoff_date = today.replace(year=today.year - years_back)
-    # Keep only rows >= cutoff_date
+    try:
+        cutoff_date = today.replace(year=today.year - years_back)
+    except ValueError:
+        cutoff_date = today - datetime.timedelta(days=years_back * 365)
     df = df[df['date'] >= pd.to_datetime(cutoff_date)]
 
-    # Exclude categories we don't want counted as expenses
-    if 'category' not in df.columns:
-        logging.warning("No 'category' column found; returning empty.")
-        return pd.DataFrame()
-
+    # Load excluded categories from config.
+    categories_config = config.get('categories', {})
+    excluded_categories = {cat for cat, info in categories_config.items() if info.get('excluded', False)}
     df['category'] = df['category'].fillna('Miscellaneous')
-    mask_excluded = df['category'].isin(EXCLUDED_CATEGORIES)
-    df = df[~mask_excluded]
+    df = df[~df['category'].isin(excluded_categories)]
 
-    # Rename the "€€€" column to "amount" if it exists
-    # and parse it to float if not already.
-    if '€€€' not in df.columns:
-        logging.warning("No '€€€' column found for amounts; returning empty.")
+    try:
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+    except Exception as ex:
+        logging.error(f'Error converting amounts to numeric: {ex}')
         return pd.DataFrame()
-    df.rename(columns={'€€€': 'amount'}, inplace=True)
-
-    # Convert amounts to float, dropping rows that fail conversion
-    df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
     df = df.dropna(subset=['amount'])
 
-    # If you want negative amounts for expenses, you could do it here:
-    # df['amount'] = df['amount'] * -1
-
     logging.info(
-        f"Prepared a DataFrame of {len(df)} expense rows from the last {years_back} years, "
-        f"excluding categories {EXCLUDED_CATEGORIES}."
+        f'Prepared a DataFrame of {len(df)} expense rows from the last {years_back} years, '
+        f'excluding categories: {sorted(excluded_categories)}.'
     )
     return df
 
 
-def get_monthly_expenses(df: pd.DataFrame) -> pd.DataFrame:
+def get_monthly_expenses(year_month: str) -> pd.DataFrame:
     """
-    Groups expenses by Year-Month and calculates total monthly spending.
-    The DataFrame is expected to have a valid 'date' column and an 'amount' column.
+    Returns a detailed breakdown by category for the specified year_month (format: 'YYYY-MM')
+    using exclusively pandas operations. For each category, the resulting DataFrame contains:
+      - "category": the category name,
+      - "total": the sum of all expenses in that category,
+      - "transactions": a list of transaction objects for that category. Each transaction object
+        includes only the keys defined in the ledger.json "data_header_mapping".
 
     Args:
-        df: A prepared DataFrame containing date and amount columns.
+        year_month: A string representing the target month in 'YYYY-MM' format.
 
     Returns:
-        A DataFrame with columns: ['year_month', 'total_spend'] sorted by year_month ascending.
-        Each row represents the total sum of amounts for that month.
+        A pandas DataFrame with columns ['category', 'total', 'transactions']. If no data exists
+        for the specified month, an empty DataFrame is returned.
     """
-    if df.empty:
-        return pd.DataFrame(columns=['year_month', 'total_spend'])
+    df_raw = get_cached_data()
+    df_prepared = _prepare_expenses_dataframe(df_raw)
+    if df_prepared.empty:
+        return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    if 'date' not in df.columns or 'amount' not in df.columns:
-        logging.warning("DataFrame lacks required columns 'date' or 'amount'. Returning empty.")
-        return pd.DataFrame(columns=['year_month', 'total_spend'])
-
-    # Create a 'year_month' column (type Period) from 'date'
-    df['year_month'] = df['date'].dt.to_period('M')
-    monthly = df.groupby('year_month')['amount'].sum().reset_index()
-    monthly.rename(columns={'amount': 'total_spend'}, inplace=True)
-
-    # Convert Period back to string for a cleaner result
-    monthly['year_month'] = monthly['year_month'].astype(str)
-    monthly = monthly.sort_values('year_month').reset_index(drop=True)
-
-    return monthly
-
-
-def get_category_breakdown(df: pd.DataFrame, year_month: str) -> pd.DataFrame:
-    """
-    Returns the sum of amounts by category for the given year_month (format: 'YYYY-MM').
-
-    Args:
-        df: A prepared DataFrame with 'date', 'category', and 'amount' columns.
-        year_month: A string in the format 'YYYY-MM'. The function filters by this month.
-
-    Returns:
-        A DataFrame with columns: ['category', 'total_spend'].
-        Rows are sorted by total_spend descending.
-    """
-    if df.empty:
-        return pd.DataFrame(columns=['category', 'total_spend'])
-
-    if 'date' not in df.columns or 'amount' not in df.columns or 'category' not in df.columns:
-        logging.warning("DataFrame is missing 'date', 'amount', or 'category'. Returning empty.")
-        return pd.DataFrame(columns=['category', 'total_spend'])
-
-    # Convert year_month to a Period type for filtering
     try:
         target_period = pd.Period(year_month)
     except ValueError:
-        logging.warning(f"Invalid year_month format: {year_month}. Use 'YYYY-MM'. Returning empty.")
-        return pd.DataFrame(columns=['category', 'total_spend'])
+        logging.warning(f"Invalid year_month format: {year_month}. Use 'YYYY-MM'. Returning empty DataFrame.")
+        return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    # Filter the DataFrame to only that month
-    df_month = df[df['date'].dt.to_period('M') == target_period]
+    df_month = df_prepared[df_prepared['date'].dt.to_period('M') == target_period]
     if df_month.empty:
-        return pd.DataFrame(columns=['category', 'total_spend'])
+        return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    breakdown = df_month.groupby('category')['amount'].sum().reset_index()
-    breakdown.rename(columns={'amount': 'total_spend'}, inplace=True)
-    breakdown.sort_values('total_spend', ascending=False, inplace=True)
-    breakdown.reset_index(drop=True, inplace=True)
+    # Load header mapping from config to determine desired transaction keys.
+    config = load_config()
+    mapping = config.get('data_header_mapping', {})
+    desired_keys = list(mapping.keys())
 
+    # Group by category and aggregate totals and transactions using pandas.
+    breakdown = (
+        df_month.groupby('category')
+        .apply(lambda g: pd.Series({
+            'total': g['amount'].sum(),
+            'transactions': g[desired_keys].to_dict(orient='records')
+        }))
+        .reset_index()
+    )
+    breakdown = breakdown.sort_values('total', ascending=False).reset_index(drop=True)
     return breakdown
-
-
-def get_expenses_summary(years_back: int = 5) -> pd.DataFrame:
-    """
-    A convenience function that:
-      1) Loads transactions from the DB
-      2) Prepares the DataFrame for analysis (filtering out categories like Transfers/Income)
-      3) Returns monthly expenses for the last 'years_back' years
-
-    Args:
-        years_back: How many years of data to keep.
-
-    Returns:
-        A DataFrame with ['year_month', 'total_spend'] for each month in the range.
-    """
-    df_raw = load_transactions()
-    df_prep = prepare_expenses_dataframe(df_raw, years_back=years_back)
-    return get_monthly_expenses(df_prep)
