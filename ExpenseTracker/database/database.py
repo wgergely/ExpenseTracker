@@ -22,6 +22,7 @@ Examples:
 """
 
 import datetime
+import functools
 import json
 import logging
 import os
@@ -46,7 +47,7 @@ TABLE_TRANSACTIONS = 'transactions'
 TABLE_META = 'cache_meta'
 CACHE_MAX_AGE_DAYS = 7
 
-
+@functools.lru_cache(maxsize=1)
 def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     """
     Loads and validates the ledger.json file, which must contain at least:

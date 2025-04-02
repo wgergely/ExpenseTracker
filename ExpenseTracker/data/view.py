@@ -16,42 +16,18 @@ from .model import TransactionsModel
 from ..ui import ui
 
 
-class AlignmentDelegate(QtWidgets.QStyledItemDelegate):
-    """
-    A delegate to enforce text alignment in table cells.
-    """
-
-    def __init__(self, alignment: int, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.alignment = alignment
-
-    def initStyleOption(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex) -> None:
-        super().initStyleOption(option, index)
-        option.displayAlignment = self.alignment
-
-
-class ChartDelegate(QtWidgets.QStyledItemDelegate):
+class GraphDelegate(QtWidgets.QStyledItemDelegate):
     """
     A custom delegate to draw a simple bar chart for the chart column.
     """
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
-        value = index.data(QtCore.Qt.UserRole)
-        if value is None:
-            return super().paint(painter, option, index)
-        try:
-            value = float(value)
-        except (ValueError, TypeError):
-            return super().paint(painter, option, index)
-        painter.save()
-        rect = option.rect.adjusted(4, 4, -4, -4)
-        # Arbitrary scaling: maximum value corresponds to full width.
-        max_val = 1000.0
-        bar_width = int(rect.width() * min(value / max_val, 1.0))
-        bar_rect = QtCore.QRect(rect.left(), rect.top(), bar_width, rect.height())
-        painter.fillRect(bar_rect, option.palette.highlight())
-        painter.restore()
+        super().paint(painter, option, index)
+
+        if index.column() != 2:
+            # Only paint the graph column (2)
+            return
 
 
 class MonthlyExpenseView(QtWidgets.QTableView):
@@ -66,18 +42,18 @@ class MonthlyExpenseView(QtWidgets.QTableView):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
 
-        # Hide headers for a cleaner look.
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
 
-        # Use standard size policies.
-        self.setMinimumSize(640, 480)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Expanding
+        )
 
-        # Enforce single row selection.
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
+
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
 
@@ -87,9 +63,7 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         self._connect_signals()
 
     def _init_delegates(self) -> None:
-        self.setItemDelegateForColumn(0, AlignmentDelegate(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, self))
-        self.setItemDelegateForColumn(1, ChartDelegate(self))
-        self.setItemDelegateForColumn(2, AlignmentDelegate(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, self))
+        self.setItemDelegate(GraphDelegate(self))
 
     def _connect_signals(self) -> None:
         self.doubleClicked.connect(self.handle_double_click)
@@ -106,9 +80,12 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
 
+        header = self.verticalHeader()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        header.setDefaultSectionSize(ui.Size.RowHeight(1.4))
+
     def sizeHint(self) -> QtCore.QSize:
-        # Rely on standard size policies; return a default size.
-        return QtCore.QSize(640, 480)
+        return QtCore.QSize(480, 120)
 
     @QtCore.Slot(QtCore.QModelIndex)
     def handle_double_click(self, index: QtCore.QModelIndex) -> None:
@@ -138,21 +115,24 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         if df_transactions.empty:
             return
 
-        # Create a new TransactionsModel using the transaction DataFrame.
-        tx_model = TransactionsModel(df_transactions)
+        model = TransactionsModel(df_transactions)
 
-        # Create and configure the popup dialog.
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("Transactions")
-        dialog.setMinimumSize(800, 600)
-        layout = QtWidgets.QVBoxLayout(dialog)
+        dialog.setMinimumSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(1.0)
+        )
 
-        # Create a TransactionsView and set its model.
-        tx_view = TransactionsView(dialog)
-        tx_view.setModel(tx_model)
-        layout.addWidget(tx_view)
+        QtWidgets.QVBoxLayout(dialog)
+        o = ui.Size.Margin(1.0)
+        dialog.layout().setContentsMargins(o, o, o, o)
 
-        dialog.exec()
+        view = TransactionsView(dialog)
+        view.setModel(model)
+        dialog.layout().addWidget(view)
+
+        dialog.open()
 
 
 class TransactionsView(QtWidgets.QTableView):
@@ -170,15 +150,42 @@ class TransactionsView(QtWidgets.QTableView):
         """Initializes view properties and layout."""
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.setAlternatingRowColors(True)
-        self.horizontalHeader().setStretchLastSection(True)
+        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
         self.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
-        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+
         self.setShowGrid(True)
-        self.setMinimumSize(640, 480)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.setAlternatingRowColors(False)
+
+        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
 
     def sizeHint(self) -> QtCore.QSize:
         """Returns the preferred size for the view."""
-        return QtCore.QSize(800, 600)
+        return QtCore.QSize(800, 400)
+
+    def _init_header(self) -> None:
+        """Initializes the header properties."""
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+
+        # Set sorting enabled for the first column
+        header.setSortIndicatorShown(True)
+        header.setSortIndicator(0, QtCore.Qt.AscendingOrder)
+        header.setSectionsClickable(True)
+        header.setSectionsMovable(False)
+
+        header = self.verticalHeader()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        header.setDefaultSectionSize(ui.Size.RowHeight(1.8))
+        header.setHidden(True)
+
+    def setModel(self, model: TransactionsModel) -> None:
+        """Sets the model for the view and initializes the header."""
+        if not isinstance(model, TransactionsModel):
+            raise TypeError("Expected a TransactionsModel instance.")
+        super().setModel(model)
+        self._init_header()
