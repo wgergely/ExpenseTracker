@@ -99,7 +99,7 @@ class Color(enum.Enum):
     DarkBackground = (40, 40, 40)
     Background = (65, 65, 65)
     LightBackground = (85, 85, 85)
-    DisabledText = (145, 145, 145)
+    DisabledText = (135, 135, 135)
     SecondaryText = (185, 185, 185)
     Text = (225, 225, 225)
     SelectedText = (255, 255, 255)
@@ -326,4 +326,5 @@ def get_category_icon(category: str) -> QtGui.QIcon:
     if not icon_path.is_file():
         logging.warning(f'Icon not found for category: {category}. Using default icon.')
         return QtGui.QIcon()
-    return QtGui.QIcon(str(icon_path))
+    icon = QtGui.QIcon(str(icon_path))
+    return icon

@@ -1,12 +1,13 @@
 """
-MonthlyExpenseModel Module
+ExpenseModel Module
 
-This module provides the MonthlyExpenseModel, a QAbstractTableModel for displaying
-monthly expense data per category with a summary row. The model now works with the
-new data structure from the data module, which returns a pandas DataFrame with
-columns 'category', 'total', and 'transactions'. Display labels for "category" and "amount"
-are derived from the ledger.json "data_header_mapping" configuration.
+This module provides the ExpenseModel, a QAbstractTableModel for displaying
+expense data per category over a specified period with a summary row.
+The model works with the new data structure from the data module, which returns a
+pandas DataFrame with columns 'category', 'total', and 'transactions'. Display labels
+for "category" and "amount" are derived from the ledger.json "data_header_mapping" configuration.
 """
+
 import functools
 import logging
 import math
@@ -15,34 +16,39 @@ from typing import Any, Dict
 import pandas as pd
 from PySide6 import QtCore
 
-from ..ui import ui
 from .data import get_monthly_expenses
 from ..database.database import load_config, get_cached_data
+from ..ui import ui
 
 # Custom roles
 TransactionsRole = QtCore.Qt.UserRole + 1
 MaximumRole = QtCore.Qt.UserRole + 2
 MinimumRole = QtCore.Qt.UserRole + 3
 AverageRole = QtCore.Qt.UserRole + 4
+TotalRole = QtCore.Qt.UserRole + 5
+RateRole = QtCore.Qt.UserRole + 6
 
 
-class MonthlyExpenseModel(QtCore.QAbstractTableModel):
+class ExpenseModel(QtCore.QAbstractTableModel):
     """
-    MonthlyExpenseModel provides a table model for monthly expense data per category.
-    It displays, for a given target month, each expense category with its total and
+    ExpenseModel provides a table model for expense data per category.
+    It displays, for a given target month and span, each expense category with its total and
     a detailed list of transactions. A summary string is provided via tooltips.
+
+    Attributes:
+        columns (list): The table columns.
+        year_month (str): The starting target month in 'YYYY-MM' format.
+        span (int): The number of months to include, starting from year_month.
     """
     columns = ['Category', 'Chart', 'Amount']
 
-    def __init__(self, year_month: str, parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, year_month: str, span: int = 1, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName('MonthlyExpenseModel')
-
-        self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
+        self.setObjectName('ExpenseModel')
         self.year_month: str = year_month
-
+        self.span: int = span
+        self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
         self._transactions_mapping: Dict[Any, Any] = {}
-
         self.refresh_data()
 
     @QtCore.Slot()
@@ -57,13 +63,11 @@ class MonthlyExpenseModel(QtCore.QAbstractTableModel):
             self.endResetModel()
 
     def _load_data(self) -> None:
-        # Retrieve the breakdown DataFrame for the target month using the new data API.
-        breakdown = get_monthly_expenses(self.year_month)
-
+        # Retrieve the breakdown DataFrame for the target period using the new data API.
+        breakdown = get_monthly_expenses(self.year_month, span=self.span)
         # Optionally add a total row aggregating all categories.
         if not breakdown.empty:
             overall_total = breakdown['total'].sum()
-            # Aggregate transactions from all categories (excluding any existing 'Total' row).
             all_trans = []
             for _, row in breakdown.iterrows():
                 if row['category'].strip().lower() != 'total':
@@ -102,7 +106,6 @@ class MonthlyExpenseModel(QtCore.QAbstractTableModel):
         if not row.empty:
             total_val = row.iloc[0]['total']
 
-        # Determine the account key using the ledger.json config.
         config = load_config()
         mapping = config.get('data_header_mapping', {})
         account_key = 'account'
@@ -120,6 +123,11 @@ class MonthlyExpenseModel(QtCore.QAbstractTableModel):
         self.year_month = year_month
         self.refresh_data()
 
+    @QtCore.Slot()
+    def set_span(self, span: int) -> None:
+        self.span = span
+        self.refresh_data()
+
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self.data_df)
 
@@ -132,12 +140,32 @@ class MonthlyExpenseModel(QtCore.QAbstractTableModel):
 
         row = index.row()
         col = index.column()
-        if row < 0 or row >= len(self.data_df):
+        if row < 0 or row >= self.data_df.shape[0]:
             return None
 
         record = self.data_df.iloc[row]
         category = record['category']
         total_value = record['total']
+
+        df = self.data_df.iloc[:-1][['total']].abs()
+
+        if role == AverageRole:
+            return df.mean().iloc[0]
+        if role == MaximumRole:
+            return df.max().iloc[0]
+        if role == MinimumRole:
+            return df.min().iloc[0]
+        if role == TotalRole:
+            return df.sum().iloc[0]
+        if role == RateRole:
+            total_value = abs(total_value)
+            v = float(abs(total_value))
+            _min = 0
+            _max = float(df.max().iloc[0])
+            v = (v - _min) / (_max - _min)
+            if total_value > 0:
+                v = max(v, 0.025)
+            return v
 
         if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.StatusTipRole):
             return self._get_summary(category)
@@ -145,35 +173,35 @@ class MonthlyExpenseModel(QtCore.QAbstractTableModel):
         if role == TransactionsRole:
             return self._transactions_mapping.get(category, [])
 
+        if role == QtCore.Qt.FontRole:
+            if index.row() == self.rowCount() - 1:
+                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
+                font.setBold(True)
+                if col == 2:
+                    font.setUnderline(True)
+                return font
+
         if col == 0:
             if role == QtCore.Qt.DecorationRole:
                 return ui.get_category_icon(category)
-
-            if role == QtCore.Qt.UserRole:
-                return category
-
             if role == QtCore.Qt.DisplayRole:
                 config = load_config()
                 categories = config.get('categories', {})
                 if not categories:
                     return category
-
                 if category in categories:
                     display_name = categories[category]['display_name']
                 else:
                     display_name = category
-
                 return display_name
 
         elif col == 1:
-            # Chart column: no display; return total in UserRole.
             if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
                 return ''
             if role == QtCore.Qt.UserRole:
                 return total_value
 
         elif col == 2:
-            # Amount column: display formatted total; return raw total in UserRole.
             if role == QtCore.Qt.DisplayRole:
                 return f'€{math.ceil(abs(total_value))}'
             if role == QtCore.Qt.UserRole:
@@ -243,39 +271,53 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     return value.strftime('%d/%m/%Y')
                 else:
                     return f'{value}'
-
             elif col == 1:
-                # Ensure float value is formatted as eur currency with 2 decimals
+                # Ensure float value is formatted as EUR currency with 2 decimals.
                 if isinstance(value, float):
-                    return f'€{value:.2f}'
+                    return f'€{abs(value):.2f}'
                 elif isinstance(value, int):
-                    return f'€{value}.00'
+                    return f'€{abs(value)}.00'
                 else:
                     return f'{value}'
-
             elif col == 2:
-                # Format the description to replace newlines with commas
+                # Format the description to replace newlines with commas.
                 if isinstance(value, str):
-                    return ', '.join(value.split('\n'))
+                    first_line = value.split('\n')[0]
+                    other_lines = value.split('\n')[1:] if len(value.split('\n')) > 1 else []
+                    other_lines = [line.strip() for line in other_lines if line.strip()]
+                    if other_lines:
+                        other_lines = f', '.join(other_lines)
+                    else:
+                        other_lines = ''
+                    return f'{first_line}\n{other_lines}'
                 else:
                     return f'{value}'
-
             elif col == 3:
-                # Map category name to display name
+                # Map category name to display name.
                 config = load_config()
                 categories = config.get('categories', {})
                 if not categories:
                     return f'{value}'
-
                 if value in categories:
                     display_name = categories[value]['display_name']
                 else:
                     display_name = f'{value}'
                 return display_name
-
             else:
                 return f'{value}'
 
+        elif role == QtCore.Qt.DecorationRole:
+            if col == 3:
+                return ui.get_category_icon(value)
+
+        elif role == QtCore.Qt.FontRole:
+            if index.column() == 0:
+                font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+                font.setBold(False)
+                return font
+            if index.column() == 2:
+                font, _ = ui.Font.MediumFont(ui.Size.SmallText(1.0))
+                return font
 
         elif role == QtCore.Qt.EditRole:
             return value
@@ -283,7 +325,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> any:
-
         if role != QtCore.Qt.DisplayRole:
             return None
         if orientation == QtCore.Qt.Horizontal:

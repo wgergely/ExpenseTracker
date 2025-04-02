@@ -102,43 +102,49 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
     return df
 
 
-def get_monthly_expenses(year_month: str) -> pd.DataFrame:
+def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: int = 1) -> pd.DataFrame:
     """
-    Returns a detailed breakdown by category for the specified year_month (format: 'YYYY-MM')
-    using exclusively pandas operations. For each category, the resulting DataFrame contains:
+    Returns a detailed breakdown by category for the specified period starting at year_month
+    (format: 'YYYY-MM') and spanning a given number of months using exclusively pandas operations.
+    For each category, the resulting DataFrame contains:
       - "category": the category name,
       - "total": the sum of all expenses in that category,
       - "transactions": a list of transaction objects for that category. Each transaction object
         includes only the keys defined in the ledger.json "data_header_mapping".
 
     Args:
-        year_month: A string representing the target month in 'YYYY-MM' format.
+        year_month: A string representing the starting target month in 'YYYY-MM' format.
+        sort_column: The column to sort the resulting DataFrame by. Default is 'category'.
+        span: Number of months to include starting from the given year_month. Defaults to 1.
 
     Returns:
         A pandas DataFrame with columns ['category', 'total', 'transactions']. If no data exists
-        for the specified month, an empty DataFrame is returned.
+        for the specified period, an empty DataFrame is returned.
     """
     df_raw = get_cached_data()
     df_prepared = _prepare_expenses_dataframe(df_raw)
     if df_prepared.empty:
         return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
+    if span < 1:
+        logging.warning(f"Invalid span {span}. Span must be >= 1. Returning empty DataFrame.")
+        return pd.DataFrame(columns=['category', 'total', 'transactions'])
+
     try:
-        target_period = pd.Period(year_month)
+        start_period = pd.Period(year_month)
     except ValueError:
         logging.warning(f"Invalid year_month format: {year_month}. Use 'YYYY-MM'. Returning empty DataFrame.")
         return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    df_month = df_prepared[df_prepared['date'].dt.to_period('M') == target_period]
+    target_periods = [start_period + i for i in range(span)]
+    df_month = df_prepared[df_prepared['date'].dt.to_period('M').isin(target_periods)]
     if df_month.empty:
         return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    # Load header mapping from config to determine desired transaction keys.
     config = load_config()
     mapping = config.get('data_header_mapping', {})
     desired_keys = list(mapping.keys())
 
-    # Group by category and aggregate totals and transactions using pandas.
     breakdown = (
         df_month.groupby('category')
         .apply(lambda g: pd.Series({
@@ -147,5 +153,8 @@ def get_monthly_expenses(year_month: str) -> pd.DataFrame:
         }))
         .reset_index()
     )
-    breakdown = breakdown.sort_values('total', ascending=False).reset_index(drop=True)
+
+    # Filter out uncategorized transactions (where category is NaN or empty)
+    breakdown = breakdown[breakdown['category'].notna() & (breakdown['category'] != '')]
+    breakdown = breakdown.sort_values(sort_column, ascending=True).reset_index(drop=True)
     return breakdown

@@ -125,8 +125,8 @@ QPushButton {
 }
 
 QPushButton:disabled {
-    color: <SecondaryText>;
-    background-color: <DarkBackground>;
+    color: <DisabledText>;
+    background-color: <Transparent>;
     border: <Separator@1.0>px solid <DarkBackground>;
 }
 
@@ -473,14 +473,12 @@ QToolTip {
 }
 
 
-
-
-
 QToolBar {
     font-size: <MediumText@1.0>px;
     background-color: <DarkBackground>;
     border: <Separator@1.0>px solid <DarkBackground>;
     border-radius: <Indicator@1.5>px;
+    spacing: <Indicator@4.0>px;
     padding: <Indicator@1.0>px;
     margin: 0;
 }
@@ -513,4 +511,23 @@ QSplitter::handle:horizontal {
 }
 QSplitter::handle:vertical {
     height: <Separator@1.0>px;
+}
+
+
+YearMonthSelector QToolButton {
+    background-color: <DarkBackground>;
+    border: <Separator@1.0>px solid <Transparent>;
+    padding: <Indicator@1.5>px;
+    border-radius: <Indicator@1.5>px;
+    padding: 0;
+    margin: 0;
+}
+
+YearMonthPopup {
+    padding: <Margin@0.5>px;
+    border: <Separator@1.0>px solid <DarkBackground>;
+    border-radius: <Indicator@1.5>px;
+}
+
+RangeSelectorBar {
 }

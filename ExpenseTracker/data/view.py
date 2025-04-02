@@ -11,7 +11,8 @@ import logging
 import pandas as pd
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from .model import MonthlyExpenseModel
+from .model import ExpenseModel
+from .model import RateRole
 from .model import TransactionsModel
 from ..ui import ui
 
@@ -25,9 +26,63 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
               index: QtCore.QModelIndex) -> None:
         super().paint(painter, option, index)
 
-        if index.column() != 2:
-            # Only paint the graph column (2)
+        if index.column() != 1:
             return
+
+        if index.row() == index.model().rowCount() - 1:
+            return
+
+        selected = option.state & QtWidgets.QStyle.State_Selected
+        hover = option.state & QtWidgets.QStyle.State_MouseOver
+
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+
+        rect = QtCore.QRectF(option.rect)
+        offset = ui.Size.Indicator(0.8)
+
+        rect = rect.adjusted(
+            offset,
+            offset,
+            -offset,
+            -offset
+        )
+
+        center = rect.center()
+
+        if selected or hover:
+            rect.setHeight(ui.Size.Margin(0.6))
+        else:
+            rect.setHeight(ui.Size.Margin(0.5))
+
+        rect.moveCenter(center)
+
+        gradient = QtGui.QLinearGradient(
+            rect.topLeft(),
+            rect.topRight()
+        )
+        gradient.setColorAt(0.0, ui.Color.Green())
+        gradient.setColorAt(1.0, ui.Color.LightRed())
+
+        # Calculate
+        width = float(rect.width()) * index.data(RateRole)
+        width = max(width, ui.Size.Separator(1.0)) if index.data(RateRole) > 0.0 else width
+        rect.setWidth(width)
+
+        painter.setBrush(gradient)
+        pen = QtCore.Qt.NoPen
+
+        painter.setPen(pen)
+
+        if hover or selected:
+            o = ui.Size.Separator(5.0)
+        else:
+            o = ui.Size.Separator(3.0)
+        painter.drawRoundedRect(
+            rect,
+            o,
+            o
+        )
 
 
 class MonthlyExpenseView(QtWidgets.QTableView):
@@ -57,6 +112,9 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
 
+        self.setWordWrap(True)
+        self.setTextElideMode(QtCore.Qt.ElideRight)
+
         ui.set_stylesheet(self)
 
         self._init_delegates()
@@ -69,8 +127,8 @@ class MonthlyExpenseView(QtWidgets.QTableView):
         self.doubleClicked.connect(self.handle_double_click)
 
     def setModel(self, model):
-        if not isinstance(model, MonthlyExpenseModel):
-            raise TypeError("Expected a MonthlyExpenseModel instance.")
+        if not isinstance(model, ExpenseModel):
+            raise TypeError("Expected a ExpenseModel instance.")
         super().setModel(model)
         self._init_section_sizing()
 
