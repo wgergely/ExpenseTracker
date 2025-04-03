@@ -90,6 +90,7 @@ def verify_db() -> bool:
     if not DB_PATH.exists():
         logging.info('No local cache DB found.')
         return False
+
     try:
         with sqlite3.connect(str(DB_PATH)) as conn:
             if not _table_exists(conn, TABLE_TRANSACTIONS):
@@ -105,6 +106,7 @@ def verify_db() -> bool:
                 return False
             logging.info('Local cache database is present, valid, and not stale.')
             return True
+
     except sqlite3.Error as ex:
         logging.warning(f'Error while verifying the local DB: {ex}')
         return False
@@ -197,11 +199,27 @@ def clear_local_cache() -> None:
     """
     Removes the entire local DB file from the system.
     """
-    if DB_PATH.exists():
-        DB_PATH.unlink()
-        logging.info('The local DB file was removed.')
-    else:
+    if not DB_PATH.exists():
         logging.info('No local DB file found to clear.')
+        return True
+
+    # Ensure the DB file is not in use before deleting and close all connections before unlinking
+    try:
+        with sqlite3.connect(str(DB_PATH)) as conn:
+            conn.close()
+    except sqlite3.Error as ex:
+        logging.error(f'Error closing the local DB connection: {ex}')
+        return False
+
+    try:
+        DB_PATH.unlink()
+    except OSError as ex:
+        logging.error(f'Error removing the local DB file: {ex}')
+        return False
+
+    logging.info('The local DB file was removed.')
+    return True
+
 
 
 def invalidate_cache(reason: str) -> None:
@@ -210,6 +228,7 @@ def invalidate_cache(reason: str) -> None:
     """
     if not DB_PATH.exists():
         return
+
     with sqlite3.connect(str(DB_PATH)) as conn:
         if _table_exists(conn, TABLE_META):
             conn.execute(f"""

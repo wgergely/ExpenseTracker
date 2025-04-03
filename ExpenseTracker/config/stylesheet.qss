@@ -19,6 +19,9 @@ QWidget:disabled {
 QWidget:focus {
     border: <Separator@2.0>px solid <Blue>;
 }
+QWidget:focus:hover {
+    border: <Separator@2.0>px solid <Text>;
+}
 
 QStackedWidget {
     background-color: <VeryDarkBackground>;

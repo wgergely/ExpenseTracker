@@ -1,11 +1,16 @@
-"""Google OAuth2 Authentication Module.
+"""
+Google OAuth2 Authentication Module.
 
 This module provides a high-level interface for authenticating
-Google services and getting valid credentials. Credentials
-are cached locally in the OS-specific temporary directory to
-avoid repeated logins.
+Google services and obtaining valid credentials. Credentials are cached
+locally in an OS-specific temporary directory to avoid repeated logins.
 
+This implementation uses a QThread to run the OAuth web flow asynchronously,
+and a custom QDialog to show authentication progress. The dialog displays
+a live countdown of the remaining time and a Cancel button. If the user cancels
+or the flow does not complete within 60 seconds, the process is aborted.
 """
+
 import json
 import logging
 import os
@@ -18,12 +23,14 @@ import google.auth.transport.requests
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
 
+from PySide6 import QtCore, QtWidgets
+
 logging.basicConfig(level=logging.INFO)
 
-# Adjust the SCOPES you need, for example, for Sheets read/write.
+# Adjust the scopes as needed (e.g. for Sheets read/write)
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# Fixed location of client_secret.json (relative to this Python module).
+# Fixed location of client_secret.json (relative to this module)
 CLIENT_SECRETS_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__),
     '..',
@@ -33,30 +40,17 @@ CLIENT_SECRETS_PATH = os.path.normpath(os.path.join(
 
 
 def get_temp_auth_dir() -> str:
-    """Get or create the path to the temporary folder used for credential caching.
-
-    Returns:
-        str: A string representing the path to the authentication directory.
-    """
+    """Get or create the temporary folder used for credential caching."""
     auth_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpensesTracker' / 'auth'
     auth_dir.mkdir(parents=True, exist_ok=True)
     return str(auth_dir)
 
 
 def load_credentials(token_path: str) -> Optional[google.oauth2.credentials.Credentials]:
-    """Attempt to load previously saved credentials from the specified token path.
-
-    Args:
-        token_path (str): Path to the credentials JSON file.
-
-    Returns:
-        google.oauth2.credentials.Credentials | None:
-            Credentials if they exist and parse successfully, or `None` if loading fails.
-    """
+    """Load cached credentials from the given token path."""
     if not os.path.exists(token_path):
         logging.info(f'No token file found at {token_path}.')
         return None
-
     try:
         creds = google.oauth2.credentials.Credentials.from_authorized_user_file(token_path)
         return creds
@@ -66,29 +60,14 @@ def load_credentials(token_path: str) -> Optional[google.oauth2.credentials.Cred
 
 
 def save_credentials(creds: google.oauth2.credentials.Credentials, token_path: str) -> None:
-    """Save the provided credentials to the specified token path.
-
-    Args:
-        creds (google.oauth2.credentials.Credentials): The credentials to save.
-        token_path (str): Path where the credentials should be stored.
-    """
+    """Save the given credentials to the specified token path."""
     with open(token_path, 'w', encoding='utf-8') as token_file:
         token_file.write(creds.to_json())
     logging.info(f'Credentials saved to {token_path}.')
 
 
 def load_client_config(path: str) -> Dict[str, Any]:
-    """Load the client_secret JSON file from disk and return its contents.
-
-    Args:
-        path (str): Path to the client_secret.json file.
-
-    Raises:
-        RuntimeError: If the file doesn't exist or isn't valid JSON.
-
-    Returns:
-        Dict[str, Any]: Parsed JSON contents of the client_secret file.
-    """
+    """Load and parse the client_secret JSON file."""
     if not os.path.exists(path):
         message = (
             f'No client_secret.json found at {path}.\n\n'
@@ -101,48 +80,124 @@ def load_client_config(path: str) -> Dict[str, Any]:
             '4. Download the JSON and place it at the specified path.\n'
         )
         raise RuntimeError(message)
-
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data
     except json.JSONDecodeError as ex:
-        message = (
-            f'The file at {path} is not valid JSON or is corrupted.\n'
-            f'Error details: {ex}'
-        )
+        message = f'The file at {path} is not valid JSON or is corrupted.\nError details: {ex}'
         raise RuntimeError(message)
 
 
-def validate_installed_app_config(client_config: Dict[str, Any]) -> None:
-    """Ensure the JSON config has the correct structure for an "Installed App" OAuth client.
+def validate_client_config(client_config: Dict[str, Any]) -> str:
+    """
+    Validate that the client configuration is for an OAuth client.
+    Accept either an "installed" or "web" configuration.
 
-    Specifically, check the presence of an 'installed' key and required subkeys.
-
-    Args:
-        client_config (Dict[str, Any]): The loaded JSON data.
+    Returns:
+        The key used ("installed" or "web").
 
     Raises:
-        RuntimeError: If the data is missing essential fields or structure.
+        RuntimeError: If neither configuration is present or required fields are missing.
     """
-    if 'installed' not in client_config:
-        message = (
-            "The JSON doesn't include an 'installed' section, which indicates this "
-            'is not an Installed App OAuth client JSON.\n'
-            'Make sure you created an OAuth Client of type "Desktop App" in Google Cloud.\n'
-        )
-        raise RuntimeError(message)
-
+    key = None
+    if "installed" in client_config:
+        key = "installed"
+    elif "web" in client_config:
+        key = "web"
+    else:
+        raise RuntimeError("Client configuration does not contain an 'installed' or 'web' section.")
     required_keys = ['client_id', 'auth_uri', 'token_uri']
-    installed_part = client_config['installed']
-
-    missing = [k for k in required_keys if k not in installed_part]
+    config_section = client_config[key]
+    missing = [k for k in required_keys if k not in config_section]
     if missing:
-        message = (
-            f"Missing required fields in the 'installed' section: {missing}\n"
-            'Please recreate or re-download your Desktop App OAuth JSON.'
+        raise RuntimeError(f"Missing required fields in the '{key}' section: {missing}.")
+    return key
+
+
+class AuthFlowWorker(QtCore.QThread):
+    """
+    QThread subclass that runs the OAuth web flow.
+
+    Emits:
+      - resultReady(object): with the credentials on success.
+      - errorOccurred(str): with an error message on failure.
+    """
+    resultReady = QtCore.Signal(object)
+    errorOccurred = QtCore.Signal(str)
+
+    def __init__(self, flow: google_auth_oauthlib.flow.InstalledAppFlow, parent=None):
+        super().__init__(parent)
+        self.flow = flow
+        self.creds = None
+
+    def run(self):
+        try:
+            self.creds = self.flow.run_local_server(port=0)
+            if not self.creds or not self.creds.token:
+                self.errorOccurred.emit("Authentication did not complete successfully.")
+            else:
+                self.resultReady.emit(self.creds)
+        except Exception as ex:
+            self.errorOccurred.emit(str(ex))
+
+
+class AuthProgressDialog(QtWidgets.QDialog):
+    """
+    A dialog that shows authentication progress. It includes instructions,
+    a live countdown of the remaining time (which will be replaced with a timeout
+    message upon expiry), and a Cancel button.
+    """
+    cancelled = QtCore.Signal()
+
+    def __init__(self, timeout_seconds: int = 60, parent=None):
+        from .. import ui
+        print("Parent:", ui.parent())
+
+        super().__init__(parent=ui.parent())
+        self.setWindowTitle("Authenticating with Google")
+        self.setModal(True)
+        self.resize(400, 180)
+        self.timeout_seconds = timeout_seconds
+        self.remaining = timeout_seconds
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        instructions = QtWidgets.QLabel(
+            "A browser window should have opened for Google sign-in.\n"
+            "Please complete sign-in in your browser.\n"
+            "Waiting for you to sign in..."
         )
-        raise RuntimeError(message)
+        layout.addWidget(instructions)
+
+        self.countdownLabel = QtWidgets.QLabel(f"Time remaining: {self.remaining} seconds")
+        layout.addWidget(self.countdownLabel)
+
+        self.statusLabel = QtWidgets.QLabel("")
+        layout.addWidget(self.statusLabel)
+
+        cancelButton = QtWidgets.QPushButton("Cancel")
+        cancelButton.clicked.connect(self.on_cancel)
+        layout.addWidget(cancelButton)
+
+        self.countdownTimer = QtCore.QTimer(self)
+        self.countdownTimer.setInterval(1000)
+        self.countdownTimer.timeout.connect(self.update_countdown)
+        self.countdownTimer.start()
+
+    def update_countdown(self):
+        self.remaining -= 1
+        self.countdownLabel.setText(f"Time remaining: {self.remaining} seconds")
+        if self.remaining <= 0:
+            self.countdownTimer.stop()
+
+    def on_cancel(self):
+        self.cancelled.emit()
+        self.reject()
+
+    def show_timeout_message(self):
+        self.countdownLabel.setText("Authentication timed out. Please try again.")
+        self.countdownTimer.stop()
 
 
 def authenticate(
@@ -150,74 +205,97 @@ def authenticate(
         token_filename: str = 'auth_token.json',
         force: bool = False,
 ) -> google.oauth2.credentials.Credentials:
-    """Authenticate the user via OAuth2 and return valid credentials.
+    """
+    Authenticate the user via OAuth2 and return valid credentials.
 
-    Args:
-        scopes (List[str], optional): List of OAuth2 scopes. Defaults to DEFAULT_SCOPES.
-        token_filename (str, optional): Name of the token file. Defaults to 'auth_token.json'.
-        force (bool, optional): If True, skip any existing credentials and re-auth. Defaults to False.
+    This function first attempts to load and refresh cached credentials.
+    If not available, it starts a new OAuth flow in a QThread while showing a
+    progress dialog with a live countdown and a Cancel button. If the flow does not complete
+    within 60 seconds or the user cancels, the process is aborted.
 
     Returns:
-        google.oauth2.credentials.Credentials: An object containing the user credentials.
+        google.oauth2.credentials.Credentials: The authenticated credentials.
 
     Raises:
-        RuntimeError: If the client_secret.json is missing or invalid.
+        RuntimeError: If authentication fails, is cancelled, or times out.
     """
     if scopes is None:
         scopes = DEFAULT_SCOPES
 
-    # 1. Load and validate the client_secret JSON
+    # 1. Load and validate client configuration.
     client_config_data = load_client_config(CLIENT_SECRETS_PATH)
-    validate_installed_app_config(client_config_data)
+    config_key = validate_client_config(client_config_data)
 
-    # 2. Attempt to load cached credentials
+    # 2. Attempt to load cached credentials.
     auth_dir = get_temp_auth_dir()
     token_path = os.path.join(auth_dir, token_filename)
-
-    # If force=True, skip loading any existing credentials.
     creds = None if force else load_credentials(token_path)
-
-    # 3. If credentials exist, check the scope and validity
     if creds:
         if not set(scopes).issubset(set(creds.scopes or [])):
-            logging.info('Credentials found, but scopes mismatch. Re-auth is required.')
-            creds = None  # Force re-auth
-
+            logging.info("Cached credentials have mismatched scopes. Re-authentication required.")
+            creds = None
     if creds and creds.valid:
-        logging.info(f'Loaded valid credentials from {token_path}.')
+        logging.info(f"Loaded valid credentials from {token_path}.")
         return creds
-
     if creds and creds.expired and creds.refresh_token:
-        logging.info(f'Credentials found at {token_path}, attempting refresh.')
+        logging.info("Cached credentials expired; attempting refresh.")
         try:
             creds.refresh(google.auth.transport.requests.Request())
-            logging.info('Successfully refreshed credentials.')
+            logging.info("Successfully refreshed credentials.")
             save_credentials(creds, token_path)
             return creds
         except google.auth.exceptions.RefreshError as ex:
-            logging.warning(f'Failed to refresh credentials: {ex}')
-            # Fall through to re-auth if refresh fails
+            logging.warning(f"Refresh failed: {ex}")
+            creds = None
 
-    # 4. No valid/refreshable creds => start a new browser-based OAuth flow
-    logging.info('No valid credentials found (or force=True), starting new OAuth flow.')
+    # 3. Start a new OAuth flow.
+    logging.info("Starting new OAuth flow...")
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(client_config_data, scopes=scopes)
-    creds = flow.run_local_server(port=0)
-    save_credentials(creds, token_path)
+    # We no longer set a clickable URL; we rely on the default browser behavior.
 
+    dialog = AuthProgressDialog(timeout_seconds=60)
+    auth_worker = AuthFlowWorker(flow)
+    result = {"creds": None, "error": None}
+    loop = QtCore.QEventLoop()
+
+    auth_worker.resultReady.connect(lambda c: (result.update({"creds": c}), loop.quit()))
+    auth_worker.errorOccurred.connect(lambda err: (result.update({"error": err}), loop.quit()))
+    dialog.cancelled.connect(lambda: loop.quit())
+
+    auth_worker.start()
+
+    timer = QtCore.QTimer()
+    timer.setSingleShot(True)
+    timer.timeout.connect(lambda: (dialog.show_timeout_message(), loop.quit()))
+    timer.start(60000)
+
+    dialog.show()
+    loop.exec()
+    timer.stop()
+
+    if auth_worker.isRunning():
+        auth_worker.terminate()
+        auth_worker.wait()
+        raise RuntimeError("OAuth flow timed out (no response from browser).")
+
+    dialog.close()
+
+    if result["error"]:
+        raise RuntimeError("OAuth flow failed: " + result["error"])
+    if not result["creds"]:
+        raise RuntimeError("Authentication was cancelled or timed out.")
+
+    creds = result["creds"]
+    save_credentials(creds, token_path)
     return creds
 
 
-def unathenticate(token_filename: str = 'auth_token.json') -> None:
-    """Delete the cached credentials file.
-
-    Args:
-        token_filename (str, optional): Name of the token file. Defaults to 'auth_token.json'.
-    """
+def unauthenticate(token_filename: str = 'auth_token.json') -> None:
+    """Delete the cached credentials file."""
     auth_dir = get_temp_auth_dir()
     token_path = os.path.join(auth_dir, token_filename)
-
     if os.path.exists(token_path):
         os.remove(token_path)
-        logging.info(f'Credentials file {token_path} deleted.')
+        logging.info(f"Credentials file {token_path} deleted.")
     else:
-        logging.info(f'No credentials file found at {token_path}. Nothing to delete.')
+        logging.info(f"No credentials file found at {token_path}.")

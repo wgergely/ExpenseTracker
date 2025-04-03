@@ -68,8 +68,8 @@ class ActionToolBar(QtWidgets.QToolBar):
     def _create_actions(self):
         self.range_selector = RangeSelectorBar(self)
         self.switch_view_btn = actions.SwitchViewAction(self)
-        self.authenticate_btn = actions.AuthenticateAction(self)
-        self.reload_btn = actions.ReloadAction(self)
+        self.authenticate_btn = actions.AuthGroupAction(self)
+        self.reload_btn = actions.DataGroupAction(self)
         self.show_ledger_btn = actions.ShowLedgerAction(self)
 
     def _populate_toolbar(self):

@@ -1,11 +1,20 @@
 from PySide6 import QtWidgets, QtCore
 
 from . import ui
-from . import signals
 from . import toolbar
 from ..data import view
 from ..data import model
 
+main_widget = None
+
+
+def show_main_widget():
+    """Show the main widget."""
+    global main_widget
+    if main_widget is None:
+        main_widget = MainWidget()
+    main_widget.show()
+    return main_widget
 
 
 class MainWidget(QtWidgets.QWidget):
@@ -24,6 +33,8 @@ class MainWidget(QtWidgets.QWidget):
 
         self.action_bar = None
         self.expense_view = None
+
+        ui.set_stylesheet(self)
 
         self._initialized = False
 

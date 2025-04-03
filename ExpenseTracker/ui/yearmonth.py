@@ -17,7 +17,7 @@ from datetime import datetime
 from PySide6 import QtCore, QtWidgets
 
 from . import ui
-from .signals import signals
+from .actions import signals
 
 
 class YearMonthPopup(QtWidgets.QFrame):
@@ -196,7 +196,6 @@ class RangeSelectorBar(QtWidgets.QWidget):
     Signals:
         rangeChanged(str, int): Emitted when the range span changes.
     """
-    rangeChanged = QtCore.Signal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -225,8 +224,6 @@ class RangeSelectorBar(QtWidgets.QWidget):
         self.start_selector.yearMonthChanged.connect(self._start_changed)
         self.end_selector.yearMonthChanged.connect(self._end_changed)
 
-        self.rangeChanged.connect(signals.dataRangeChanged)
-
     def _create_ui(self):
         QtWidgets.QHBoxLayout(self)
         o = ui.Size.Indicator(0)
@@ -244,18 +241,24 @@ class RangeSelectorBar(QtWidgets.QWidget):
         self.end_selector.min_date = start_value
         if self._date_str_to_int(self.end_selector.get_value()) < self._date_str_to_int(start_value):
             self.end_selector.set_value(start_value)
-        self._emit_range_changed()
+        self.emit_range_changed()
 
     def _end_changed(self, end_value):
         if self._date_str_to_int(self.start_selector.get_value()) > self._date_str_to_int(end_value):
             self.start_selector.set_value(end_value)
-        self._emit_range_changed()
+        self.emit_range_changed()
 
-    def _emit_range_changed(self):
-        start_int = self._date_str_to_int(self.start_selector.get_value())
-        end_int = self._date_str_to_int(self.end_selector.get_value())
+    @QtCore.Slot()
+    def emit_range_changed(self):
+        start = self.start_selector.get_value()
+        start_int = self._date_str_to_int(start)
+
+        end = self.end_selector.get_value()
+        end_int = self._date_str_to_int(end)
         span = (end_int - start_int) + 1
-        self.rangeChanged.emit(self.start_selector.get_value(), span)
+        span = min(1, span)
+
+        signals.dataRangeChanged.emit(self.start_selector.get_value(), span)
 
     def get_range(self):
         """Return a tuple of (start_value, end_value)."""
