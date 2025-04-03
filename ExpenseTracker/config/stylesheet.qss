@@ -493,6 +493,7 @@ QToolBar::separator {
 QToolBar QToolButton {
     font-size: <MediumText@0.9>px;
     color: <Text>;
+    height: <Margin@1.0>px;
     text-align: center;
     background-color: <Transparent>;
     border-radius: <Indicator@1.5>px;
@@ -517,14 +518,21 @@ QSplitter::handle:vertical {
     height: <Separator@1.0>px;
 }
 
+RangeSelectorBar {
+    padding: <Indicator@2.0>px <Indicator@0.5>px;
+    background-color: <Background>;
+    spacing: <Indicator@0.5>px;
+}
 
-YearMonthSelector QToolButton {
-    background-color: <DarkBackground>;
+YearMonthSelector {
+    color: <Text>;
+    font-weight: 900;
+    font-size: <MediumText@1.0>px;
+    background-color: <Background>;
     border: <Separator@1.0>px solid <Transparent>;
     padding: <Indicator@1.5>px;
-    border-radius: <Indicator@1.5>px;
-    padding: 0;
     margin: 0;
+    border-radius: <Indicator@1.5>px;
 }
 
 YearMonthPopup {

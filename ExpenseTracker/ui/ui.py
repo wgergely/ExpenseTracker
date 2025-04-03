@@ -96,7 +96,7 @@ class Color(enum.Enum):
     Opaque = (0, 0, 0, 30)
     Transparent = (0, 0, 0, 0)
     VeryDarkBackground = (30, 30, 30)
-    DarkBackground = (40, 40, 40)
+    DarkBackground = (45, 45, 45)
     Background = (65, 65, 65)
     LightBackground = (85, 85, 85)
     DisabledText = (135, 135, 135)

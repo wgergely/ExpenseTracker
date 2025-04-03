@@ -131,7 +131,7 @@ class YearMonthPopup(QtWidgets.QFrame):
         self.close()
 
 
-class YearMonthSelector(QtWidgets.QWidget):
+class YearMonthSelector(QtWidgets.QToolButton):
     """
     Widget for selecting a year-month combination.
 
@@ -145,18 +145,13 @@ class YearMonthSelector(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
+
         self.current_value = datetime.now().strftime("%Y-%m")
         self.min_date = None
         self.max_date = None
-        ui.set_stylesheet(self)
-        self._create_ui()
 
-    def _create_ui(self):
-        layout = QtWidgets.QHBoxLayout(self)
-        self.display_button = QtWidgets.QToolButton(self)
-        self.display_button.setText(self.current_value)
-        self.display_button.clicked.connect(self._show_popup)
-        layout.addWidget(self.display_button)
+        self.setText(self.current_value)
+        self.clicked.connect(self._show_popup)
 
     def _show_popup(self):
         self.popup = YearMonthPopup(
@@ -166,7 +161,7 @@ class YearMonthSelector(QtWidgets.QWidget):
             max_date=self.max_date
         )
         self.popup.yearMonthSelected.connect(self.set_value)
-        pos = self.display_button.mapToGlobal(QtCore.QPoint(0, self.display_button.height()))
+        pos = self.mapToGlobal(QtCore.QPoint(0, self.height()))
         self.popup.move(pos)
         self.popup.show()
         self.popup.raise_()
@@ -176,7 +171,7 @@ class YearMonthSelector(QtWidgets.QWidget):
     def set_value(self, value):
         """Update the current value and emit change signal."""
         self.current_value = value
-        self.display_button.setText(value)
+        self.setText(value)
         self.yearMonthChanged.emit(value)
 
     def get_value(self):
@@ -184,7 +179,7 @@ class YearMonthSelector(QtWidgets.QWidget):
         return self.current_value
 
 
-class RangeSelectorBar(QtWidgets.QWidget):
+class RangeSelectorBar(QtWidgets.QToolBar):
     """
     Toolbar widget for selecting a start and end year-month range.
 
@@ -199,7 +194,45 @@ class RangeSelectorBar(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
+        self.global_min_date = None
+        self.global_max_date = None
 
+        self.start_selector = None
+        self.end_selector = None
+
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Maximum
+        )
+
+        ui.set_stylesheet(self)
+
+        self._add_actions()
+        self._init_min_max_dates()
+        self._connect_signals()
+
+    def _connect_signals(self):
+        self.start_selector.yearMonthChanged.connect(self._start_changed)
+        self.end_selector.yearMonthChanged.connect(self._end_changed)
+
+    def _add_actions(self):
+        button = QtWidgets.QToolButton(self)
+        icon = ui.get_category_icon('btn_date')
+        button.setIcon(icon)
+        button.setDisabled(True)
+        self.addWidget(button)
+
+        self.start_selector = YearMonthSelector(self)
+        self.start_selector.setObjectName('start_selector')
+        self.addWidget(self.start_selector)
+
+        self.addSeparator()
+
+        self.end_selector = YearMonthSelector(self)
+        self.end_selector.setObjectName('end_selector')
+        self.addWidget(self.end_selector)
+
+    def _init_min_max_dates(self):
         now = datetime.now()
         global_min_date = f"{now.year - 10}-01"
         global_max_date = f"{now.year}-{now.month:02d}"
@@ -207,32 +240,12 @@ class RangeSelectorBar(QtWidgets.QWidget):
         self.global_min_date = global_min_date
         self.global_max_date = global_max_date
 
-        self.start_selector = YearMonthSelector(self)
-        self.end_selector = YearMonthSelector(self)
-
         self.start_selector.min_date = global_min_date
         self.start_selector.max_date = global_max_date
 
         # End selector's limits: minimum follows start; maximum is global.
         self.end_selector.min_date = self.start_selector.get_value()
         self.end_selector.max_date = global_max_date
-
-        self._create_ui()
-        self._connect_signals()
-
-    def _connect_signals(self):
-        self.start_selector.yearMonthChanged.connect(self._start_changed)
-        self.end_selector.yearMonthChanged.connect(self._end_changed)
-
-    def _create_ui(self):
-        QtWidgets.QHBoxLayout(self)
-        o = ui.Size.Indicator(0)
-        self.layout().setContentsMargins(o, o, o, o)
-        self.layout().setSpacing(0)
-
-        self.layout().addWidget(self.start_selector, 0)
-        self.layout().addWidget(QtWidgets.QLabel('-', self), 0)
-        self.layout().addWidget(self.end_selector, 0)
 
     def _date_str_to_int(self, date_str):
         return int(date_str[:4]) * 12 + int(date_str[5:7])

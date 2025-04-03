@@ -1,52 +1,41 @@
-"""
-ExpenseView Module
-
-This module provides a custom QTableView (ExpenseView) for displaying monthly expense data
-with a chart-like appearance. Double-clicking or pressing Enter on a row opens a popup dialog
-displaying the transaction data for the selected category using the bespoke TransactionsModel and TransactionsView.
-"""
-
 from PySide6 import QtCore, QtWidgets, QtGui
-
 from .model import ExpenseModel, RateRole, TransactionsModel
 from ..ui import ui
 from ..ui.actions import signals
 
-
-class TransactionsDialog(QtWidgets.QDialog):
+class TransactionsDialog(QtWidgets.QDockWidget):
     """
-    TransactionsDialog is a custom dialog for displaying transaction data.
+    TransactionsDialog is a custom dockable widget for displaying transaction data.
 
     It initializes the view and sets up the layout for displaying transactions.
     """
-
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle('Transactions')
+        super().__init__("Transactions", parent)
+        self.setObjectName("ExpenseTrackerTransactionsDialog")
+        self.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFloatable
+        )
         self.setMinimumSize(
             ui.Size.DefaultWidth(1.0),
             ui.Size.DefaultHeight(1.0)
         )
-
-        self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowMinMaxButtonsHint)
-
         self.view = None
-
         self._create_ui()
         self._init_model()
 
     def _create_ui(self) -> None:
-        QtWidgets.QVBoxLayout(self)
-        o = ui.Size.Margin(1.0)
+        content = QtWidgets.QWidget(self)
+        layout = QtWidgets.QVBoxLayout(content)
+        margin = ui.Size.Margin(1.0)
+        layout.setContentsMargins(margin, margin, margin, margin)
+        layout.setSpacing(margin)
+        self.view = TransactionsView(content)
+        self.view.setObjectName("ExpenseTrackerTransactionsView")
+        layout.addWidget(self.view, 1)
+        self.setWidget(content)
 
-        self.layout().setContentsMargins(o, o, o, o)
-
-        self.view = TransactionsView(parent=self)
-        self.view.setObjectName('ExpenseTrackerTransactionsView')
-
-        self.layout().addWidget(self.view, 1)
-
-    def _init_model(self):
+    def _init_model(self) -> None:
         model = TransactionsModel()
         self.view.setModel(model)
 
@@ -56,10 +45,8 @@ class TransactionsDialog(QtWidgets.QDialog):
             ui.Size.DefaultHeight(1.0)
         )
 
-
 class GraphDelegate(QtWidgets.QStyledItemDelegate):
     """A custom delegate to draw a simple bar chart for the chart column."""
-
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
         super().paint(painter, option, index)
@@ -94,36 +81,29 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
         o = ui.Size.Separator(5.0) if (hover or selected) else ui.Size.Separator(3.0)
         painter.drawRoundedRect(rect, o, o)
 
-
 class ExpenseView(QtWidgets.QTableView):
     """
     ExpenseView is a custom QTableView for displaying monthly expense data.
 
-    Double-clicking or pressing Enter on a row opens a popup dialog displaying transaction details.
+    Double-clicking or pressing Enter on a row opens a dockable TransactionsDialog on the right.
     Tab and Shift+Tab navigate between rows (unless at the beginning or end of the list).
     """
-
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
-
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
-
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
         self.setWordWrap(True)
         self.setTextElideMode(QtCore.Qt.ElideRight)
-
         ui.set_stylesheet(self)
-
         self._init_delegates()
-
         self._connect_signals()
 
     def _init_delegates(self) -> None:
@@ -137,7 +117,6 @@ class ExpenseView(QtWidgets.QTableView):
             raise TypeError("Expected a ExpenseModel instance.")
         super().setModel(model)
         self._init_section_sizing()
-
         self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
         self.model().modelAboutToBeReset.connect(signals.categorySelectionChanged)
         self.model().modelReset.connect(signals.categorySelectionChanged)
@@ -158,25 +137,24 @@ class ExpenseView(QtWidgets.QTableView):
     def activate_action(self, index: QtCore.QModelIndex) -> None:
         """
         Slot called on double-clicking or pressing Enter on a row.
-        Opens a popup dialog displaying transaction details for the selected category.
+        Opens a dockable TransactionsDialog on the right side.
         """
-        from .. import ui
-
         if not index.isValid():
             return
 
-        row = index.row()
-
-        if ui.parent() is None:
+        # Retrieve the main dock widget (assumed to be the top-level window)
+        main = self.window()
+        if main is None or not hasattr(main, "addDockWidget"):
             return
 
-        if ui.parent().transactions_view is None:
-            ui.parent().transactions_view = TransactionsDialog(parent=ui.parent())
-        elif ui.parent().transactions_view.isVisible():
-            ui.parent().transactions_view.raise_()
+        if not hasattr(main, "transactions_view") or main.transactions_view is None:
+            main.transactions_view = TransactionsDialog(parent=main)
+            main.addDockWidget(QtCore.Qt.RightDockWidgetArea, main.transactions_view)
+        elif main.transactions_view.isVisible():
+            main.transactions_view.raise_()
             return
 
-        ui.parent().transactions_view.show()
+        main.transactions_view.show()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         key = event.key()
@@ -199,14 +177,12 @@ class ExpenseView(QtWidgets.QTableView):
                     return
         super().keyPressEvent(event)
 
-
 class TransactionsView(QtWidgets.QTableView):
     """
     TransactionsView is a custom QTableView for displaying transaction data.
 
     It configures selection, sizing, and header behavior for an optimal display of the transactions table.
     """
-
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent=parent)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -240,6 +216,5 @@ class TransactionsView(QtWidgets.QTableView):
         """Sets the model for the view and initializes the header."""
         if not isinstance(model, TransactionsModel):
             raise TypeError("Expected a TransactionsModel instance.")
-
         super().setModel(model)
         self._init_header()
