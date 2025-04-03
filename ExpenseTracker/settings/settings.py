@@ -14,7 +14,8 @@ from .model import (
 )
 from ..auth import auth, service
 from ..ui import ui
-
+from .header_editor import HeaderEditor
+from .data_mapping_editor import DataMappingEditor
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
     """
@@ -146,8 +147,29 @@ class SettingsWidget(QtWidgets.QWidget):
         btns_layout.addWidget(close_btn)
         container_layout.addLayout(btns_layout)
 
+        # SECTION 3) HEADERS
+        header_label = QtWidgets.QLabel('Header Editor')
+        header_label.setStyleSheet('font-weight: bold;')
+        container_layout.addWidget(header_label)
+
+        header_box = QtWidgets.QGroupBox('')
+        header_form = QtWidgets.QFormLayout(header_box)
+        header_form.setHorizontalSpacing(margin_size * 3)
+
+        self.header_editor = HeaderEditor(self)
+        header_form.addRow('Spreadsheet Columns', self.header_editor)
+
+        self.data_mapping_editor = DataMappingEditor(self)
+        header_form.addRow('Columns Map', self.data_mapping_editor)
+
+        # Add the header editor to the container layout
+        container_layout.addWidget(header_box)
+
+
         # Place our container in the custom scroll area
         self._scroll_area.setWidget(container)
+
+
 
         # Final layout for SettingsWidget
         final_layout = QtWidgets.QVBoxLayout(self)

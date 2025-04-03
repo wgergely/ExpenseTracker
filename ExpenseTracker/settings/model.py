@@ -6,7 +6,6 @@ Models for the ExpenseTracker settings.
 import shutil
 import pathlib
 import json
-import os
 import tempfile
 
 from PySide6 import QtCore
