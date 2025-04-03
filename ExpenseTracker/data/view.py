@@ -1,7 +1,7 @@
 """
-MonthlyExpenseView Module
+ExpenseView Module
 
-This module provides a custom QTableView (MonthlyExpenseView) for displaying monthly expense data
+This module provides a custom QTableView (ExpenseView) for displaying monthly expense data
 with a chart-like appearance. Double-clicking any row opens a popup dialog that displays the
 transaction data for the selected category using the bespoke TransactionsModel and TransactionsView.
 """
@@ -85,9 +85,9 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
         )
 
 
-class MonthlyExpenseView(QtWidgets.QTableView):
+class ExpenseView(QtWidgets.QTableView):
     """
-    MonthlyExpenseView is a custom QTableView for displaying monthly expense data.
+    ExpenseView is a custom QTableView for displaying monthly expense data.
 
     It hides headers, enforces single row selection, and uses custom delegates for a
     chart-like appearance. A double-click on any row opens a popup dialog displaying the
@@ -107,7 +107,6 @@ class MonthlyExpenseView(QtWidgets.QTableView):
 
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
 
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
@@ -202,14 +201,10 @@ class TransactionsView(QtWidgets.QTableView):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent=parent)
-        self._init_view()
 
-    def _init_view(self) -> None:
-        """Initializes view properties and layout."""
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
 
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
         self.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Fixed)

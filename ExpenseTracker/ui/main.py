@@ -53,8 +53,8 @@ class MainWidget(QtWidgets.QWidget):
 
         self.layout().addWidget(self.action_bar, 1)
 
-        self.expense_view = view.MonthlyExpenseView(parent=self)
-        self.expense_view.setObjectName('ExpenseTrackerMonthlyExpenseView')
+        self.expense_view = view.ExpenseView(parent=self)
+        self.expense_view.setObjectName('ExpenseTrackerExpenseView')
 
         self.layout().addWidget(self.expense_view, 1)
 
