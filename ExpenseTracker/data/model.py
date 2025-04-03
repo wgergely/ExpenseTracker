@@ -99,9 +99,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         total = trans_df.get('amount', pd.Series()).sum()
         total = f'€{abs(total):.2f}'
 
-        # Get the 3 largest transactions from trans_df
         largest_transactions = trans_df.nsmallest(3, 'amount')
-        # Create a string representation of the largest transactions
         largest_transactions = ', '.join(
             [f'€{abs(row["amount"]):.2f} ({row["description"]})\n\n' for _, row in largest_transactions.iterrows()]
         )
@@ -279,7 +277,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def _load_data(self) -> None:
         # Get index from the main widget'
-
         from .. import ui
         index = ui.index()
 
@@ -288,7 +285,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
             return
 
-
         df = index.data(TransactionsRole)
 
         if df.empty:
@@ -296,11 +292,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
             return
 
-        # Rename columns based on the ledger.json "data_header_mapping" configuration
         config = load_config()
         mapping = config.get('data_header_mapping', {})
         if mapping:
-            # Build a source-to-destination renaming map: {source: destination}
             rename_map = {source: dest for dest, source in mapping.items()}
             missing_sources = [src for src in rename_map if src not in df.columns]
             if missing_sources:
@@ -310,7 +304,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             else:
                 df = df.rename(columns=rename_map)
 
-        # Sort by amount from largest to smallest
+        # Sort by amount from largest absolute to smallest (descending by absolute value).
+        # We'll do final sort logic in the proxy; here keep as-is ascending for raw.
         df = df.sort_values(by='amount', ascending=True)
         self.data_df = df.copy()
 
@@ -331,16 +326,22 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         Clear the model data and reset the DataFrame.
         """
         self.beginResetModel()
-        self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+        self.data_df = None
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        if self.data_df is None:
+            return 0
         return len(self.data_df)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        if self.data_df is None:
+            return 0
         return len(self.data_df.columns)
 
-    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> any:
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
+        if self.data_df is None:
+            return None
         if not index.isValid():
             return None
         row = index.row()
@@ -356,7 +357,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 1:
-                # Ensure float value is formatted as EUR currency with 2 decimals.
                 if isinstance(value, float):
                     return f'€{abs(value):.2f}'
                 elif isinstance(value, int):
@@ -364,10 +364,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 2:
-                # Format the description to replace newlines with commas.
                 if isinstance(value, str):
-                    first_line = value.split('\n')[0]
-                    other_lines = value.split('\n')[1:] if len(value.split('\n')) > 1 else []
+                    lines = value.split('\n')
+                    first_line = lines[0]
+                    other_lines = lines[1:] if len(lines) > 1 else []
                     other_lines = [line.strip() for line in other_lines if line.strip()]
                     if other_lines:
                         other_lines = f', '.join(other_lines)
@@ -377,7 +377,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 3:
-                # Map category name to display name.
                 config = load_config()
                 categories = config.get('categories', {})
                 if not categories:
@@ -408,7 +407,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         return None
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
-                   role: int = QtCore.Qt.DisplayRole) -> any:
+                   role: int = QtCore.Qt.DisplayRole) -> Any:
+        if self.data_df is None:
+            return None
         if role != QtCore.Qt.DisplayRole:
             return None
         if orientation == QtCore.Qt.Horizontal:
@@ -423,25 +424,39 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             return QtCore.Qt.NoItemFlags
         return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
 
-    @QtCore.Slot()
-    def init_data(self) -> None:
-        """
-        Initialize the model data.
-        """
-        self.beginResetModel()
-        try:
-            self._load_data()
-        except Exception as ex:
-            logging.error(f'Failed to load transactions data: {ex}')
-            raise
-        finally:
-            self.endResetModel()
 
-    @QtCore.Slot()
-    def clear_data(self) -> None:
-        """
-        Clear the model data and reset the DataFrame.
-        """
-        self.beginResetModel()
-        self.data_df = None
-        self.endResetModel()
+class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
+    """
+    Sort/Filter proxy for ExpenseModel.
+    Allows sorting by either Category (column 0) or Amount (column 2).
+    For filtering, not used by default, but can be extended.
+    """
+    def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
+        if left.column() == 2 and right.column() == 2:
+            # Sort by absolute numeric value
+            left_data = abs(left.model().data(left, QtCore.Qt.UserRole) or 0)
+            right_data = abs(right.model().data(right, QtCore.Qt.UserRole) or 0)
+            return left_data < right_data
+        return super().lessThan(left, right)
+
+
+class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
+    """
+    Sort/Filter proxy for TransactionsModel.
+    Sorts by absolute amount for column 1. Allows text filtering on description (column 2).
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDynamicSortFilter(True)
+        # By default, filter on the description column (2).
+        self.setFilterKeyColumn(2)
+        self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
+
+    def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
+        if left.column() == 1 and right.column() == 1:
+            left_val = left.model().data(left, QtCore.Qt.EditRole)
+            right_val = right.model().data(right, QtCore.Qt.EditRole)
+            left_abs = abs(left_val) if isinstance(left_val, (int, float)) else 0
+            right_abs = abs(right_val) if isinstance(right_val, (int, float)) else 0
+            return left_abs < right_abs
+        return super().lessThan(left, right)

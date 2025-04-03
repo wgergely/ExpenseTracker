@@ -1,5 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from .model import ExpenseModel, RateRole, TransactionsModel
+from .model import ExpenseSortFilterProxyModel, TransactionsSortFilterProxyModel
 from ..ui import ui
 from ..ui.actions import signals
 
@@ -21,6 +22,7 @@ class TransactionsDialog(QtWidgets.QDockWidget):
             ui.Size.DefaultHeight(1.0)
         )
         self.view = None
+        self.proxy_model = None
         self._create_ui()
         self._init_model()
 
@@ -37,7 +39,12 @@ class TransactionsDialog(QtWidgets.QDockWidget):
 
     def _init_model(self) -> None:
         model = TransactionsModel()
-        self.view.setModel(model)
+        self.proxy_model = TransactionsSortFilterProxyModel(self)
+        self.proxy_model.setSourceModel(model)
+        # Default sort is by the 'Amount' column (1) in descending order so largest abs at the top.
+        self.view.setModel(self.proxy_model)
+        self.view.setSortingEnabled(True)
+        self.view.horizontalHeader().setSortIndicator(1, QtCore.Qt.DescendingOrder)
 
     def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(
@@ -113,13 +120,19 @@ class ExpenseView(QtWidgets.QTableView):
         self.doubleClicked.connect(self.activate_action)
 
     def setModel(self, model):
-        if not isinstance(model, ExpenseModel):
-            raise TypeError("Expected a ExpenseModel instance.")
+        if not isinstance(model, ExpenseModel) and not isinstance(model, QtCore.QSortFilterProxyModel):
+            raise TypeError("Expected an ExpenseModel or its QSortFilterProxyModel wrapper.")
         super().setModel(model)
         self._init_section_sizing()
-        self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
-        self.model().modelAboutToBeReset.connect(signals.categorySelectionChanged)
-        self.model().modelReset.connect(signals.categorySelectionChanged)
+        if isinstance(model, ExpenseModel):
+            self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
+            self.model().modelAboutToBeReset.connect(signals.categorySelectionChanged)
+            self.model().modelReset.connect(signals.categorySelectionChanged)
+        else:
+            # If using proxy, connect to the source model for signals
+            source = model.sourceModel()
+            source.modelAboutToBeReset.connect(signals.categorySelectionChanged)
+            source.modelReset.connect(signals.categorySelectionChanged)
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
@@ -142,7 +155,6 @@ class ExpenseView(QtWidgets.QTableView):
         if not index.isValid():
             return
 
-        # Retrieve the main dock widget (assumed to be the top-level window)
         main = self.window()
         if main is None or not hasattr(main, "addDockWidget"):
             return
@@ -212,9 +224,7 @@ class TransactionsView(QtWidgets.QTableView):
         header.setDefaultSectionSize(ui.Size.RowHeight(1.8))
         header.setHidden(True)
 
-    def setModel(self, model: TransactionsModel) -> None:
+    def setModel(self, model: QtCore.QAbstractItemModel) -> None:
         """Sets the model for the view and initializes the header."""
-        if not isinstance(model, TransactionsModel):
-            raise TypeError("Expected a TransactionsModel instance.")
         super().setModel(model)
         self._init_header()

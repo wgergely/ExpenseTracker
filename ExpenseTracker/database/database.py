@@ -2,7 +2,7 @@
 Local Cache Database Module
 
 This module maintains a local SQLite cache of remote ledger data from Google Sheets.
-The cache is stored at ${temp}/ExpensesTracker/datacache.db. It can invalidate data
+The cache is stored at ${temp}/ExpenseTracker/datacache.db. It can invalidate data
 after a certain age and mark itself invalid if the remote data can't be fetched or
 validated. Column types are defined in ledger.json.
 
@@ -38,7 +38,7 @@ from ..auth import service
 
 logging.basicConfig(level=logging.INFO)
 
-DB_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpensesTracker'
+DB_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker'
 DB_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DB_DIR / 'datacache.db'
 LEDGER_CONFIG_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'ledger.json'

@@ -41,7 +41,7 @@ CLIENT_SECRETS_PATH = os.path.normpath(os.path.join(
 
 def get_temp_auth_dir() -> str:
     """Get or create the temporary folder used for credential caching."""
-    auth_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpensesTracker' / 'auth'
+    auth_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'auth'
     auth_dir.mkdir(parents=True, exist_ok=True)
     return str(auth_dir)
 

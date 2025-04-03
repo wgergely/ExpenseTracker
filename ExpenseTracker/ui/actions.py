@@ -5,14 +5,6 @@ Actions Module.
 Defines the toolbar actions used in the application. In particular, it
 groups the authentication actions (Connect/Disconnect) and the data actions
 (Reload/Clear Data) under single tool buttons with drop‐down menus.
-
-Actions provided:
-  - SwitchViewAction: Toggles between graph and pie-chart views.
-  - AuthGroupAction: Main button shows "Connect"; its menu offers "Connect" and "Disconnect".
-  - DataGroupAction: Main button shows "Reload"; its menu offers "Reload" and "Clear Data".
-  - ShowLedgerAction: Opens the Google spreadsheet (ledger) in the default browser.
-
-Helper functions for actual operations are also provided.
 """
 
 from PySide6 import QtCore, QtWidgets, QtGui
@@ -38,6 +30,11 @@ class Signals(QtCore.QObject):
 
     categorySelectionChanged = QtCore.Signal()
 
+    # New signals for sorting/filtering
+    sortExpenseRequested = QtCore.Signal(int, bool)        # column, ascending?
+    sortTransactionRequested = QtCore.Signal(int, bool)    # column, ascending?
+    filterTransactionsRequested = QtCore.Signal(str)
+
     def __init__(self):
         super().__init__()
         self._connect_signals()
@@ -53,13 +50,9 @@ class Signals(QtCore.QObject):
         self.dataRangeChanged.connect(self.categorySelectionChanged)
         self.dataFetched.connect(self.categorySelectionChanged)
 
-
     @staticmethod
     @QtCore.Slot()
     def show_ledger():
-        """
-        Open the Google spreadsheet (ledger) in the default browser.
-        """
         from ..database import database
 
         config = database.load_config()
@@ -72,9 +65,6 @@ class Signals(QtCore.QObject):
     @staticmethod
     @QtCore.Slot(bool)
     def authenticate(force=False):
-        """
-        Authenticate with Google and load the data.
-        """
         from ..auth import auth
         from ..ui import parent
 
@@ -82,7 +72,6 @@ class Signals(QtCore.QObject):
         reply = QtWidgets.QMessageBox.question(parent(), 'Authenticate', msg,
                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                                                QtWidgets.QMessageBox.No)
-
         if reply == QtWidgets.QMessageBox.No:
             return
 
@@ -94,9 +83,6 @@ class Signals(QtCore.QObject):
     @staticmethod
     @QtCore.Slot()
     def unauthenticate():
-        """
-        Unauthenticate with Google.
-        """
         from ..auth import auth
         from ..database import database
         from ..ui import parent
@@ -108,9 +94,7 @@ class Signals(QtCore.QObject):
         if reply == QtWidgets.QMessageBox.No:
             return
 
-
         signals.dataAboutToBeFetched.emit()
-
         try:
             auth.unauthenticate()
         except Exception as e:
@@ -129,9 +113,6 @@ class Signals(QtCore.QObject):
     @staticmethod
     @QtCore.Slot()
     def fetch_data():
-        """
-        Load data from Google.
-        """
         from ..database import database
 
         database.get_remote_data()
@@ -140,9 +121,6 @@ class Signals(QtCore.QObject):
     @staticmethod
     @QtCore.Slot()
     def clear_data():
-        """
-        Clear local data.
-        """
         from ..database import database
         from ..ui import parent
 
@@ -181,11 +159,6 @@ class SwitchViewAction(QtWidgets.QToolButton):
 class AuthGroupAction(QtWidgets.QToolButton):
     """
     Grouped authentication action.
-
-    The main button shows "Connect" with the authenticate icon.
-    Its dropdown menu offers:
-      - Connect (with force mode support)
-      - Disconnect
     """
 
     def __init__(self, parent=None):
@@ -198,7 +171,6 @@ class AuthGroupAction(QtWidgets.QToolButton):
         menu = QtWidgets.QMenu(self)
         self.setMenu(menu)
 
-        # "Authenticate" action
         action = QtGui.QAction(parent=menu)
         action.setText('Authenticate')
         action.setToolTip('Authenticate with Google')
@@ -207,7 +179,6 @@ class AuthGroupAction(QtWidgets.QToolButton):
         action.triggered.connect(self.emit_authenticate_requested)
         menu.addAction(action)
 
-        # "Unauthenticate" action
         action = QtGui.QAction(parent=menu)
         action.setText('Unauthenticate')
         action.setToolTip('Unauthenticate from Google')
@@ -215,25 +186,6 @@ class AuthGroupAction(QtWidgets.QToolButton):
         action.setIcon(ui.get_category_icon('btn_deauthenticate'))
         action.triggered.connect(signals.deauthenticateRequested)
         menu.addAction(action)
-
-        #
-        #
-        # # "Connect" action
-        # self.connect_action = QtGui.QAction(ui.get_category_icon('btn_authenticate'),
-        #                                     'Connect', self)
-        # self.connect_action.setToolTip('Connect to Google')
-        # menu.addAction(self.connect_action)
-        # # "Disconnect" action
-        # self.disconnect_action = QtGui.QAction(ui.get_category_icon('btn_deauthenticate'),
-        #                                        'Disconnect', self)
-        # self.disconnect_action.setToolTip('Disconnect from Google')
-        # menu.addAction(self.disconnect_action)
-        # self.setMenu(menu)
-        #
-        # # When the main button is clicked, trigger Connect.
-        # self.clicked.connect(self.emit_authenticate_requested)
-        # self.connect_action.triggered.connect(self.emit_authenticate_requested)
-        # self.disconnect_action.triggered.connect(signals.deauthenticateRequested)
 
     @QtCore.Slot()
     def emit_authenticate_requested(self):
@@ -247,11 +199,6 @@ class AuthGroupAction(QtWidgets.QToolButton):
 class DataGroupAction(QtWidgets.QToolButton):
     """
     Grouped data action.
-
-    The main button shows "Reload" with the reload icon.
-    Its dropdown menu offers:
-      - Reload (with force mode support)
-      - Clear Data
     """
 
     def __init__(self, parent=None):
@@ -261,11 +208,9 @@ class DataGroupAction(QtWidgets.QToolButton):
         self.setIcon(ui.get_category_icon('btn_reload'))
         self.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
 
-        # Create the menu
         menu = QtWidgets.QMenu(self)
         self.setMenu(menu)
 
-        # "Reload" action
         action = QtGui.QAction(parent=menu)
         action.setText('Reload Data')
         action.setToolTip('Reload data from Google')
@@ -274,7 +219,6 @@ class DataGroupAction(QtWidgets.QToolButton):
         action.triggered.connect(self.emit_data_fetch_requested)
         menu.addAction(action)
 
-        # "Clear Data" action
         action = QtGui.QAction(parent=menu)
         action.setText('Clear Data')
         action.setToolTip('Clear local data')
@@ -303,3 +247,55 @@ class ShowLedgerAction(QtWidgets.QToolButton):
         self.setToolTip('Open Ledger')
         self.setIcon(ui.get_category_icon('btn_ledger'))
         self.clicked.connect(signals.openLedgerRequested)
+
+
+#
+# New actions for sorting and filtering:
+#
+
+class SortExpenseAction(QtGui.QAction):
+    """
+    Sort expense model by given column (0=Category, 2=Amount) and direction.
+    """
+    def __init__(self, text, column, ascending=True, parent=None):
+        super().__init__(text, parent)
+        self.column = column
+        self.ascending = ascending
+        self.triggered.connect(self.emit_sort)
+
+    @QtCore.Slot()
+    def emit_sort(self):
+        signals.sortExpenseRequested.emit(self.column, self.ascending)
+
+
+class SortTransactionsAction(QtGui.QAction):
+    """
+    Sort transaction model by the given column and direction.
+    """
+    def __init__(self, text, column, ascending=True, parent=None):
+        super().__init__(text, parent)
+        self.column = column
+        self.ascending = ascending
+        self.triggered.connect(self.emit_sort)
+
+    @QtCore.Slot()
+    def emit_sort(self):
+        signals.sortTransactionRequested.emit(self.column, self.ascending)
+
+
+class FilterTransactionsAction(QtGui.QAction):
+    """
+    Action to filter transactions by description.
+    Prompts the user for text input to filter the proxy model.
+    """
+    def __init__(self, text='Filter Transactions', parent=None):
+        super().__init__(text, parent)
+        self.triggered.connect(self.ask_filter)
+
+    @QtCore.Slot()
+    def ask_filter(self):
+        from ..ui import parent
+        text, ok = QtWidgets.QInputDialog.getText(parent(), "Filter Transactions",
+                                                  "Enter text to filter (description):")
+        if ok:
+            signals.filterTransactionsRequested.emit(text)
