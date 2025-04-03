@@ -10,13 +10,13 @@ for "category" and "amount" are derived from the ledger.json "data_header_mappin
 
 import logging
 import math
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 from PySide6 import QtCore
 
 from .data import get_monthly_expenses
-from ..database.database import load_config, get_cached_data
+from ..database.database import load_config
 from ..ui import ui
 from ..ui.actions import signals
 
@@ -45,7 +45,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def __init__(self, year_month: str, span: int = 1, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
-        self._transactions_mapping: Dict[Any, Any] = {}
         self.year_month: str = year_month
         self.span: int = span
 
@@ -81,41 +80,40 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         self.data_df = breakdown
 
-        # Build a mapping from category to its list of transactions.
-        self._transactions_mapping = {}
-        for _, row in self.data_df.iterrows():
-            cat = row['category']
-            self._transactions_mapping[cat] = row['transactions']
-
         self.layoutChanged.emit()
 
-    def _get_summary(self, category: str) -> str:
-        # For the "Total" row, aggregate transactions from all non-total categories.
-        if isinstance(category, str) and category.strip().lower() == 'total':
-            trans = []
-            for cat, txns in self._transactions_mapping.items():
-                if cat.strip().lower() != 'total':
-                    trans.extend(txns)
-        else:
-            trans = self._transactions_mapping.get(category, [])
+    def _get_trans_df(self, row: int) -> pd.DataFrame:
+        try:
+            trans_df = pd.DataFrame(self.data_df.iloc[row]['transactions'])
+        except:
+            trans_df = pd.DataFrame()
 
-        num_trans = len(trans)
-        total_val = 0.0
-        row = self.data_df[self.data_df['category'] == category]
-        if not row.empty:
-            total_val = row.iloc[0]['total']
+        return trans_df
 
-        config = load_config()
-        mapping = config.get('data_header_mapping', {})
-        account_key = 'account'
-        for key, val in mapping.items():
-            if val.strip().lower() == 'account name':
-                account_key = key
-                break
+    def _get_summary(self, row: int) -> str:
+        trans_df = self._get_trans_df(row)
 
-        accounts = {txn.get(account_key, '') for txn in trans if txn.get(account_key, '')}
-        summary = f'Transactions: {num_trans}, Total: €{total_val:.2f}, Accounts: {len(accounts)}'
-        return summary
+        category = trans_df.get('category', pd.Series()).unique()
+        category = ', '.join(category)
+
+        total = trans_df.get('amount', pd.Series()).sum()
+        total = f'€{abs(total):.2f}'
+
+        # Get the 3 largest transactions from trans_df
+        largest_transactions = trans_df.nsmallest(3, 'amount')
+        # Create a string representation of the largest transactions
+        largest_transactions = ', '.join(
+            [f'€{abs(row["amount"]):.2f} ({row["description"]})\n\n' for _, row in largest_transactions.iterrows()]
+        )
+
+        accounts = trans_df.get('account', pd.Series()).unique()
+        accounts = ', '.join(accounts)
+
+        return (f'Category: {category}\n'
+                f'Total: {total}\n'
+                f'Accounts: {accounts}\n\n'
+                f'Transactions:\n\n{largest_transactions}...'
+                )
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self.data_df)
@@ -138,6 +136,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         df = self.data_df.iloc[:-1][['total']].abs()
 
+        if role == TransactionsRole:
+            return self._get_trans_df(row)
+
         if role == AverageRole:
             return df.mean().iloc[0]
         if role == MaximumRole:
@@ -157,10 +158,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
             return v
 
         if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.StatusTipRole):
-            return self._get_summary(category)
-
-        if role == TransactionsRole:
-            return self._transactions_mapping.get(category, [])
+            return self._get_summary(index.row())
 
         if role == QtCore.Qt.FontRole:
             if index.row() == self.rowCount() - 1:
@@ -229,7 +227,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         """
         self.beginResetModel()
         self.data_df = pd.DataFrame(columns=self.columns)
-        self._transactions_mapping = {}
         self.endResetModel()
 
     @QtCore.Slot()
@@ -250,6 +247,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         """
         self.year_month = year_month
         self.span = span
+
         self.init_data()
 
 
@@ -260,9 +258,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     renamed based on the ledger.json "data_header_mapping" configuration.
     """
 
-    def __init__(self, df: pd.DataFrame = None, parent: QtCore.QObject | None = None) -> None:
-        super().__init__(parent)
-        self.data_df: pd.DataFrame = df
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent=parent)
+
+        self.data_df: pd.DataFrame = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
 
         self._connect_signals()
 
@@ -276,29 +275,64 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         signals.deauthenticateRequested.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
-    def _load_data(self) -> None:
-        df = self.data_df
+        signals.categorySelectionChanged.connect(self.init_data)
 
-        if df is None:
-            # Load the raw transaction data from the cache.
-            df = get_cached_data()
-            # Load configuration to apply header mapping.
-            config = load_config()
-            mapping = config.get('data_header_mapping', {})
-            if mapping:
-                # Build a source-to-destination renaming map: {source: destination}
-                rename_map = {source: dest for dest, source in mapping.items()}
-                missing_sources = [src for src in rename_map if src not in df.columns]
-                if missing_sources:
-                    logging.warning(
-                        f"TransactionsModel: Missing source columns {missing_sources} in data."
-                    )
-                else:
-                    df = df.rename(columns=rename_map)
+    def _load_data(self) -> None:
+        # Get index from the main widget'
+
+        from .. import ui
+        index = ui.index()
+
+        if not index.isValid():
+            logging.warning('TransactionsModel: Invalid index.')
+            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+            return
+
+
+        df = index.data(TransactionsRole)
+
+        if df.empty:
+            logging.warning('TransactionsModel: No data available.')
+            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+            return
+
+        # Rename columns based on the ledger.json "data_header_mapping" configuration
+        config = load_config()
+        mapping = config.get('data_header_mapping', {})
+        if mapping:
+            # Build a source-to-destination renaming map: {source: destination}
+            rename_map = {source: dest for dest, source in mapping.items()}
+            missing_sources = [src for src in rename_map if src not in df.columns]
+            if missing_sources:
+                logging.warning(
+                    f"TransactionsModel: Missing source columns {missing_sources} in data."
+                )
+            else:
+                df = df.rename(columns=rename_map)
 
         # Sort by amount from largest to smallest
         df = df.sort_values(by='amount', ascending=True)
         self.data_df = df.copy()
+
+    @QtCore.Slot()
+    def init_data(self):
+        try:
+            self.beginResetModel()
+            self._load_data()
+        except Exception as ex:
+            logging.error(f'Failed to load transactions data: {ex}')
+            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+        finally:
+            self.endResetModel()
+
+    @QtCore.Slot()
+    def clear_data(self) -> None:
+        """
+        Clear the model data and reset the DataFrame.
+        """
+        self.beginResetModel()
+        self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+        self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self.data_df)

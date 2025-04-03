@@ -256,15 +256,14 @@ class RangeSelectorBar(QtWidgets.QWidget):
         end = self.end_selector.get_value()
         end_int = self._date_str_to_int(end)
         span = (end_int - start_int) + 1
-        span = min(1, span)
 
         signals.dataRangeChanged.emit(self.start_selector.get_value(), span)
 
-    def get_range(self):
+    def get_range(self) -> tuple[str, str]:
         """Return a tuple of (start_value, end_value)."""
         return (self.start_selector.get_value(), self.end_selector.get_value())
 
-    def get_range_span(self):
+    def get_range_span(self) -> int:
         """Return the span of the range in months."""
         start_int = self._date_str_to_int(self.start_selector.get_value())
         end_int = self._date_str_to_int(self.end_selector.get_value())

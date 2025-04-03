@@ -33,6 +33,7 @@ class MainWidget(QtWidgets.QWidget):
 
         self.action_bar = None
         self.expense_view = None
+        self.transactions_view = None
 
         ui.set_stylesheet(self)
 

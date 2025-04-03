@@ -36,6 +36,8 @@ class Signals(QtCore.QObject):
 
     openLedgerRequested = QtCore.Signal()
 
+    categorySelectionChanged = QtCore.Signal()
+
     def __init__(self):
         super().__init__()
         self._connect_signals()
@@ -47,6 +49,10 @@ class Signals(QtCore.QObject):
 
         self.dataFetchRequested.connect(self.fetch_data)
         self.clearDataRequested.connect(self.clear_data)
+
+        self.dataRangeChanged.connect(self.categorySelectionChanged)
+        self.dataFetched.connect(self.categorySelectionChanged)
+
 
     @staticmethod
     @QtCore.Slot()

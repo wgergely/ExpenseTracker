@@ -104,7 +104,7 @@ class Color(enum.Enum):
     Text = (225, 225, 225)
     SelectedText = (255, 255, 255)
     Blue = (88, 138, 180)
-    LightBlue = (50, 50, 195, 180)
+    LightBlue = (98, 158, 190)
     MediumBlue = (66, 118, 160, 180)
     DarkBlue = (31, 39, 46)
     Red = (219, 114, 114)

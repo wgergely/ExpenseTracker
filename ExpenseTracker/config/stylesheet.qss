@@ -20,7 +20,7 @@ QWidget:focus {
     border: <Separator@2.0>px solid <Blue>;
 }
 QWidget:focus:hover {
-    border: <Separator@2.0>px solid <Text>;
+    border: <Separator@2.0>px solid <LightBlue>;
 }
 
 QStackedWidget {
@@ -534,4 +534,14 @@ YearMonthPopup {
 }
 
 RangeSelectorBar {
+}
+
+
+ExpenseView:focus,
+ExpenseView:focus:hover,
+TransactionListView:focus,
+TransactionListView:focus:hover {
+    border: <Separator@2.0>px solid <Transparent>;
+
+
 }
