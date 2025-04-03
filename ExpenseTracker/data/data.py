@@ -141,6 +141,9 @@ def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: i
     if df_month.empty:
         return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
+    # Remove positive amounts from df_month (we're only interested in expenses)
+    df_month = df_month[df_month['amount'] < 0]
+
     config = load_config()
     mapping = config.get('data_header_mapping', {})
     desired_keys = list(mapping.keys())
@@ -156,5 +159,7 @@ def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: i
 
     # Filter out uncategorized transactions (where category is NaN or empty)
     breakdown = breakdown[breakdown['category'].notna() & (breakdown['category'] != '')]
+
+    # Sort the breakdown DataFrame by the specified column
     breakdown = breakdown.sort_values(sort_column, ascending=True).reset_index(drop=True)
     return breakdown

@@ -19,6 +19,7 @@ from PySide6 import QtCore
 from .data import get_monthly_expenses
 from ..database.database import load_config, get_cached_data
 from ..ui import ui
+from ..ui.signals import signals
 
 # Custom roles
 TransactionsRole = QtCore.Qt.UserRole + 1
@@ -43,13 +44,24 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     columns = ['Category', 'Chart', 'Amount']
 
     def __init__(self, year_month: str, span: int = 1, parent: QtCore.QObject | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName('ExpenseModel')
+        super().__init__(parent=parent)
+
+
+        self._transactions_mapping: Dict[Any, Any] = {}
         self.year_month: str = year_month
         self.span: int = span
+
         self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
-        self._transactions_mapping: Dict[Any, Any] = {}
+
+        self.setObjectName('ExpenseModel')
+
         self.refresh_data()
+
+        self._connect_signals()
+
+    def _connect_signals(self) -> None:
+        signals.dataRangeChanged.connect(self.on_range_changed)
+        signals.dataFetched.connect(self.refresh_data)
 
     @QtCore.Slot()
     def refresh_data(self) -> None:
@@ -89,7 +101,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         self.layoutChanged.emit()
 
-    @functools.lru_cache(maxsize=128)
     def _get_summary(self, category: str) -> str:
         # For the "Total" row, aggregate transactions from all non-total categories.
         if isinstance(category, str) and category.strip().lower() == 'total':
@@ -125,6 +136,16 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
     @QtCore.Slot()
     def set_span(self, span: int) -> None:
+        self.span = span
+        self.refresh_data()
+
+    @QtCore.Slot(str)
+    @QtCore.Slot(int)
+    def on_range_changed(self, year_month: str, span: int) -> None:
+        """
+        Slot to handle range changes.
+        """
+        self.year_month = year_month
         self.span = span
         self.refresh_data()
 
@@ -232,6 +253,11 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def __init__(self, df: pd.DataFrame = None, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
+
+        self._df = None
+        self._init_data(df)
+
+    def _init_data(self, df: pd.DataFrame = None) -> None:
         if df is None:
             # Load the raw transaction data from the cache.
             df = get_cached_data()
@@ -248,6 +274,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     )
                 else:
                     df = df.rename(columns=rename_map)
+
+        # Sort by amount from largest to smallest
+        df = df.sort_values(by='amount', ascending=True)
         self._df = df.copy()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:

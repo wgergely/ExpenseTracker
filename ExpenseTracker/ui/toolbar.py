@@ -56,8 +56,8 @@ class ActionToolBar(QtWidgets.QToolBar):
         ))
         self.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum,
-            QtWidgets.QSizePolicy.MinimumExpanding
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Maximum
         )
 
         ui.set_stylesheet(self)
@@ -73,6 +73,12 @@ class ActionToolBar(QtWidgets.QToolBar):
         self.show_ledger_btn = actions.ShowLedgerAction(self)
 
     def _populate_toolbar(self):
+        button = QtWidgets.QToolButton(self)
+        icon = ui.get_category_icon('btn_date')
+        button.setIcon(icon)
+        button.setDisabled(True)
+        self.addWidget(button)
+
         self.addWidget(self.range_selector)
 
         spacer = QtWidgets.QWidget(self)

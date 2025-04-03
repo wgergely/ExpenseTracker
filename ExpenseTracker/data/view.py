@@ -102,7 +102,7 @@ class MonthlyExpenseView(QtWidgets.QTableView):
 
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.Expanding
+            QtWidgets.QSizePolicy.MinimumExpanding
         )
 
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)

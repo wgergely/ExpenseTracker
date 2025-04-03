@@ -1,6 +1,11 @@
 from PySide6 import QtWidgets, QtCore
 
 from . import ui
+from . import signals
+from . import toolbar
+from ..data import view
+from ..data import model
+
 
 
 class MainWidget(QtWidgets.QWidget):
@@ -17,11 +22,10 @@ class MainWidget(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Preferred
         )
 
-        self.month_picker_widget = None
-        self.span_picker_widget = None
-
-        self.expense_view_buttons_bar = None
+        self.action_bar = None
         self.expense_view = None
+
+        self._initialized = False
 
         self._create_ui()
         self._connect_signals()
@@ -33,10 +37,37 @@ class MainWidget(QtWidgets.QWidget):
         self.layout().setContentsMargins(o, o, o, o)
         self.layout().setSpacing(o)
 
-        self.month_picker_widget
+        self.action_bar = toolbar.ActionToolBar(parent=self)
+        self.action_bar.setObjectName('ExpenseTrackerActionToolBar')
+
+        self.layout().addWidget(self.action_bar, 1)
+
+        self.expense_view = view.MonthlyExpenseView(parent=self)
+        self.expense_view.setObjectName('ExpenseTrackerMonthlyExpenseView')
+
+        self.layout().addWidget(self.expense_view, 1)
 
     def _connect_signals(self):
         pass
+
+    def showEvent(self, event: QtCore.QEvent) -> None:
+        """Handles the show event to initialize the widget."""
+        if self._initialized:
+            super().showEvent(event)
+            return
+
+        self._init_data()
+
+    def _init_data(self):
+        year_month, _ = self.action_bar.range_selector.get_range()
+        span = self.action_bar.range_selector.get_range_span()
+
+        m = model.ExpenseModel(year_month, span=span)
+        m.set_year_month(year_month)
+        m.set_span(span)
+
+        self.expense_view.setModel(m)
+
 
     def sizeHint(self):
         return QtCore.QSize(

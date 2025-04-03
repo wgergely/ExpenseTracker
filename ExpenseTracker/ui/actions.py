@@ -2,10 +2,10 @@
 
 """
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 
 from . import ui
-from .signals import signals
+
 
 class SwitchViewAction(QtWidgets.QToolButton):
     """
@@ -21,6 +21,7 @@ class SwitchViewAction(QtWidgets.QToolButton):
 
     @QtCore.Slot()
     def on_clicked(self):
+        from .signals import signals
         signals.switchViewToggled.emit()
 
 
@@ -41,6 +42,8 @@ class AuthenticateAction(QtWidgets.QToolButton):
 
     @QtCore.Slot()
     def on_clicked(self, checked=False):
+        from .signals import signals
+
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         force = bool(modifiers & (QtCore.Qt.ShiftModifier |
                                   QtCore.Qt.AltModifier |
@@ -65,6 +68,8 @@ class ReloadAction(QtWidgets.QToolButton):
 
     @QtCore.Slot()
     def on_clicked(self, checked=False):
+        from .signals import signals
+
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         force = bool(modifiers & (QtCore.Qt.ShiftModifier |
                                   QtCore.Qt.AltModifier |
@@ -86,4 +91,54 @@ class ShowLedgerAction(QtWidgets.QToolButton):
 
     @QtCore.Slot()
     def on_clicked(self):
+        from .signals import signals
         signals.showLedgerRequested.emit()
+
+
+
+def show_ledger():
+    """
+    Open the Google spreadsheet (ledger) in the default browser.
+    """
+    from ..database import database
+    config = database.load_config()
+    spreadsheet_id = config.get('id', None)
+    if not spreadsheet_id:
+        raise ValueError("No spreadsheet ID found in the configuration.")
+
+    url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+    QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
+
+
+def authenticate():
+    """
+    Authenticate with Google and load the data.
+    """
+    from ..auth import auth
+
+    # Perform authentication
+    # show prompt
+    msg = 'Are you sure you want to authenticate with Google?'
+    reply = QtWidgets.QMessageBox.question(None, 'Authenticate', msg,
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                           QtWidgets.QMessageBox.No)
+    if reply == QtWidgets.QMessageBox.No:
+        return
+
+    auth.authenticate(force=True)
+
+    msg = 'Authentication successful.'
+    QtWidgets.QMessageBox.information(None, 'Authentication', msg,
+                                        QtWidgets.QMessageBox.Ok)
+
+def reload_data():
+    """
+    Load data from Google.
+    """
+    from ..database import database
+
+    # Load the data
+    database.get_remote_data()
+
+    from .signals import signals
+    signals.dataFetched.emit()

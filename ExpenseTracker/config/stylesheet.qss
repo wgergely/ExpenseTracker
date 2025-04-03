@@ -476,10 +476,11 @@ QToolTip {
 QToolBar {
     font-size: <MediumText@1.0>px;
     background-color: <DarkBackground>;
-    border: <Separator@1.0>px solid <DarkBackground>;
+    border: <Separator@2.0>px solid <DarkBackground>;
     border-radius: <Indicator@1.5>px;
     spacing: <Indicator@4.0>px;
-    padding: <Indicator@1.0>px;
+    padding-left: <Margin@0.5>px;
+    padding-right: <Margin@0.5>px;
     margin: 0;
 }
 QToolBar::separator {

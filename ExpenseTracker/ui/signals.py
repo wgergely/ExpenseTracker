@@ -1,7 +1,9 @@
 from PySide6 import QtCore
 
 
+
 class Signals(QtCore.QObject):
+    dataFetched = QtCore.Signal()
 
     switchViewToggled = QtCore.Signal()
     authenticateRequested = QtCore.Signal(bool)
@@ -20,6 +22,11 @@ class Signals(QtCore.QObject):
         self.reloadRequested.connect(lambda f: print(f"Reload requested: {f}"))
         self.showLedgerRequested.connect(lambda: print("Show ledger requested"))
 
+
+        from . import actions
+        self.showLedgerRequested.connect(actions.show_ledger)
+        self.authenticateRequested.connect(actions.authenticate)
+        self.reloadRequested.connect(actions.reload_data)
 
 
 
