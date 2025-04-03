@@ -6,18 +6,17 @@ are cached locally in the OS-specific temporary directory to
 avoid repeated logins.
 
 """
-import google.auth.exceptions
-import google.auth.transport.requests
-import google.oauth2.credentials
-import google_auth_oauthlib.flow
-
 import json
 import logging
 import os
 import pathlib
 import tempfile
-
 from typing import Optional, List, Dict, Any
+
+import google.auth.exceptions
+import google.auth.transport.requests
+import google.oauth2.credentials
+import google_auth_oauthlib.flow
 
 logging.basicConfig(level=logging.INFO)
 
@@ -206,3 +205,19 @@ def authenticate(
     save_credentials(creds, token_path)
 
     return creds
+
+
+def unathenticate(token_filename: str = 'auth_token.json') -> None:
+    """Delete the cached credentials file.
+
+    Args:
+        token_filename (str, optional): Name of the token file. Defaults to 'auth_token.json'.
+    """
+    auth_dir = get_temp_auth_dir()
+    token_path = os.path.join(auth_dir, token_filename)
+
+    if os.path.exists(token_path):
+        os.remove(token_path)
+        logging.info(f'Credentials file {token_path} deleted.')
+    else:
+        logging.info(f'No credentials file found at {token_path}. Nothing to delete.')
