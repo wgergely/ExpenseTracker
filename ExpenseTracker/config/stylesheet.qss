@@ -30,9 +30,19 @@ QStackedWidget {
 QGroupBox {
     border: <Separator@1.0>px solid <Opaque>;
     border-radius: <Indicator@1.5>px;
-    background-color: <Opaque>;
+    background-color: rgba(255, 255, 255, 10);
 }
-
+QGroupBox QLabel {
+    color: <SecondaryText>;
+    font-size: <SmallText@1.0>px;
+    font-weight: 500;
+}
+QGroupBox QPlainTextEdit {
+    font-family: monospace;
+    font-weight: 500;
+    font-size: <SmallText@1.0>px;
+    color: <SecondaryText>;
+}
 QGroupBox::!title {
     color: <DisabledText>;
     subcontrol-origin: padding;
@@ -363,7 +373,7 @@ QHeaderView {
 }
 QHeaderView::section {
     font-size: <SmallText@1.0>px;
-    padding-left: <Margin@1.0>px;
+    padding-left: <Margin@0.5>px;
     height: <RowHeight@1.0>px;
     background-color: <Transparent>;
     color: <DisabledText>;

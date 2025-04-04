@@ -1,8 +1,10 @@
 """
 Header editor module for ledger headers. Provides:
 - Model (HeaderItemModel) with drag reorder
+- Also supports external drag: sets 'application/x-headeritem' so other widgets can drop the header name
 - Delegate (HeaderItemDelegate) for custom inline editing
 - Main widget (HeaderEditor) with toolbar and context menu
+- Automatically loads headers from ledger.json or falls back to ledger.json.template
 - Each row's height set to ui.Size.RowHeight(1.0)
 - Editing can start via double-click or pressing Enter (activated signal)
 """
@@ -20,19 +22,45 @@ if not TEMPLATE_DIR.exists():
     raise FileNotFoundError(f'Template directory {TEMPLATE_DIR} does not exist.')
 
 LEDGER_TEMPLATE = TEMPLATE_DIR / 'ledger.json.template'
-
 CONFIG_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
 LEDGER_PATH = CONFIG_DIR / 'ledger.json'
 
 HEADER_TYPES = ['string', 'int', 'float', 'date']
 
+def load_ledger_headers() -> dict:
+    """
+    Loads the 'header' dict from LEDGER_PATH if available,
+    otherwise falls back to LEDGER_TEMPLATE.
+    Returns a dict of the form { 'Name': 'Type', ... } or an empty dict on failure.
+    """
+    def load_header_dict_from_path(path: pathlib.Path) -> dict:
+        if not path.exists():
+            return {}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('header', {})
+        except Exception:
+            return {}
+
+    header_dict = load_header_dict_from_path(LEDGER_PATH)
+    if header_dict:
+        return header_dict
+
+    fallback_dict = load_header_dict_from_path(LEDGER_TEMPLATE)
+    return fallback_dict or {}
+
 
 class HeaderItemModel(QtCore.QAbstractListModel):
     """
     A model that stores header items as a list of dicts:
-    [ { 'name': <str>, 'type': <str> }, ... ]
-    Supports drag-and-drop reordering.
+      [ { 'name': <str>, 'type': <str> }, ... ]
+    Supports internal drag-and-drop reordering,
+    and also sets 'application/x-headeritem' to allow external drops.
     """
+
+    MIME_INTERNAL = 'application/vnd.text.list'
+    MIME_EXTERNAL = 'application/x-headeritem'
 
     def __init__(self, headers=None, parent=None):
         super().__init__(parent)
@@ -48,14 +76,14 @@ class HeaderItemModel(QtCore.QAbstractListModel):
             return None
         item = self._headers[index.row()]
         if role == QtCore.Qt.DisplayRole:
-            return f"{item['name']} ({item['type']})"
+            return f'{item["name"]} ({item["type"]})'
         elif role == QtCore.Qt.EditRole:
             return item
         return None
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         """
-        Expects value to be a dict: { 'name': <str>, 'type': <str> }
+        Expects value to be a dict: { "name": <str>, "type": <str> }
         """
         if not index.isValid() or role != QtCore.Qt.EditRole:
             return False
@@ -66,48 +94,79 @@ class HeaderItemModel(QtCore.QAbstractListModel):
     def flags(self, index):
         base_flags = super().flags(index)
         if index.isValid():
+            # Editable, draggable, droppable for internal reorder
             return (base_flags
                     | QtCore.Qt.ItemIsEditable
                     | QtCore.Qt.ItemIsDragEnabled
                     | QtCore.Qt.ItemIsDropEnabled)
         else:
+            # Even if no valid index, we can drop items
             return base_flags | QtCore.Qt.ItemIsDropEnabled
 
     def supportedDropActions(self):
+        # For internal reordering, we typically use MoveAction
         return QtCore.Qt.MoveAction
 
     def mimeTypes(self):
-        return ['application/vnd.text.list']
+        # We produce:
+        # 1) application/vnd.text.list => for internal reorder
+        # 2) application/x-headeritem => for external drops into other widgets
+        base = super().mimeTypes()
+        return list(set(base + [self.MIME_INTERNAL, self.MIME_EXTERNAL]))
 
     def mimeData(self, indexes):
+        """
+        For the first valid index, store the row in 'application/vnd.text.list'
+        (for internal reorder) and the item['name'] in 'application/x-headeritem'
+        (for external usage).
+        """
         mime_data = QtCore.QMimeData()
-        rows = [i.row() for i in indexes if i.isValid()]
-        mime_data.setData('application/vnd.text.list', bytearray(str(rows), 'utf-8'))
+
+        valid_rows = [i.row() for i in indexes if i.isValid()]
+        if not valid_rows:
+            return mime_data
+
+        row = valid_rows[0]  # just handle one item
+        if 0 <= row < len(self._headers):
+            # For internal reordering
+            mime_data.setData(self.MIME_INTERNAL, bytearray(str(valid_rows), 'utf-8'))
+
+            # For external usage
+            header_item = self._headers[row]
+            header_name = header_item['name']
+            mime_data.setData(self.MIME_EXTERNAL, header_name.encode('utf-8'))
+
         return mime_data
 
     def dropMimeData(self, data, action, row, column, parent):
+        """
+        Handle internal reordering if we have 'application/vnd.text.list'.
+        The external 'application/x-headeritem' doesn't matter here
+        because we are a source, not a target.
+        """
         if action == QtCore.Qt.IgnoreAction:
             return True
-        if not data.hasFormat('application/vnd.text.list'):
-            return False
 
-        if parent.isValid():
-            drop_row = parent.row()
-        else:
-            drop_row = self.rowCount()
+        if data.hasFormat(self.MIME_INTERNAL):
+            # Reorder logic
+            if parent.isValid():
+                drop_row = parent.row()
+            else:
+                drop_row = self.rowCount()
 
-        encoded_data = data.data('application/vnd.text.list').data()
-        row_list = eval(encoded_data.decode('utf-8'))
+            encoded_data = data.data(self.MIME_INTERNAL).data()
+            row_list = eval(encoded_data.decode('utf-8'))
+            to_move = [self._headers[r] for r in row_list]
 
-        to_move = [self._headers[r] for r in row_list]
+            self.beginResetModel()
+            for r in sorted(row_list, reverse=True):
+                self._headers.pop(r)
+            for i, itm in enumerate(to_move):
+                self._headers.insert(drop_row + i, itm)
+            self.endResetModel()
+            return True
 
-        self.beginResetModel()
-        for r in sorted(row_list, reverse=True):
-            self._headers.pop(r)
-        for i, itm in enumerate(to_move):
-            self._headers.insert(drop_row + i, itm)
-        self.endResetModel()
-        return True
+        return False
 
     def insertRow(self, row, name='', type_='string'):
         self.beginInsertRows(QtCore.QModelIndex(), row, row)
@@ -122,7 +181,7 @@ class HeaderItemModel(QtCore.QAbstractListModel):
 
     def to_header_dict(self):
         """
-        Convert the internal list into a dict: { 'Name': 'Type', ... }
+        Convert the internal list into a dict: { "Name": "Type", ... }
         """
         return {item['name']: item['type'] for item in self._headers}
 
@@ -142,6 +201,7 @@ class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
     """
 
     def paint(self, painter, option, index):
+        # Example custom painting
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         selected = option.state & QtWidgets.QStyle.State_Selected
 
@@ -152,11 +212,9 @@ class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.setPen(QtCore.Qt.NoPen)
         painter.drawRect(option.rect)
 
-        # Draw the text with a custom color
+        # Draw text
         text = index.data(QtCore.Qt.DisplayRole)
-        rect = QtCore.QRect(option.rect)
-        rect.adjust(ui.Size.Margin(1.0), 0, -ui.Size.Margin(1.0), 0)
-
+        rect = option.rect.marginsRemoved(QtCore.QMargins(ui.Size.Margin(1.0), 0, ui.Size.Margin(1.0), 0))
         if text:
             painter.setPen(ui.Color.Text())
             painter.drawText(rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, text)
@@ -173,8 +231,6 @@ class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
         if data is not None:
             editor.set_name(data['name'])
             editor.set_type(data['type'])
-            # Focus and select the text in the QLineEdit
-            # Delay with a singleShot to ensure the widget is fully visible
             QtCore.QTimer.singleShot(0, editor.focus_and_select)
 
     def setModelData(self, editor, model, index):
@@ -241,34 +297,67 @@ class HeaderEditor(QtWidgets.QWidget):
     - QListView with drag reorder & custom delegate
     - Toolbar with add, remove, edit, restore
     - Context menu with same actions
+    - Loads from LEDGER_PATH or falls back to LEDGER_TEMPLATE
     - Row height set to ui.Size.RowHeight(1.0) for both list items and editor
+    - Exports 'application/x-headeritem' when dragging an item externally
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
+
+        # Attempt to load from LEDGER_PATH or fallback
+        initial_header_dict = self._load_ledger_header()
+
+        # Convert dict -> list of { 'name': k, 'type': v }
         self.model = HeaderItemModel()
+        self.model.load_from_header_dict(initial_header_dict)
+
         self.delegate = HeaderItemDelegate()
 
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Minimum,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
-
         self.setMinimumSize(
             ui.Size.Margin(1.0),
-            ui.Size.RowHeight(10.0)
+            ui.Size.RowHeight(7.5)
         )
 
         self._init_ui()
         self._connect_signals()
 
+    def _load_ledger_header(self) -> dict:
+        """
+        Loads the 'header' dict from LEDGER_PATH if available,
+        otherwise falls back to LEDGER_TEMPLATE,
+        returning an empty dict if neither is available.
+        """
+        def load_header_dict_from_path(path: pathlib.Path) -> dict:
+            if not path.exists():
+                return {}
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                return data.get('header', {})
+            except Exception:
+                return {}
+
+        header_dict = load_header_dict_from_path(LEDGER_PATH)
+        if header_dict:
+            return header_dict
+
+        fallback_dict = load_header_dict_from_path(LEDGER_TEMPLATE)
+        return fallback_dict or {}
+
     def _init_ui(self):
         main_layout = QtWidgets.QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
         row_h = ui.Size.RowHeight(1.0)
 
         self.toolbar = QtWidgets.QToolBar()
-        self.toolbar.setIconSize(QtCore.QSize(row_h - 6, row_h - 6))
+        f = ui.Size.Indicator(2.0)
+        self.toolbar.setIconSize(QtCore.QSize(row_h - f, row_h - f))
         self.toolbar.setFixedHeight(row_h)
 
         self.act_add = QtGui.QAction('Add', self)
@@ -286,14 +375,26 @@ class HeaderEditor(QtWidgets.QWidget):
         self.view.setModel(self.model)
         self.view.setItemDelegate(self.delegate)
         self.view.setUniformItemSizes(True)
+
+        self.view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
         # By default, double-click or 'EditKeyPressed' triggers editing
-        # We'll also force "activated" -> on_edit for Enter key activation
-        self.view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
-                                  QtWidgets.QAbstractItemView.EditKeyPressed)
+        self.view.setEditTriggers(
+            QtWidgets.QAbstractItemView.DoubleClicked |
+            QtWidgets.QAbstractItemView.EditKeyPressed
+        )
+        # Pressing Enter on an item also triggers editing
+        self.view.activated.connect(self.on_edit)
+
+        # ** Key: allow external dragging:
         self.view.setDragEnabled(True)
         self.view.setAcceptDrops(True)
         self.view.setDropIndicatorShown(True)
+        self.view.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
+
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.view.setResizeMode(QtWidgets.QListView.Adjust)
+
 
         main_layout.addWidget(self.view)
         self.setLayout(main_layout)
@@ -303,9 +404,6 @@ class HeaderEditor(QtWidgets.QWidget):
         self.act_remove.triggered.connect(self.on_remove)
         self.act_edit.triggered.connect(self.on_edit)
         self.act_restore.triggered.connect(self.on_restore)
-
-        # Connect "activated" (enter on item) to editing
-        self.view.activated.connect(self.on_edit)
 
         # Context menu
         self.view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -322,9 +420,9 @@ class HeaderEditor(QtWidgets.QWidget):
     def on_add(self):
         row = self.model.rowCount()
         self.model.insertRow(row, name='', type_='string')
-        index = self.model.index(row)
-        self.view.setCurrentIndex(index)
-        self.view.edit(index)
+        idx = self.model.index(row)
+        self.view.setCurrentIndex(idx)
+        self.view.edit(idx)
 
     def on_remove(self):
         idx = self.view.currentIndex()
@@ -357,7 +455,8 @@ class HeaderEditor(QtWidgets.QWidget):
         return self.model.to_header_dict()
 
     def sizeHint(self):
+        # Example size hint
         return QtCore.QSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.RowHeight(1.0)
+            ui.Size.Margin(10.0),
+            ui.Size.RowHeight(8.0)
         )

@@ -16,6 +16,8 @@ from ..auth import auth, service
 from ..ui import ui
 from .header_editor import HeaderEditor
 from .data_mapping_editor import DataMappingEditor
+from .category_editor import CategoryEditor
+
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
     """
@@ -41,18 +43,18 @@ class SettingsScrollArea(QtWidgets.QScrollArea):
 
 
 class SettingsWidget(QtWidgets.QWidget):
-    """
-    The main widget that displays:
-    1) Connect to Google / Client Secret form
-    2) Ledger Info form (spreadsheet ID, sheet name)
-    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ledger_data = LedgerSettingsData()
+
         ui.set_stylesheet(self)
+
         self._create_ui()
         self._connect_signals()
+
+        self.load_existing_secret()
+
 
     def sizeHint(self):
         # Return a fixed size hint for the scroll area
@@ -65,6 +67,12 @@ class SettingsWidget(QtWidgets.QWidget):
         # Use a custom scroll area that syncs child widget width to itself
         self._scroll_area = SettingsScrollArea(self)
 
+        self.load_disk_btn = QtWidgets.QPushButton('Import JSON')
+        self.paste_btn = QtWidgets.QPushButton('Paste from Clipboard')
+        self.help_btn = QtWidgets.QPushButton('Help')
+        self.save_secret_btn = QtWidgets.QPushButton('Save Client Secret')
+        self.authenticate_btn = QtWidgets.QPushButton('Authenticate')
+
         # Container: holds all content in a vertical layout
         container = QtWidgets.QWidget()
         container_layout = QtWidgets.QVBoxLayout(container)
@@ -76,68 +84,128 @@ class SettingsWidget(QtWidgets.QWidget):
         )
 
         # Margins & spacing
-        margin_size = ui.Size.Margin(1.5)
-        container_layout.setContentsMargins(margin_size, margin_size, margin_size, margin_size)
-        container_layout.setSpacing(margin_size)
+        o = ui.Size.Margin(1.0)
+        container_layout.setContentsMargins(o, o, o, o)
+        container_layout.setSpacing(o)
 
         # SECTION 1) CONNECT TO GOOGLE
         connect_label = QtWidgets.QLabel('Connect to Google')
-        connect_label.setStyleSheet('font-weight: bold;')
+        connect_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
         container_layout.addWidget(connect_label)
 
         connect_box = QtWidgets.QGroupBox('')
         connect_form = QtWidgets.QFormLayout(connect_box)
-        connect_form.setHorizontalSpacing(margin_size * 3)
+        connect_form.setContentsMargins(o, o, o, o)
+        connect_form.setSpacing(o)
+        connect_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        connect_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapAllRows)
+        connect_form.setHorizontalSpacing(o)
+        connect_form.setVerticalSpacing(o)
 
         # Row: Pick JSON & Paste from Clipboard
         pick_hbox = QtWidgets.QHBoxLayout()
-        self.load_disk_btn = QtWidgets.QPushButton('Pick JSON')
-        self.paste_btn = QtWidgets.QPushButton('Paste from Clipboard')
-        self.help_btn = QtWidgets.QPushButton('Help')
+        pick_hbox.setContentsMargins(0, 0, 0, 0)
+        pick_hbox.setSpacing(o)
         pick_hbox.addWidget(self.load_disk_btn, 1)
         pick_hbox.addWidget(self.paste_btn, 1)
         pick_hbox.addWidget(self.help_btn, 0)
         pick_widget = QtWidgets.QWidget()
+        pick_widget.setObjectName('wrapper')
+        pick_widget.setStyleSheet('#wrapper { background: transparent; }')
         pick_widget.setLayout(pick_hbox)
-        connect_form.addRow('Select Secret', pick_widget)
+        connect_form.addRow('Import Client Secret', pick_widget)
 
         # Row: JSON Preview
         self.json_preview = JsonPreviewWidget()
-        connect_form.addRow('Client Secret JSON', self.json_preview)
-
-        # Row: Save + Authenticate
-        action_hbox = QtWidgets.QHBoxLayout()
-        self.save_secret_btn = QtWidgets.QPushButton('Save Client Secret')
-        self.authenticate_btn = QtWidgets.QPushButton('Authenticate')
-        action_hbox.addWidget(self.save_secret_btn)
-        action_hbox.addWidget(self.authenticate_btn)
-        action_widget = QtWidgets.QWidget()
-        action_widget.setLayout(action_hbox)
-        connect_form.addRow('', action_widget)
+        connect_form.addRow('Preview', self.json_preview)
 
         container_layout.addWidget(connect_box)
 
-        # SECTION 2) LEDGER INFO
-        ledger_label = QtWidgets.QLabel('Ledger Info')
-        ledger_label.setStyleSheet('font-weight: bold;')
-        container_layout.addWidget(ledger_label)
+        # SECTION 3) HEADERS
+        header_label = QtWidgets.QLabel('Google Spreadsheet')
+        header_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
+        container_layout.addWidget(header_label)
 
-        ledger_box = QtWidgets.QGroupBox('')
-        ledger_form = QtWidgets.QFormLayout(ledger_box)
-        ledger_form.setHorizontalSpacing(margin_size * 3)
+        header_box = QtWidgets.QGroupBox('')
+        header_form = QtWidgets.QFormLayout(header_box)
+        header_form.setContentsMargins(o, o, o, o)
+        header_form.setSpacing(o)
+        header_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        header_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapAllRows)
+        header_form.setHorizontalSpacing(o)
+        header_form.setVerticalSpacing(o)
 
-        self.ledger_id_edit = QtWidgets.QLineEdit()
+        # Row: Save + Authenticate
+        connect_form.addRow('', self.save_secret_btn)
+        connect_form.addRow('', self.authenticate_btn)
+
+        self.ledger_id_edit = QtWidgets.QLineEdit(parent=self)
         self.ledger_id_edit.setText(self.ledger_data.ledger_id)
-        ledger_form.addRow('Spreadsheet ID', self.ledger_id_edit)
+        self.ledger_id_edit.setPlaceholderText('e.g. 1a2b3c4d5e6f7g8h9i0j')
+        header_form.addRow('Google Spreadsheet ID Properties', self.ledger_id_edit)
 
-        self.sheet_name_edit = QtWidgets.QLineEdit()
+        self.sheet_name_edit = QtWidgets.QLineEdit(parent=self)
         self.sheet_name_edit.setText(self.ledger_data.sheet_name)
-        ledger_form.addRow('Sheet Name', self.sheet_name_edit)
+        self.sheet_name_edit.setPlaceholderText('e.g. Sheet1')
+        header_form.addRow('Sheet to Use', self.sheet_name_edit)
 
-        self.test_ledger_btn = QtWidgets.QPushButton('Test Sheet Access')
-        ledger_form.addRow('Actions', self.test_ledger_btn)
+        self.test_ledger_btn = QtWidgets.QPushButton('Test Access', parent=self)
+        header_form.addRow('', self.test_ledger_btn)
 
-        container_layout.addWidget(ledger_box)
+        # Add the header editor to the container layout
+        container_layout.addWidget(header_box)
+
+        # SECTION 2) HEADER EDITOR
+
+        header_label = QtWidgets.QLabel('Google Spreadsheet Columns')
+        header_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
+        container_layout.addWidget(header_label)
+
+        header_box = QtWidgets.QGroupBox('')
+        header_form = QtWidgets.QFormLayout(header_box)
+        header_form.setContentsMargins(o, o, o, o)
+        header_form.setSpacing(o)
+        header_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        header_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapAllRows)
+        header_form.setHorizontalSpacing(o)
+        header_form.setVerticalSpacing(o)
+
+        self.header_editor = HeaderEditor(parent=self)
+        header_form.addRow('Google Spreadsheet Columns', self.header_editor)
+
+        self.data_mapping_editor = DataMappingEditor(parent=self)
+        header_form.addRow('Map Google Spreadsheet Columns', self.data_mapping_editor)
+
+        # Add the header editor to the container layout
+        container_layout.addWidget(header_box)
+
+
+
+        # SECTION 4) CATEGORIES
+
+        category_label = QtWidgets.QLabel('Categories')
+        category_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
+        container_layout.addWidget(category_label)
+
+        category_box = QtWidgets.QGroupBox('')
+        category_form = QtWidgets.QFormLayout(category_box)
+        category_form.setContentsMargins(o, o, o, o)
+        category_form.setSpacing(o)
+        category_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        category_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapAllRows)
+        category_form.setHorizontalSpacing(o)
+        category_form.setVerticalSpacing(o)
+
+
+        self.category_editor = CategoryEditor(parent=self)
+        category_form.addRow('', self.category_editor)
+
+        # Add the header editor to the container layout
+        container_layout.addWidget(category_box)
+
+
+        # Place our container in the custom scroll area
+        self._scroll_area.setWidget(container)
 
         # BOTTOM: CLOSE BUTTON
         btns_layout = QtWidgets.QHBoxLayout()
@@ -147,36 +215,10 @@ class SettingsWidget(QtWidgets.QWidget):
         btns_layout.addWidget(close_btn)
         container_layout.addLayout(btns_layout)
 
-        # SECTION 3) HEADERS
-        header_label = QtWidgets.QLabel('Header Editor')
-        header_label.setStyleSheet('font-weight: bold;')
-        container_layout.addWidget(header_label)
-
-        header_box = QtWidgets.QGroupBox('')
-        header_form = QtWidgets.QFormLayout(header_box)
-        header_form.setHorizontalSpacing(margin_size * 3)
-
-        self.header_editor = HeaderEditor(self)
-        header_form.addRow('Spreadsheet Columns', self.header_editor)
-
-        self.data_mapping_editor = DataMappingEditor(self)
-        header_form.addRow('Columns Map', self.data_mapping_editor)
-
-        # Add the header editor to the container layout
-        container_layout.addWidget(header_box)
-
-
-        # Place our container in the custom scroll area
-        self._scroll_area.setWidget(container)
-
-
-
         # Final layout for SettingsWidget
         final_layout = QtWidgets.QVBoxLayout(self)
+        final_layout.setContentsMargins(0, 0, 0, 0)
         final_layout.addWidget(self._scroll_area)
-        self.setLayout(final_layout)
-
-        self.load_existing_secret()
 
     def _connect_signals(self):
         self.load_disk_btn.clicked.connect(self.on_load_secret_from_disk)

@@ -1,6 +1,6 @@
 {
-  "id": "<LEDGER_ID>",
-  "sheet": "<SHEET_NAME>",
+  "id": "",
+  "sheet": "Sheet1",
   "header": {
     "ID": "int",
     "Date":	"date",

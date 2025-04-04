@@ -19,10 +19,17 @@ We load a list of possible spreadsheet columns by first reading ledger.json (LED
 If that fails or is missing, we fall back to ledger.json.template (LEDGER_TEMPLATE).
 If neither is valid, we return an empty list.
 
+We also automatically load the current 'data_header_mapping' from the same ledger.json,
+or if that fails, from ledger.json.template. If neither is valid, we start with blank mappings.
+
 Row height is enforced with ui.Size.RowHeight(1.0).
 The table is non-focusable but still allows cell editing via click/double-click.
 
 We fix the editor alignment by overriding updateEditorGeometry in the delegate.
+
+We also allow dropping from the Header Editor. If the user drags
+a header name (mime type "application/x-headeritem"), the dropped name
+becomes the value for the data mapping's spreadsheet column.
 """
 
 import json
@@ -43,6 +50,37 @@ CONFIG_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
 LEDGER_PATH = CONFIG_DIR / 'ledger.json'
 
 DATA_MAPPING_KEYS = ['date', 'amount', 'description', 'category', 'account']
+
+
+def _load_data_mapping_from_path(path: pathlib.Path) -> dict:
+    """
+    Attempt to read the 'data_header_mapping' from the JSON file at 'path'.
+    Return a dict if found, else empty dict.
+    """
+    if not path.exists():
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('data_header_mapping', {})
+    except Exception:
+        return {}
+
+
+def load_data_mapping() -> dict:
+    """
+    Loads the 'data_header_mapping' from LEDGER_PATH if available,
+    otherwise falls back to LEDGER_TEMPLATE.
+    If neither is available or fails, returns an empty dict.
+    """
+    # Attempt from LEDGER_PATH first
+    mapping = _load_data_mapping_from_path(LEDGER_PATH)
+    if mapping:
+        return mapping
+
+    # Fall back to LEDGER_TEMPLATE
+    fallback = _load_data_mapping_from_path(LEDGER_TEMPLATE)
+    return fallback or {}
 
 
 def load_header_names_from_path(path: pathlib.Path) -> list[str]:
@@ -84,9 +122,14 @@ class DataMappingModel(QtCore.QAbstractTableModel):
     We store the mapping internally like:
       _keys = [ "date", "amount", "description", "category", "account" ]
       _mapping = { "date": <mapped_name>, "amount": <mapped_name>, ... }
+
+    Also implements dropMimeData() to accept "application/x-headeritem"
+    from the Header Editor. The dropped header name is used as
+    the spreadsheet column value in col=1.
     """
 
     HEADERS = ['Data Column', 'Spreadsheet Column']  # column 0, column 1
+    MIME_HEADER = 'application/x-headeritem'
 
     def __init__(self, mapping_dict=None, parent=None):
         super().__init__(parent)
@@ -152,11 +195,58 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         if col == 0:
             return (base_flags | QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable) & ~QtCore.Qt.ItemIsEditable
 
-        # Column 1 is editable
+        # Column 1 is editable + droppable
         return (base_flags
                 | QtCore.Qt.ItemIsSelectable
                 | QtCore.Qt.ItemIsEditable
-                | QtCore.Qt.ItemIsEnabled)
+                | QtCore.Qt.ItemIsEnabled
+                | QtCore.Qt.ItemIsDropEnabled)
+
+    def supportedDropActions(self):
+        # We'll allow MoveAction or CopyAction as needed
+        return QtCore.Qt.CopyAction | QtCore.Qt.MoveAction
+
+    def mimeTypes(self):
+        """
+        We can accept 'application/x-headeritem' from the header editor.
+        """
+        base_types = super().mimeTypes()
+        return base_types + [self.MIME_HEADER]
+
+    def dropMimeData(self, data, action, row, column, parent):
+        """
+        If we receive a 'application/x-headeritem', interpret the payload as
+        the header name to place into col=1.
+        """
+        if action == QtCore.Qt.IgnoreAction:
+            return True
+
+        # If no data for 'application/x-headeritem', let the base do its normal check
+        if not data.hasFormat(self.MIME_HEADER):
+            return super().dropMimeData(data, action, row, column, parent)
+
+        # decode the dropped header name
+        header_name = data.data(self.MIME_HEADER).data().decode('utf-8', errors='replace').strip()
+        if not header_name:
+            return False
+
+        # Determine drop row/col
+        if parent.isValid():
+            drop_row = parent.row()
+            drop_col = parent.column()
+        else:
+            drop_row = row
+            drop_col = column
+
+        # We only want to set col=1
+        if drop_row < 0:
+            drop_row = 0
+        if drop_col != 1:
+            drop_col = 1
+
+        # Set the cell value
+        success = self.setData(self.index(drop_row, drop_col), header_name, QtCore.Qt.EditRole)
+        return success
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
         # Horizontal header with "Data Column" (col 0) / "Spreadsheet Column" (col 1)
@@ -187,6 +277,9 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
     Delegate for column 1 (Spreadsheet Column). Provides a QLineEdit
     with a QCompleter using the ledger's header names.
     Column 0 is read-only. We override updateEditorGeometry to fix alignment.
+
+    The QCompleter is set to be always visible if the user is typing,
+    by using UnfilteredPopupCompletion or a similar approach.
     """
 
     def __init__(self, available_headers, parent=None):
@@ -212,12 +305,15 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
             # Read-only column, use default paint
             super().paint(painter, option, index)
 
-
     def createEditor(self, parent, option, index):
         if index.column() == 1:
             editor = QtWidgets.QLineEdit(parent)
             completer = QtWidgets.QCompleter(self._available_headers, editor)
+            # Show all options in a popup as soon as user types
             completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+            completer.setCompletionMode(QtWidgets.QCompleter.UnfilteredPopupCompletion)
+            # If you want partial substring matching:
+            # completer.setFilterMode(QtCore.Qt.MatchContains)
             editor.setCompleter(completer)
             return editor
         return None
@@ -229,6 +325,9 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         editor.setText(value or '')
         # Focus and select text after 0 ms
         QtCore.QTimer.singleShot(0, lambda: (editor.setFocus(), editor.selectAll()))
+        # Force the completer to appear with the current text
+        if editor.completer():
+            editor.completer().complete()
 
     def setModelData(self, editor, model, index):
         if editor is None:
@@ -248,6 +347,7 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         Explicitly set the editor geometry to match the cell area.
         """
         editor.setGeometry(option.rect)
+        editor.setStyleSheet(f'height: {option.rect.height()}px')
 
 
 class DataMappingEditor(QtWidgets.QWidget):
@@ -258,16 +358,22 @@ class DataMappingEditor(QtWidgets.QWidget):
       - A horizontal header, hidden vertical header
       - A custom delegate for col 1 that offers a QLineEdit + QCompleter
       - Non-focusable table, but still clickable/double-clickable for editing
+      - Accepts drag-and-drop from the Header Editor:
+        If you drop a header name (mime type "application/x-headeritem"),
+        it populates the col=1 field with that name
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
 
         # Attempt to load column names from ledger.json, else fallback ledger.json.template
         self._all_headers = get_all_header_names()
 
-        # Create model & delegate
-        self.model = DataMappingModel()
+        # Load existing data_header_mapping from LEDGER_PATH or fallback to template
+        # Then create the model with that mapping
+        current_mapping = self._load_data_mapping()
+        self.model = DataMappingModel(mapping_dict=current_mapping)
+
         self.delegate = DataMappingDelegate(self._all_headers, self)
 
         self.setSizePolicy(
@@ -282,8 +388,33 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         self._init_ui()
 
+    def _load_data_mapping(self) -> dict:
+        """
+        Load 'data_header_mapping' from LEDGER_PATH if available,
+        otherwise fallback to LEDGER_TEMPLATE, else empty.
+        """
+        def load_mapping_from(path: pathlib.Path) -> dict:
+            if not path.exists():
+                return {}
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                return data.get('data_header_mapping', {})
+            except Exception:
+                return {}
+
+        # First try LEDGER_PATH
+        mapping = load_mapping_from(LEDGER_PATH)
+        if mapping:
+            return mapping
+
+        # Fallback to template
+        fallback = load_mapping_from(LEDGER_TEMPLATE)
+        return fallback or {}
+
     def _init_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
+        self.layout().setContentsMargins(0, 0, 0, 0)
 
         self.table = QtWidgets.QTableView(self)
         self.table.setModel(self.model)
@@ -299,8 +430,7 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         # Let columns expand proportionally
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
-        # Set alignment for the header
+        # Align column labels left
         self.table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft)
 
         # Table is clickable for editing, but won't appear focused
@@ -308,6 +438,11 @@ class DataMappingEditor(QtWidgets.QWidget):
         # Allow double-click or Enter to edit
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
                                    QtWidgets.QAbstractItemView.EditKeyPressed)
+
+        # Enable drop acceptance
+        self.table.setAcceptDrops(True)
+        self.table.setDragDropMode(QtWidgets.QAbstractItemView.DropOnly)
+        self.table.setDropIndicatorShown(True)
 
         layout.addWidget(self.table)
         self.setLayout(layout)
