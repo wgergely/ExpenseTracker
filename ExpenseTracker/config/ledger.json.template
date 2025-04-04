@@ -1,5 +1,5 @@
 {
-  "id": "",
+  "id": "<SPREADSHEET_ID>",
   "sheet": "Sheet1",
   "header": {
     "ID": "int",
@@ -36,7 +36,7 @@
       "display_name": "Charitable Giving",
       "color": "#BB86FC",
       "description": "Charitable donations",
-      "icon": "CharitableGiving.png",
+      "icon": "Charitable Giving.png",
       "excluded": false
     },
     "Family": {
@@ -120,14 +120,14 @@
       "display_name": "Transport & Travel",
       "color": "#BB86FC",
       "description": "Transport and travel expenses",
-        "icon": "Transport & Travel.png",
+      "icon": "Transport & Travel.png",
       "excluded": false
     },
     "Health": {
       "display_name": "Health",
       "color": "#BB86FC",
       "description": "Health expenses",
-      "
+      "icon": "Health.png",
       "excluded": false
     }
   }

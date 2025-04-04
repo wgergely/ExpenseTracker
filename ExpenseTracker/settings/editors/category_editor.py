@@ -1,33 +1,17 @@
 """
 Category editor module for ledger "categories". Provides:
-- CategoriesModel (QAbstractTableModel) for columns:
-  0) name
-  1) display_name
-  2) description
-  3) icon
-  4) color
-  5) excluded
-
+- CategoriesModel (QAbstractTableModel) for columns
 - CategoryItemDelegate for custom painting and custom editors:
 - CategoryEditor widget with a QToolbar for Add, Remove, Edit, Restore
 
 """
+import logging
 
-import json
-import pathlib
-import tempfile
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..ui import ui
+from .. import lib
+from ...ui import ui
 
-TEMPLATE_DIR = pathlib.Path(__file__).parent.parent / 'config'
-ICON_DIR = TEMPLATE_DIR / 'icons'
-LEDGER_TEMPLATE = TEMPLATE_DIR / 'ledger.json.template'
-
-CONFIG_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-LEDGER_PATH = CONFIG_DIR / 'ledger.json'
-
-# Columns
 COL_ICON = 0
 COL_COLOR = 1
 COL_NAME = 2
@@ -36,17 +20,6 @@ COL_DESCRIPTION = 4
 COL_EXCLUDED = 5
 
 DEFAULT_ICON = "Miscellaneous.png"
-
-
-def load_categories_dict_from_path(path: pathlib.Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data.get('categories', {})
-    except Exception:
-        return {}
 
 
 class CategoriesModel(QtCore.QAbstractTableModel):
@@ -59,9 +32,27 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         COL_EXCLUDED: ""
     }
 
-    def __init__(self, categories_list=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self._categories = categories_list if categories_list else []
+        self._categories = []
+
+        QtCore.QTimer.singleShot(150, self.init_data)
+
+    def init_data(self):
+        d = lib.settings.get_section('categories')
+
+        self.beginResetModel()
+        self._categories.clear()
+        for k, v in d.items():
+            self._categories.append({
+                "name": k,
+                "display_name": v.get("display_name", ""),
+                "description": v.get("description", ""),
+                "icon": v.get("icon", DEFAULT_ICON),
+                "color": v.get("color", ui.Color.Text().name(QtGui.QColor.HexRgb)),
+                "excluded": bool(v.get("excluded", False))
+            })
+        self.endResetModel()
 
     def rowCount(self, parent=QtCore.QModelIndex()):
         return len(self._categories) if not parent.isValid() else 0
@@ -88,7 +79,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
             elif col == COL_ICON:
                 return cat["icon"] if cat["icon"] else DEFAULT_ICON
             elif col == COL_COLOR:
-                return cat["color"] or "#FFFFFF"
+                return cat["color"] or ui.Color.Text().name(QtGui.QColor.HexRgb)
             elif col == COL_EXCLUDED:
                 return cat["excluded"]
         return None
@@ -104,7 +95,12 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         if col == COL_NAME:
             new_name = str(value).strip()
             if not new_name:
+                logging.warning("Category name cannot be empty.")
                 return False  # reject empty name
+            if new_name in [cat["name"] for cat in self._categories if cat != self._categories[row]]:
+                logging.warning(f"Category name '{new_name}' already exists.")
+                return False
+
             cat["name"] = new_name
         elif col == COL_DISPLAY_NAME:
             cat["display_name"] = str(value).strip()
@@ -145,9 +141,20 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         if not icon:
             icon = DEFAULT_ICON
         if not color:
-            color = "#FFFFFF"
+            color = ui.Color.Text().name(QtGui.QColor.HexRgb)
+
+        name = name if name else "NewCategory"
+
+        # Ensure name is unique
+        names = [c["name"] for c in self._categories]
+        if name in names:
+            i = 1
+            while f"{name}_{i}" in names:
+                i += 1
+            name = f"{name}_{i}"
+
         self._categories.insert(row, {
-            "name": name if name else "NewCategory",
+            "name": name,
             "display_name": display_name,
             "description": desc,
             "icon": icon,
@@ -170,38 +177,35 @@ class CategoriesModel(QtCore.QAbstractTableModel):
                 "display_name": c["display_name"],
                 "description": c["description"],
                 "icon": c["icon"] if c["icon"] else DEFAULT_ICON,
-                "color": c["color"] if c["color"] else "#FFFFFF",
+                "color": c["color"] if c["color"] else ui.Color.Text().name(QtGui.QColor.HexRgb),
                 "excluded": c["excluded"]
             }
         return out
 
-    def load_from_categories_dict(self, d: dict):
-        self.beginResetModel()
-        self._categories.clear()
-        for k, v in d.items():
-            self._categories.append({
-                "name": k,
-                "display_name": v.get("display_name", ""),
-                "description": v.get("description", ""),
-                "icon": v.get("icon", DEFAULT_ICON),
-                "color": v.get("color", "#FFFFFF"),
-                "excluded": bool(v.get("excluded", False))
-            })
-        self.endResetModel()
-
+    @QtCore.Slot()
+    def add_new(self):
+        """
+        Add a new category with default values.
+        """
+        r = self.rowCount()
+        self.insertRow(r, name="NewCategory", icon=DEFAULT_ICON)
+        idx = self.index(r, COL_NAME)
+        self.dataChanged.emit(idx, idx, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
+        return idx
 
 class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
-    def __init__(self, icon_dir, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.icon_dir = icon_dir
+
         self._all_icons = []
-        if icon_dir.exists():
-            for p in sorted(icon_dir.glob("*.png")):
+
+        if lib.settings.paths.icon_dir.exists():
+            for p in sorted(lib.settings.paths.icon_dir.glob("*.png")):
                 self._all_icons.append(p.name)
 
     def paint(self, painter, option, index):
         painter.save()
-        # background
+
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         selected = option.state & QtWidgets.QStyle.State_Selected
         if hover or selected:
@@ -250,10 +254,10 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRect(option.rect)
 
             painter.setOpacity(1.0)
-            icon = QtGui.QIcon(str(self.icon_dir / icon_name))
+            icon = QtGui.QIcon(str(lib.settings.paths.icon_dir / icon_name))
             icon.paint(painter, rect, QtCore.Qt.AlignCenter)
         elif col == COL_COLOR:
-            rect = QtCore.QRect(0,0,ui.Size.Margin(1.0), ui.Size.Margin(1.0))
+            rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
             rect.moveCenter(option.rect.center())
 
             o = ui.Size.Indicator(1.0)
@@ -324,7 +328,8 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         elif col == COL_COLOR:
             color_str = val or ui.Color.Text().name(QtGui.QColor.HexRgb)
             old_color = QtGui.QColor(color_str)
-            new_col = QtWidgets.QColorDialog.getColor(old_color, editor.parentWidget(), "Pick Color", QtWidgets.QColorDialog.ShowAlphaChannel)
+            new_col = QtWidgets.QColorDialog.getColor(old_color, editor.parentWidget(), "Pick Color",
+                                                      QtWidgets.QColorDialog.ShowAlphaChannel)
             if new_col.isValid():
                 model.setData(index, new_col.name(QtGui.QColor.HexRgb), QtCore.Qt.EditRole)
             self.commitData.emit(editor)
@@ -362,9 +367,6 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         else:
             editor.setGeometry(QtCore.QRect(0, 0, 0, 0))
 
-
-
-
     def _pick_icon_dialog(self, current_icon, parent):
         """
         Blocking dialog in IconMode. Return the chosen icon or None if canceled.
@@ -396,7 +398,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         current_idx = None
         for i, icon_name in enumerate(self._all_icons):
             item = QtGui.QStandardItem()
-            icon_path = self.icon_dir / icon_name
+            icon_path = lib.settings.paths.icon_dir / icon_name
             icon_obj = QtGui.QIcon(str(icon_path))
             item.setIcon(icon_obj)
             # item.setText(icon_name)
@@ -445,135 +447,131 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         return None
 
 
-
 class CategoryEditor(QtWidgets.QWidget):
     """
     Main widget that:
     - loads categories from ledger.json or fallback ledger.json.template
     - shows them in a QTableView with CategoryItemDelegate
     - offers Add/Remove/Edit/Restore through a toolbar
+
     """
+
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
+        self.toolbar = None
+        self.view = None
 
-        cat_dict = self._load_categories()
-        cat_list = self._dict_to_list(cat_dict)
-        self.model = CategoriesModel(cat_list)
+        self.setMinimumSize(
+            ui.Size.Margin(2.0),
+            ui.Size.RowHeight(12.0)
+        )
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Expanding
+        )
 
-        self.delegate = CategoryItemDelegate(ICON_DIR, self)
+        self._create_ui()
+        self._init_model()
+        self._init_actions()
+        self._connect_signals()
 
-        self.setMinimumSize(ui.Size.Margin(2.0),
-                            ui.Size.RowHeight(12.0))
-        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-
-        self._init_ui()
-
-    def _load_categories(self) -> dict:
-        cd = load_categories_dict_from_path(LEDGER_PATH)
-        if cd:
-            return cd
-        fallback = load_categories_dict_from_path(LEDGER_TEMPLATE)
-        return fallback or {}
-
-    def _dict_to_list(self, cat_dict: dict) -> list:
-        out = []
-        for k, v in cat_dict.items():
-            out.append({
-                "name": k,
-                "display_name": v.get("display_name", ""),
-                "description": v.get("description", ""),
-                "icon": v.get("icon", ""),
-                "color": v.get("color", "#FFFFFF"),
-                "excluded": bool(v.get("excluded", False))
-            })
-        return out
-
-    def _list_to_dict(self) -> dict:
-        return self.model.to_categories_dict()
-
-    def _init_ui(self):
-        lay = QtWidgets.QVBoxLayout(self)
+    def _create_ui(self):
+        QtWidgets.QVBoxLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
-
         # Toolbar
         self.toolbar = QtWidgets.QToolBar(self)
         self.toolbar.setMovable(False)
         self.toolbar.setFixedHeight(ui.Size.RowHeight(1.0))
-        self.act_add = QtGui.QAction("Add", self)
-        self.act_remove = QtGui.QAction("Remove", self)
-        self.act_edit = QtGui.QAction("Edit", self)
-        self.act_restore = QtGui.QAction("Restore")
-
-        self.toolbar.addAction(self.act_add)
-        self.toolbar.addAction(self.act_remove)
-        self.toolbar.addAction(self.act_edit)
-        self.toolbar.addAction(self.act_restore)
-        lay.addWidget(self.toolbar)
+        self.layout().addWidget(self.toolbar, 1)
 
         # Table
-        self.table = QtWidgets.QTableView(self)
-        self.table.setModel(self.model)
-        self.table.setItemDelegate(self.delegate)
-
+        self.view = QtWidgets.QTableView(self)
+        self.view.setItemDelegate(CategoryItemDelegate())
+        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         # Double-click editing
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
-                                   QtWidgets.QAbstractItemView.EditKeyPressed)
+        self.view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
+                                  QtWidgets.QAbstractItemView.EditKeyPressed)
 
         # Hide vertical header
-        self.table.verticalHeader().setVisible(False)
+        self.view.verticalHeader().setVisible(False)
+
+        self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.view.horizontalHeader().setDefaultSectionSize(ui.Size.RowHeight(1.0))
+
+        self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.view.setFocusPolicy(QtCore.Qt.NoFocus)
+
+        self.layout().addWidget(self.view)
+
+    def _connect_signals(self):
+        pass
+        # self.act_add.triggered.connect(self.on_add)
+        # self.act_remove.triggered.connect(self.on_remove)
+        # self.act_edit.triggered.connect(self.on_edit)
+        # self.act_restore.triggered.connect(self.on_restore)
+
+    def _init_model(self):
+        model = CategoriesModel(parent=self)
+        self.view.setModel(model)
 
         # Row height
         rh = ui.Size.RowHeight(1.0)
-        self.table.verticalHeader().setDefaultSectionSize(rh)
+        self.view.verticalHeader().setDefaultSectionSize(rh)
 
         # Column widths
-        self.table.horizontalHeader().setSectionResizeMode(COL_NAME, QtWidgets.QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(COL_DISPLAY_NAME, QtWidgets.QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(COL_DESCRIPTION, QtWidgets.QHeaderView.Stretch)
+        self.view.horizontalHeader().setSectionResizeMode(COL_NAME, QtWidgets.QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(COL_DISPLAY_NAME, QtWidgets.QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(COL_DESCRIPTION, QtWidgets.QHeaderView.Stretch)
 
-        self.table.horizontalHeader().setSectionResizeMode(COL_ICON, QtWidgets.QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(COL_COLOR, QtWidgets.QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(COL_EXCLUDED, QtWidgets.QHeaderView.Fixed)
+        self.view.horizontalHeader().setSectionResizeMode(COL_ICON, QtWidgets.QHeaderView.Fixed)
+        self.view.horizontalHeader().setSectionResizeMode(COL_COLOR, QtWidgets.QHeaderView.Fixed)
+        self.view.horizontalHeader().setSectionResizeMode(COL_EXCLUDED, QtWidgets.QHeaderView.Fixed)
+
+    def _init_actions(self):
+
+        action = QtGui.QAction('Add', self)
+        action.setShortcut('Ctrl+N')
+        action.setStatusTip('Add a new category')
+        action.triggered.connect(self.view.model().add_new)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def on_remove():
+            if not self.view.selectionModel().hasSelection():
+                logging.warning("No category selected.")
+                return
+
+            index = next(iter(self.view.selectionModel().selectedIndexes()), QtCore.QModelIndex())
+
+            if not index.isValid():
+                logging.warning("No category selected.")
+                return
+
+            self.view.model().removeRow(index.row())
+
+        action = QtGui.QAction('Remove', self)
+        action.setShortcut('Delete')
+        action.setStatusTip('Remove selected category')
+        action.triggered.connect(on_remove)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
 
 
-        self.table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.table.horizontalHeader().setDefaultSectionSize(ui.Size.RowHeight(1.0))
+        # self.act_remove = QtGui.QAction("Remove", self)
+        # self.act_edit = QtGui.QAction("Edit", self)
+        # self.act_restore = QtGui.QAction("Restore")
+        #
+        # self.toolbar.addAction(self.act_add)
 
-        # Possibly hide the header for col3,col4,col5 if you want no text
-        # (the model's headerData returns empty strings for them)
 
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.table.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        lay.addWidget(self.table)
-        self.setLayout(lay)
-
-        self._connect_signals()
-
-    def _connect_signals(self):
-        self.act_add.triggered.connect(self.on_add)
-        self.act_remove.triggered.connect(self.on_remove)
-        self.act_edit.triggered.connect(self.on_edit)
-        self.act_restore.triggered.connect(self.on_restore)
-
-    def on_add(self):
-        r = self.model.rowCount()
-        self.model.insertRow(r, name="NewCategory", icon=DEFAULT_ICON)
-        idx = self.model.index(r, 0)
-        self.table.setCurrentIndex(idx)
-        self.table.edit(idx)
-
-    def on_remove(self):
-        idx = self.table.currentIndex()
-        if idx.isValid():
-            self.model.removeRow(idx.row())
 
     def on_edit(self):
-        idx = self.table.currentIndex()
+        idx = self.view.currentIndex()
         if idx.isValid():
-            self.table.edit(idx)
+            self.view.edit(idx)
 
     def on_restore(self):
         # Confirm first
@@ -586,15 +584,11 @@ class CategoryEditor(QtWidgets.QWidget):
         if res != QtWidgets.QMessageBox.Yes:
             return
 
-        if not LEDGER_TEMPLATE.exists():
+        if not lib.settings.paths.ledger_template.exists():
             QtWidgets.QMessageBox.warning(self, "Error", "ledger.json.template not found.")
             return
 
-        cat_dict = load_categories_dict_from_path(LEDGER_TEMPLATE)
+        cat_dict = lib.settings.get_section('categories')
         self.model.load_from_categories_dict(cat_dict)
-        
-        QtWidgets.QMessageBox.information(self, "Restored", "Categories restored from template.")
 
-    def get_categories_dict(self) -> dict:
-        """Return the final categories dict for saving to ledger.json."""
-        return self._list_to_dict()
+        QtWidgets.QMessageBox.information(self, "Restored", "Categories restored from template.")

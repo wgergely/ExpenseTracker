@@ -7,7 +7,7 @@ Main settings GUI. Merges client_secret.json editing with ledger info configurat
 import json
 from PySide6 import QtWidgets, QtCore
 
-from .editor import JsonPreviewWidget
+from .editor import JSONWidget
 from .model import (
     LedgerSettingsData,
     CLIENT_SECRET_PATH
@@ -116,7 +116,7 @@ class SettingsWidget(QtWidgets.QWidget):
         connect_form.addRow('Import Client Secret', pick_widget)
 
         # Row: JSON Preview
-        self.json_preview = JsonPreviewWidget()
+        self.json_preview = JSONWidget()
         connect_form.addRow('Preview', self.json_preview)
 
         container_layout.addWidget(connect_box)

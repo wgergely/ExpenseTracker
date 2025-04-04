@@ -5,53 +5,11 @@ Custom editor delegates for settings views.
 """
 import json
 
-from PySide6 import QtWidgets, QtGui, QtCore
-
-HEADER_TYPES = ["string", "int", "float", "date"]
+from PySide6 import QtWidgets, QtCore
 
 
-class HeaderTypeDelegate(QtWidgets.QItemDelegate):
-    """
-    Delegate to edit header 'type' via a combo box.
-    """
 
-    def createEditor(self, parent, option, index):
-        combo = QtWidgets.QComboBox(parent)
-        combo.addItems(HEADER_TYPES)
-        return combo
-
-    def setEditorData(self, editor, index):
-        value = index.model().data(index, QtCore.Qt.EditRole)
-        idx = editor.findText(value)
-        if idx >= 0:
-            editor.setCurrentIndex(idx)
-
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentText(), QtCore.Qt.EditRole)
-
-
-class ColorDelegate(QtWidgets.QItemDelegate):
-    """
-    Delegate to pick a color with a dialog.
-    """
-
-    def createEditor(self, parent, option, index):
-        # We'll trigger a color dialog in setModelData instead of using inline widgets.
-        return None
-
-    def setEditorData(self, editor, index):
-        pass
-
-    def setModelData(self, editor, model, index):
-        old_val = index.model().data(index, QtCore.Qt.EditRole)
-        new_color = QtWidgets.QColorDialog.getColor(QtGui.QColor(old_val))
-        if new_color.isValid():
-            model.setData(index, new_color.name(), QtCore.Qt.EditRole)
-        else:
-            model.setData(index, old_val, QtCore.Qt.EditRole)
-
-
-class JsonPreviewWidget(QtWidgets.QWidget):
+class JSONWidget(QtWidgets.QWidget):
     """
     A widget to preview JSON text in read-only mode.
     Externally, call set_json_text(...) to load and pretty-print JSON.

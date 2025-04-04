@@ -13,6 +13,8 @@ from . import ui
 
 
 class Signals(QtCore.QObject):
+    configSectionChanged = QtCore.Signal(str) # Section, config
+
     switchViewToggled = QtCore.Signal()
 
     authenticateRequested = QtCore.Signal(bool)
@@ -49,6 +51,8 @@ class Signals(QtCore.QObject):
 
         self.dataRangeChanged.connect(self.categorySelectionChanged)
         self.dataFetched.connect(self.categorySelectionChanged)
+
+        self.configSectionChanged.connect(lambda s: print(f'Config section changed: {s}'))
 
     @staticmethod
     @QtCore.Slot()

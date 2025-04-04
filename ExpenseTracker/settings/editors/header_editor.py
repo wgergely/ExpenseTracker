@@ -17,15 +17,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..ui import ui
 
-TEMPLATE_DIR = pathlib.Path(__file__).parent.parent / 'config'
-if not TEMPLATE_DIR.exists():
-    raise FileNotFoundError(f'Template directory {TEMPLATE_DIR} does not exist.')
 
-LEDGER_TEMPLATE = TEMPLATE_DIR / 'ledger.json.template'
-CONFIG_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-LEDGER_PATH = CONFIG_DIR / 'ledger.json'
-
-HEADER_TYPES = ['string', 'int', 'float', 'date']
 
 def load_ledger_headers() -> dict:
     """
@@ -323,7 +315,7 @@ class HeaderEditor(QtWidgets.QWidget):
             ui.Size.RowHeight(7.5)
         )
 
-        self._init_ui()
+        self._create_ui()
         self._connect_signals()
 
     def _load_ledger_header(self) -> dict:
@@ -349,7 +341,7 @@ class HeaderEditor(QtWidgets.QWidget):
         fallback_dict = load_header_dict_from_path(LEDGER_TEMPLATE)
         return fallback_dict or {}
 
-    def _init_ui(self):
+    def _create_ui(self):
         main_layout = QtWidgets.QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 

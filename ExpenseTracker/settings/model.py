@@ -10,23 +10,7 @@ import tempfile
 
 from PySide6 import QtCore
 
-TEMPLATE_DIR = pathlib.Path(__file__).parent.parent / 'config'
-if not TEMPLATE_DIR.exists():
-    raise FileNotFoundError(f"Template directory {TEMPLATE_DIR} does not exist.")
 
-CLIENT_SECRET_TEMPLATE = TEMPLATE_DIR / 'client_secret.json.template'
-LEDGER_TEMPLATE = TEMPLATE_DIR / 'ledger.json.template'
-
-CONFIG_DIR = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-CLIENT_SECRET_PATH = CONFIG_DIR / 'client_secret.json'
-LEDGER_PATH = CONFIG_DIR / 'ledger.json'
-
-if not CONFIG_DIR.exists():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-if not CLIENT_SECRET_PATH.exists():
-    shutil.copy(CLIENT_SECRET_TEMPLATE, CLIENT_SECRET_PATH)
-if not LEDGER_PATH.exists():
-    shutil.copy(LEDGER_TEMPLATE, LEDGER_PATH)
 
 
 class LedgerSettingsData:
