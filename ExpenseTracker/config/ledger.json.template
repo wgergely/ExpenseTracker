@@ -29,90 +29,105 @@
       "display_name": "Cash",
       "color": "#BB86FC",
       "description": "Cash transactions",
+      "icon": "Cash.png",
       "excluded": false
     },
     "Charitable Giving": {
       "display_name": "Charitable Giving",
       "color": "#BB86FC",
       "description": "Charitable donations",
+      "icon": "CharitableGiving.png",
       "excluded": false
     },
     "Family": {
       "display_name": "Family",
       "color": "#BB86FC",
       "description": "Family expenses",
+      "icon": "Family.png",
       "excluded": false
     },
     "Fees & Fines": {
       "display_name": "Fees & Fines",
       "color": "#BB86FC",
       "description": "Fees and fines",
+        "icon": "Fees & Fines.png",
       "excluded": false
     },
     "Food & Groceries": {
       "display_name": "Food & Groceries",
       "color": "#BB86FC",
       "description": "Food and grocery expenses",
+        "icon": "Food & Groceries.png",
       "excluded": false
     },
     "Income": {
       "display_name": "Income",
       "color": "#BB86FC",
       "description": "Income transactions",
+        "icon": "Income.png",
       "excluded": true
     },
     "Leisure & Entertainment": {
       "display_name": "Leisure & Entertainment",
       "color": "#BB86FC",
       "description": "Leisure and entertainment expenses",
+        "icon": "Leisure & Entertainment.png",
       "excluded": false
     },
     "Rent & Rates": {
       "display_name": "Rent & Rates",
       "color": "#BB86FC",
       "description": "Rent and rates expenses",
+        "icon": "Rent & Rates.png",
       "excluded": false
     },
     "Shopping & Merchandise": {
       "display_name": "Shopping & Merchandise",
       "color": "#BB86FC",
       "description": "Shopping and merchandise expenses",
+        "icon": "Shopping & Merchandise.png",
       "excluded": false
     },
     "Services & Subscriptions": {
       "display_name": "Services & Subscriptions",
       "color": "#BB86FC",
       "description": "Services and subscriptions expenses",
+        "icon": "Services & Subscriptions.png",
       "excluded": false
     },
     "Miscellaneous": {
       "display_name": "Miscellaneous",
       "color": "#BB86FC",
       "description": "Miscellaneous expenses",
+        "icon": "Miscellaneous.png",
       "excluded": false
     },
     "Tax & Social Security": {
       "display_name": "Tax & Social Security",
       "color": "#BB86FC",
       "description": "Tax and social security expenses",
+        "icon": "Tax & Social Security.png",
       "excluded": true
     },
     "Transfers": {
       "display_name": "Transfers",
       "color": "#BB86FC",
       "description": "Transfer transactions",
+      "icon": "Transfers.png",
       "excluded": true
     },
     "Transport & Travel": {
       "display_name": "Transport & Travel",
       "color": "#BB86FC",
       "description": "Transport and travel expenses",
+        "icon": "Transport & Travel.png",
       "excluded": false
     },
     "Health": {
       "display_name": "Health",
       "color": "#BB86FC",
       "description": "Health expenses",
+      "
       "excluded": false
     }
   }

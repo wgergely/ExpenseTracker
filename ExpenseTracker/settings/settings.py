@@ -157,7 +157,7 @@ class SettingsWidget(QtWidgets.QWidget):
 
         # SECTION 2) HEADER EDITOR
 
-        header_label = QtWidgets.QLabel('Google Spreadsheet Columns')
+        header_label = QtWidgets.QLabel('Source Columns')
         header_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
         container_layout.addWidget(header_label)
 
@@ -171,13 +171,32 @@ class SettingsWidget(QtWidgets.QWidget):
         header_form.setVerticalSpacing(o)
 
         self.header_editor = HeaderEditor(parent=self)
-        header_form.addRow('Google Spreadsheet Columns', self.header_editor)
-
-        self.data_mapping_editor = DataMappingEditor(parent=self)
-        header_form.addRow('Map Google Spreadsheet Columns', self.data_mapping_editor)
+        header_form.addRow('The source spreadsheet columns', self.header_editor)
 
         # Add the header editor to the container layout
         container_layout.addWidget(header_box)
+
+        # SECTION 3) DATA MAPPING
+
+        data_mapping_label = QtWidgets.QLabel('Column Mapping')
+        data_mapping_label.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
+        container_layout.addWidget(data_mapping_label)
+
+        data_mapping_box = QtWidgets.QGroupBox('')
+        data_mapping_form = QtWidgets.QFormLayout(data_mapping_box)
+        data_mapping_form.setContentsMargins(o, o, o, o)
+        data_mapping_form.setSpacing(o)
+        data_mapping_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        data_mapping_form.setRowWrapPolicy(QtWidgets.QFormLayout.WrapAllRows)
+        data_mapping_form.setHorizontalSpacing(o)
+        data_mapping_form.setVerticalSpacing(o)
+
+
+        self.data_mapping_editor = DataMappingEditor(parent=self)
+        data_mapping_form.addRow('Map Google Spreadsheet Columns', self.data_mapping_editor)
+
+        # Add the data mapping editor to the container layout
+        container_layout.addWidget(data_mapping_box)
 
 
 

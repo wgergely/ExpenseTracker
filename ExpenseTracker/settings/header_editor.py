@@ -435,9 +435,21 @@ class HeaderEditor(QtWidgets.QWidget):
             self.view.edit(idx)
 
     def on_restore(self):
+        # Confirm first
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            'Restore Header',
+            'Are you sure you want to restore the header from the template?',
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
+
         if not LEDGER_TEMPLATE.exists():
             QtWidgets.QMessageBox.warning(self, 'Error', 'Ledger template not found.')
             return
+
         try:
             with open(LEDGER_TEMPLATE, 'r', encoding='utf-8') as f:
                 data = json.load(f)

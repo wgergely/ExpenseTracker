@@ -29,10 +29,10 @@ LEDGER_PATH = CONFIG_DIR / 'ledger.json'
 
 # Columns
 COL_ICON = 0
-COL_NAME = 1
-COL_DISPLAY_NAME = 2
-COL_DESCRIPTION = 3
-COL_COLOR = 4
+COL_COLOR = 1
+COL_NAME = 2
+COL_DISPLAY_NAME = 3
+COL_DESCRIPTION = 4
 COL_EXCLUDED = 5
 
 DEFAULT_ICON = "Miscellaneous.png"
@@ -54,9 +54,9 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         COL_NAME: "Name",
         COL_DISPLAY_NAME: "Display Name",
         COL_DESCRIPTION: "Description",
-        COL_ICON: "Icon",
-        COL_COLOR: "Color",
-        COL_EXCLUDED: "Excluded"
+        COL_ICON: "",
+        COL_COLOR: "",
+        COL_EXCLUDED: ""
     }
 
     def __init__(self, categories_list=None, parent=None):
@@ -242,17 +242,22 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
             rect.moveCenter(option.rect.center())
 
-            o = ui.Size.Indicator(2.0)
-            rect.adjusted(o, o, -o, -o)
+            index = index.sibling(index.row(), COL_COLOR)
+            val = index.data(QtCore.Qt.EditRole) or ui.Color.Text().name(QtGui.QColor.HexRgb)
 
+            painter.setBrush(QtGui.QBrush(QtGui.QColor(val)))
+            painter.setOpacity(0.2)
+            painter.drawRect(option.rect)
+
+            painter.setOpacity(1.0)
             icon = QtGui.QIcon(str(self.icon_dir / icon_name))
             icon.paint(painter, rect, QtCore.Qt.AlignCenter)
         elif col == COL_COLOR:
             rect = QtCore.QRect(0,0,ui.Size.Margin(1.0), ui.Size.Margin(1.0))
             rect.moveCenter(option.rect.center())
 
-            o = ui.Size.Indicator(2.0)
-            rect.adjusted(o, o, -o, -o)
+            o = ui.Size.Indicator(1.0)
+            rect = rect.adjusted(o, o, -o, -o)
 
             if not val:
                 val = ui.Color.Text().name(QtGui.QColor.HexRgb)
@@ -260,10 +265,14 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.setRenderHint(QtGui.QPainter.Antialiasing)
             painter.setBrush(QtGui.QBrush(QtGui.QColor(val)))
 
+            painter.setOpacity(0.2)
+            painter.drawRect(option.rect)
+
+            painter.setOpacity(1.0)
+            o = ui.Size.Indicator(1.0)
             painter.drawRoundedRect(rect, o, o)
 
         elif col == COL_EXCLUDED:
-            # '❌' if True, else blank
             is_excl = bool(val)
             text_val = "❌" if is_excl else "✅"
             painter.setPen(ui.Color.Text())
@@ -273,27 +282,20 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawText(option.rect, QtCore.Qt.AlignCenter, text_val)
         painter.restore()
 
-    def _drawIcon(self, painter, icon_name, option):
-        icon_path = self.icon_dir / icon_name
-        icon_obj = QtGui.QIcon(str(icon_path)) if icon_path.exists() else QtGui.QIcon()
-        icon_size = ui.Size.Margin(1.5)
-        x = option.rect.x() + (option.rect.width() - icon_size)//2
-        y = option.rect.y() + (option.rect.height() - icon_size)//2
-        target_rect = QtCore.QRect(x, y, icon_size, icon_size)
-        icon_obj.paint(painter, target_rect)
-
-    #
-    # Creating an Editor
-    #
     def createEditor(self, parent, option, index):
         col = index.column()
         if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
             e = QtWidgets.QLineEdit(parent)
             return e
         else:
-            # For col3,4,5, we return a dummy widget. We'll do popups in setEditorData.
+            # dummy widget for popups
             # This ensures the "edit" event is triggered, though.
             e = QtWidgets.QWidget(parent)
+            e.setAttribute(QtCore.Qt.WA_NoSystemBackground)
+            e.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
+            e.setAttribute(QtCore.Qt.WA_NoChildEventsForParent)
+            e.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+            e.setFocusPolicy(QtCore.Qt.NoFocus)
             return e
 
     def setEditorData(self, editor, index):
@@ -316,21 +318,28 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             # done editing
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
+            editor.deleteLater()
+
         elif col == COL_COLOR:
-            # Show color dialog
-            color_str = val or "#FFFFFF"
+            color_str = val or ui.Color.Text().name(QtGui.QColor.HexRgb)
             old_color = QtGui.QColor(color_str)
             new_col = QtWidgets.QColorDialog.getColor(old_color, editor.parentWidget(), "Pick Color", QtWidgets.QColorDialog.ShowAlphaChannel)
             if new_col.isValid():
                 model.setData(index, new_col.name(QtGui.QColor.HexRgb), QtCore.Qt.EditRole)
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
+            editor.deleteLater()
+
         elif col == COL_EXCLUDED:
             # toggle
             new_val = not bool(val)
             model.setData(index, new_val, QtCore.Qt.EditRole)
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
+            editor.deleteLater()
 
     def setModelData(self, editor, model, index):
         """
@@ -350,6 +359,11 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
             editor.setGeometry(option.rect)
             editor.setStyleSheet(f"height: {option.rect.height()}px;")
+        else:
+            editor.setGeometry(QtCore.QRect(0, 0, 0, 0))
+
+
+
 
     def _pick_icon_dialog(self, current_icon, parent):
         """
@@ -357,7 +371,15 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         """
         d = QtWidgets.QDialog(parent)
         d.setWindowTitle("Pick Icon")
+        d.setMinimumSize(
+            ui.Size.DefaultWidth(0.5),
+            ui.Size.DefaultWidth(0.5),
+        )
         lay = QtWidgets.QVBoxLayout(d)
+        lay.setContentsMargins(0, 0, 0, 0)
+
+        o = ui.Size.Margin(0.5)
+        lay.setSpacing(o)
 
         view = QtWidgets.QListView(d)
         model = QtGui.QStandardItemModel(view)
@@ -365,8 +387,11 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         view.setViewMode(QtWidgets.QListView.IconMode)
         view.setResizeMode(QtWidgets.QListView.Adjust)
         view.setMovement(QtWidgets.QListView.Static)
+        view.setFlow(QtWidgets.QListView.LeftToRight)
+        view.setItemAlignment(QtCore.Qt.AlignCenter)
         view.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        view.setSpacing(ui.Size.Margin(1.0))
 
         current_idx = None
         for i, icon_name in enumerate(self._all_icons):
@@ -389,13 +414,13 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         btn_lay = QtWidgets.QHBoxLayout()
         ok_btn = QtWidgets.QPushButton("OK", d)
         cancel_btn = QtWidgets.QPushButton("Cancel", d)
-        btn_lay.addStretch(1)
-        btn_lay.addWidget(ok_btn)
-        btn_lay.addWidget(cancel_btn)
+        btn_lay.addWidget(ok_btn, 1)
+        btn_lay.addWidget(cancel_btn, 0)
         lay.addLayout(btn_lay)
 
         chosen_icon = None
 
+        @QtCore.Slot()
         def on_ok():
             idx = view.currentIndex()
             if idx.isValid():
@@ -403,6 +428,9 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
                 nonlocal chosen_icon
                 chosen_icon = ic
             d.accept()
+
+        view.doubleClicked.connect(on_ok)
+        view.activated.connect(on_ok)
 
         def on_cancel():
             d.reject()
@@ -415,6 +443,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         if res == QtWidgets.QDialog.Accepted and chosen_icon:
             return chosen_icon
         return None
+
 
 
 class CategoryEditor(QtWidgets.QWidget):
@@ -547,11 +576,23 @@ class CategoryEditor(QtWidgets.QWidget):
             self.table.edit(idx)
 
     def on_restore(self):
+        # Confirm first
+        res = QtWidgets.QMessageBox.question(
+            self,
+            "Restore",
+            "Are you sure you want to restore the categories from the template?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if res != QtWidgets.QMessageBox.Yes:
+            return
+
         if not LEDGER_TEMPLATE.exists():
             QtWidgets.QMessageBox.warning(self, "Error", "ledger.json.template not found.")
             return
+
         cat_dict = load_categories_dict_from_path(LEDGER_TEMPLATE)
         self.model.load_from_categories_dict(cat_dict)
+        
         QtWidgets.QMessageBox.information(self, "Restored", "Categories restored from template.")
 
     def get_categories_dict(self) -> dict:
