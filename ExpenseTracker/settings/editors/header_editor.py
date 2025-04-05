@@ -1,73 +1,153 @@
-"""Header section editor for ledger.json.
+"""Section editor for ledger.json "header" definitions.
 
 """
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import lib
 from ...ui import ui
+from ...ui.actions import signals
 
 
-class HeaderItemModel(QtCore.QAbstractListModel):
-    """
-    A model that stores header items as a list of dicts:
-      [ { 'name': <str>, 'type': <str> }, ... ]
-    Supports internal drag-and-drop reordering,
-    and also sets 'application/x-headeritem' to allow external drops.
-    """
-
+class HeaderItemModel(QtCore.QAbstractTableModel):
     MIME_INTERNAL = 'application/vnd.text.list'
     MIME_EXTERNAL = 'application/x-headeritem'
 
-    def __init__(self, headers=None, parent=None):
+    HEADERS = ['Name', 'Type']
+
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self._headers = headers or []
+        self._headers = []
+        self._ignore_reload = False
+
+        self._connect_signals()
+        QtCore.QTimer.singleShot(150, self.init_data)
+
+    @QtCore.Slot()
+    def init_data(self):
+        if self._ignore_reload:
+            return
+
+        self.beginResetModel()
+        self._headers.clear()
+        try:
+            self._headers = [{'name': k, 'type': v} for k, v in lib.settings.get_section('header').items()]
+        finally:
+            self.endResetModel()
+
+    def _connect_signals(self):
+        @QtCore.Slot(str)
+        def on_config_changed(section):
+            if section != 'header':
+                return
+            self.init_data()
+
+        signals.configSectionChanged.connect(on_config_changed)
+
+        @QtCore.Slot()
+        def on_layout_changed():
+            # We only want to write to disk but not reset the model
+            try:
+                self._ignore_reload = True
+                lib.settings.set_section('header', self.get_current_section_data())
+            finally:
+                self._ignore_reload = False
+
+        self.rowsRemoved.connect(on_layout_changed)
+        self.rowsInserted.connect(on_layout_changed)
+        self.rowsMoved.connect(on_layout_changed)
 
     def rowCount(self, parent=QtCore.QModelIndex()):
         if parent.isValid():
             return 0
         return len(self._headers)
 
+    def columnCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid():
+            return 0
+        return 2
+
     def data(self, index, role=QtCore.Qt.DisplayRole):
-        if not index.isValid() or not 0 <= index.row() < len(self._headers):
+        if not index.isValid():
             return None
+
         item = self._headers[index.row()]
-        if role == QtCore.Qt.DisplayRole:
+
+        if role == QtCore.Qt.StatusTipRole:
             return f'{item["name"]} ({item["type"]})'
-        elif role == QtCore.Qt.EditRole:
-            return item
+
+        if index.column() == 0:
+            if role == QtCore.Qt.DisplayRole:
+                return item['name']
+            elif role == QtCore.Qt.EditRole:
+                return item['name']
+            elif role == QtCore.Qt.ToolTipRole:
+                return item['name']
+            elif role == QtCore.Qt.FontRole:
+                font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+                return font
+        elif index.column() == 1:
+            if role == QtCore.Qt.DisplayRole:
+                return item['type']
+            elif role == QtCore.Qt.EditRole:
+                return item['type']
+            elif role == QtCore.Qt.ToolTipRole:
+                return item['type']
+            elif role == QtCore.Qt.FontRole:
+                font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
+                return font
+            elif role == QtCore.Qt.TextAlignmentRole:
+                return QtCore.Qt.AlignCenter
+            elif role == QtCore.Qt.ForegroundRole:
+                return ui.Color.Green()
         return None
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
-        """
-        Expects value to be a dict: { "name": <str>, "type": <str> }
-        """
         if not index.isValid() or role != QtCore.Qt.EditRole:
             return False
-        self._headers[index.row()] = value
+
+        item = self._headers[index.row()]
+
+        if index.column() == 0:
+            if value == item['name']:
+                return True
+            item['name'] = value
+        if index.column() == 1:
+            if value == item['type']:
+                return True
+            item['type'] = value
+
         self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
         return True
 
     def flags(self, index):
+        if not index.isValid():
+            return QtCore.Qt.ItemIsEnabled
+
         base_flags = super().flags(index)
+
         if index.isValid():
             # Editable, draggable, droppable for internal reorder
             return (base_flags
+                    | QtCore.Qt.ItemIsEnabled
+                    | QtCore.Qt.ItemIsSelectable
                     | QtCore.Qt.ItemIsEditable
                     | QtCore.Qt.ItemIsDragEnabled
                     | QtCore.Qt.ItemIsDropEnabled)
         else:
             # Even if no valid index, we can drop items
-            return base_flags | QtCore.Qt.ItemIsDropEnabled
+            return (base_flags
+                    | QtCore.Qt.ItemIsEnabled
+                    | QtCore.Qt.ItemIsDropEnabled
+                    )
 
     def supportedDropActions(self):
         # For internal reordering, we typically use MoveAction
         return QtCore.Qt.MoveAction
 
     def mimeTypes(self):
-        # We produce:
-        # 1) application/vnd.text.list => for internal reorder
-        # 2) application/x-headeritem => for external drops into other widgets
+        # application/vnd.text.list for internal reorder
+        # application/x-headeritem for external drops into other widgets
         base = super().mimeTypes()
         return list(set(base + [self.MIME_INTERNAL, self.MIME_EXTERNAL]))
 
@@ -97,9 +177,7 @@ class HeaderItemModel(QtCore.QAbstractListModel):
 
     def dropMimeData(self, data, action, row, column, parent):
         """
-        Handle internal reordering if we have 'application/vnd.text.list'.
-        The external 'application/x-headeritem' doesn't matter here
-        because we are a source, not a target.
+        Handle internal reordering.
         """
         if action == QtCore.Qt.IgnoreAction:
             return True
@@ -115,161 +193,140 @@ class HeaderItemModel(QtCore.QAbstractListModel):
             row_list = eval(encoded_data.decode('utf-8'))
             to_move = [self._headers[r] for r in row_list]
 
-            self.beginResetModel()
+            self.rowsAboutToBeMoved.emit(parent, row_list[0], row_list[-1], parent, drop_row)
             for r in sorted(row_list, reverse=True):
                 self._headers.pop(r)
             for i, itm in enumerate(to_move):
                 self._headers.insert(drop_row + i, itm)
-            self.endResetModel()
+            self.rowsMoved.emit(parent, row_list[0], row_list[-1], parent, drop_row)
             return True
 
         return False
 
-    def insertRow(self, row, name='', type_='string'):
-        self.beginInsertRows(QtCore.QModelIndex(), row, row)
-        self._headers.insert(row, {'name': name, 'type': type_})
+    def insertRow(self, row, parent=QtCore.QModelIndex()):
+        """
+        Insert a new row at the specified row.
+        """
+
+        default_type = 'string'
+        default_name = 'NewColumn'
+
+        # Ensure the new name is unique
+        existing_names = {item['name'] for item in self._headers}
+        while default_name in existing_names:
+            default_name = f'NewColumn_{len(existing_names) + 1}'
+
+        item = {'name': default_name, 'type': default_type}
+
+        self.beginInsertRows(parent, row, row)
+        self._headers.insert(row, item)
         self.endInsertRows()
 
-    def removeRow(self, row, parent=QtCore.QModelIndex()):
-        if 0 <= row < len(self._headers):
-            self.beginRemoveRows(parent, row, row)
-            self._headers.pop(row)
-            self.endRemoveRows()
-
-    def to_header_dict(self):
+    def moveRow(self, source_parent: QtCore.QModelIndex, source_row: int, destination_parent: QtCore.QModelIndex,
+                destination_row: int):
         """
-        Convert the internal list into a dict: { "Name": "Type", ... }
+        Move the row from source to destination.
+        """
+        if source_row == destination_row and source_parent == destination_parent:
+            return True
+
+        self.beginMoveRows(source_parent, source_row, source_row, destination_parent, destination_row)
+        item = self._headers.pop(source_row)
+        self._headers.insert(destination_row, item)
+        self.endMoveRows()
+
+        return True
+
+    def removeRow(self, row, parent=QtCore.QModelIndex()):
+        """
+        Remove the row at the specified index.
+        """
+        if row < 0 or row >= len(self._headers):
+            return False
+
+        self.beginRemoveRows(parent, row, row)
+        self._headers.pop(row)
+        self.endRemoveRows()
+        return True
+
+    def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
+        """
+        Provide header data for the model.
+        """
+        if role == QtCore.Qt.DisplayRole:
+            if orientation == QtCore.Qt.Horizontal:
+                return self.HEADERS[section]
+            elif orientation == QtCore.Qt.Vertical:
+                return str(section + 1)
+        return None
+
+    def get_current_section_data(self):
+        """
+        Return the current section data as a dictionary.
         """
         return {item['name']: item['type'] for item in self._headers}
 
-    def load_from_header_dict(self, header_dict):
-        self.beginResetModel()
-        self._headers.clear()
-        for k, v in header_dict.items():
-            self._headers.append({'name': k, 'type': v})
-        self.endResetModel()
-
 
 class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
-    """
-    A delegate that provides:
-    - row height control via sizeHint()
-    - custom inline editor for header items
-    """
-
-    def paint(self, painter, option, index):
-        # Example custom painting
-        hover = option.state & QtWidgets.QStyle.State_MouseOver
-        selected = option.state & QtWidgets.QStyle.State_Selected
-
-        if hover or selected:
-            painter.setBrush(ui.Color.Background())
-        else:
-            painter.setBrush(ui.Color.VeryDarkBackground())
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.drawRect(option.rect)
-
-        # Draw text
-        text = index.data(QtCore.Qt.DisplayRole)
-        rect = option.rect.marginsRemoved(QtCore.QMargins(ui.Size.Margin(1.0), 0, ui.Size.Margin(1.0), 0))
-        if text:
-            painter.setPen(ui.Color.Text())
-            painter.drawText(rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, text)
 
     def createEditor(self, parent, option, index):
-        editor_widget = HeaderEditWidget(parent)
-        # Ensure the editor matches the row height
-        row_h = ui.Size.RowHeight(1.0)
-        editor_widget.setFixedHeight(row_h)
-        return editor_widget
+        if not index.isValid():
+            return None
+
+        if index.column() == 0:
+            editor = QtWidgets.QLineEdit(parent=parent)
+            return editor
+        elif index.column() == 1:
+            editor = QtWidgets.QComboBox(parent=parent)
+            view = QtWidgets.QListView()
+            editor.setView(view)
+            editor.addItems(lib.HEADER_TYPES)
+            return editor
+
+    def updateEditorGeometry(self, editor, option, index):
+        """
+        Explicitly set the editor geometry to match the cell area.
+        """
+        editor.setGeometry(option.rect)
+        editor.setStyleSheet(f'height: {option.rect.height()}px')
 
     def setEditorData(self, editor, index):
-        data = index.model().data(index, QtCore.Qt.EditRole)
-        if data is not None:
-            editor.set_name(data['name'])
-            editor.set_type(data['type'])
-            QtCore.QTimer.singleShot(0, editor.focus_and_select)
+        if not index.isValid():
+            return
+
+        if index.column() == 0:
+            name = index.data(QtCore.Qt.EditRole)
+            editor.setText(name)
+        elif index.column() == 1:
+            type_val = index.data(QtCore.Qt.EditRole)
+            idx = editor.findText(type_val)
+            if idx >= 0:
+                editor.setCurrentIndex(idx)
+            editor.showPopup()
 
     def setModelData(self, editor, model, index):
-        name_val = editor.get_name()
-        type_val = editor.get_type()
-        model.setData(index, {'name': name_val, 'type': type_val}, QtCore.Qt.EditRole)
+        if not index.isValid():
+            return  #
+        if not editor:
+            return
 
-    def sizeHint(self, option, index):
-        """
-        Return a fixed size for each row, using ui.Size.RowHeight(1.0).
-        """
-        row_h = ui.Size.RowHeight(1.0)
-        return QtCore.QSize(option.rect.width(), row_h)
+        if index.column() == 0:
+            v = editor.text()
+        elif index.column() == 1:
+            v = editor.currentText()
+        else:
+            return
 
+        if v == index.data(QtCore.Qt.EditRole):
+            return
 
-class HeaderEditWidget(QtWidgets.QWidget):
-    """
-    Inline editor widget used by HeaderItemDelegate.
-    Includes QLineEdit for 'name' and QComboBox for 'type'.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self._name_edit = QtWidgets.QLineEdit(self)
-        self._type_combo = QtWidgets.QComboBox(self)
-        self._type_combo.addItems(lib.HEADER_TYPES)
-
-        row_h = ui.Size.RowHeight(1.0)
-        self._name_edit.setFixedHeight(row_h)
-        self._type_combo.setFixedHeight(row_h)
-
-        layout.addWidget(self._name_edit)
-        layout.addWidget(self._type_combo)
-        self.setLayout(layout)
-
-    def set_name(self, text):
-        self._name_edit.setText(text)
-
-    def set_type(self, text):
-        idx = self._type_combo.findText(text)
-        if idx >= 0:
-            self._type_combo.setCurrentIndex(idx)
-
-    def get_name(self):
-        return self._name_edit.text()
-
-    def get_type(self):
-        return self._type_combo.currentText()
-
-    def focus_and_select(self):
-        """
-        Give focus to the line edit and select all text.
-        """
-        self._name_edit.setFocus()
-        self._name_edit.selectAll()
+        model.setData(index, v, QtCore.Qt.EditRole)
 
 
 class HeaderEditor(QtWidgets.QWidget):
-    """
-    Main widget for editing the "header" section.
-    - QListView with drag reorder & custom delegate
-    - Toolbar with add, remove, edit, restore
-    - Context menu with same actions
-    - Loads from LEDGER_PATH or falls back to LEDGER_TEMPLATE
-    - Row height set to ui.Size.RowHeight(1.0) for both list items and editor
-    - Exports 'application/x-headeritem' when dragging an item externally
-    """
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-
-        # Attempt to load from LEDGER_PATH or fallback
-        initial_header_dict = self._load_ledger_header()
-
-        # Convert dict -> list of { 'name': k, 'type': v }
-        self.model = HeaderItemModel()
-        self.model.load_from_header_dict(initial_header_dict)
-
-        self.delegate = HeaderItemDelegate()
 
         self.toolbar = None
         self.view = None
@@ -283,9 +340,11 @@ class HeaderEditor(QtWidgets.QWidget):
             ui.Size.RowHeight(7.5)
         )
 
+        ui.set_stylesheet(self)
+
         self._create_ui()
         self._init_model()
-        self._init_action()
+        self._init_actions()
         self._connect_signals()
 
     def _create_ui(self):
@@ -296,12 +355,12 @@ class HeaderEditor(QtWidgets.QWidget):
         row_h = ui.Size.RowHeight(1.0)
         self.toolbar.setFixedHeight(row_h)
 
-        self.layout().addWidget(self.toolbar)
+        self.layout().addWidget(self.toolbar, 1)
 
-        self.view = QtWidgets.QListView()
-        self.view.setModel(self.model)
-        self.view.setItemDelegate(self.delegate)
-        self.view.setUniformItemSizes(True)
+        self.view = QtWidgets.QTableView(parent=self)
+        delegate = HeaderItemDelegate(self.view)
+        self.view.setItemDelegate(delegate)
+        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         self.view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
@@ -316,21 +375,159 @@ class HeaderEditor(QtWidgets.QWidget):
         self.view.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
 
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.view.setResizeMode(QtWidgets.QListView.Adjust)
-
-        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
-        self.setFocusProxy(self.view)
 
         self.layout().addWidget(self.view)
 
-    def _connect_signals(self):
-        pass_
-        # self.view.activated.connect(self.on_edit)
+    def _init_model(self):
+        model = HeaderItemModel()
+        self.view.setModel(model)
 
-    def sizeHint(self):
-        # Example size hint
-        return QtCore.QSize(
-            ui.Size.Margin(10.0),
-            ui.Size.RowHeight(8.0)
-        )
+        header = self.view.horizontalHeader()
+        header.setSectionsMovable(False)
+        header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+
+        header = self.view.verticalHeader()
+        header.setSectionsMovable(False)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        header.setDefaultSectionSize(ui.Size.RowHeight(1.0))
+        header.setHidden(True)
+
+    def _init_actions(self):
+        @QtCore.Slot()
+        def add_action():
+            model = self.view.model()
+            row = model.rowCount()
+            model.insertRow(row)
+            index = model.index(row, 0)
+            self.view.setCurrentIndex(index)
+
+        action = QtGui.QAction("Add", self)
+        action.setShortcut("Ctrl+N")
+        action.setStatusTip("Add a new header")
+        action.setIcon(ui.get_icon("btn_add"))
+        action.triggered.connect(add_action)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def remove_action():
+            sm = self.view.selectionModel()
+            if not sm.hasSelection():
+                return
+            index = next(iter(sm.selectedIndexes()), QtCore.QModelIndex())
+            if index.isValid():
+                self.view.model().removeRow(index.row())
+
+        action = QtGui.QAction("Remove", self)
+        action.setShortcut("Delete")
+        action.setStatusTip("Remove selected header")
+        action.setIcon(ui.get_icon("btn_delete"))
+        action.triggered.connect(remove_action)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        action.setVisible(True)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def reset_action():
+            res = QtWidgets.QMessageBox.question(
+                self,
+                "Restore",
+                "Are you sure you want to restore the header definitions from the template?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            )
+            if res != QtWidgets.QMessageBox.Yes:
+                return
+            try:
+                lib.settings.revert_section("header")
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Failed to restore header definitions: {e}"
+                )
+                return
+
+        action = QtGui.QAction("Revert", self)
+        action.setShortcut("Ctrl+Shift+R")
+        action.setStatusTip("Restore header definitions from template")
+        action.triggered.connect(reset_action)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def reload_action():
+            lib.settings.reload_section("header")
+
+        action = QtGui.QAction("Refresh", self)
+        action.setShortcut("Ctrl+R")
+        action.setStatusTip("Reload header definitions from disk")
+        action.triggered.connect(reload_action)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        action.setVisible(True)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def move_up():
+            sm = self.view.selectionModel()
+            if not sm.hasSelection():
+                return
+            index = next(iter(sm.selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                return
+            row = index.row()
+            if row <= 0:
+                return
+            model = self.view.model()
+            if model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), row - 1):
+                new_index = model.index(row - 1, index.column())
+                self.view.setCurrentIndex(new_index)
+
+        action = QtGui.QAction("Move Up", self)
+        action.setShortcut("Ctrl+Up")
+        action.setStatusTip("Move selected header up")
+        action.setIcon(ui.get_icon("arrow_up"))
+        action.triggered.connect(move_up)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def move_down():
+            sm = self.view.selectionModel()
+            if not sm.hasSelection():
+                return
+            index = next(iter(sm.selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                return
+            row = index.row()
+            model = self.view.model()
+            if row >= model.rowCount() - 1:
+                return
+            if model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), row + 1):
+                new_index = model.index(row + 1, index.column())
+                self.view.setCurrentIndex(new_index)
+
+        action = QtGui.QAction("Move Down", self)
+        action.setShortcut("Ctrl+Down")
+        action.setStatusTip("Move selected header down")
+        action.setIcon(ui.get_icon("arrow_down"))
+        action.triggered.connect(move_down)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+    def _connect_signals(self):
+        pass

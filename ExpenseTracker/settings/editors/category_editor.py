@@ -158,18 +158,19 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         d = lib.settings.get_section('categories')
 
         self.beginResetModel()
-        self._categories.clear()
-        for k, v in d.items():
-            self._categories.append({
-                'name': k,
-                'display_name': v.get('display_name', ''),
-                'description': v.get('description', ''),
-                'icon': v.get('icon', DEFAULT_ICON),
-                'color': v.get('color', ui.Color.Text().name(QtGui.QColor.HexRgb)),
-                'excluded': bool(v.get('excluded', False))
-            })
-
-        self.endResetModel()
+        try:
+            self._categories.clear()
+            for k, v in d.items():
+                self._categories.append({
+                    'name': k,
+                    'display_name': v.get('display_name', ''),
+                    'description': v.get('description', ''),
+                    'icon': v.get('icon', DEFAULT_ICON),
+                    'color': v.get('color', ui.Color.Text().name(QtGui.QColor.HexRgb)),
+                    'excluded': bool(v.get('excluded', False))
+                })
+        finally:
+            self.endResetModel()
 
     def _connect_signals(self):
         @QtCore.Slot(str)
@@ -224,6 +225,31 @@ class CategoriesModel(QtCore.QAbstractTableModel):
                 return cat['color'] or ui.Color.Text().name(QtGui.QColor.HexRgb)
             elif col == COL_EXCLUDED:
                 return cat['excluded']
+
+        if role == QtCore.Qt.FontRole:
+            if col == COL_NAME:
+                font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+                font.setItalic(True)
+            elif col == COL_DISPLAY_NAME:
+                font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+            else:
+                font, _ = ui.Font.MediumFont(ui.Size.MediumText(1.0))
+            return font
+        if role == QtCore.Qt.TextAlignmentRole:
+            if col in (COL_NAME, COL_DISPLAY_NAME):
+                return QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+            elif col == COL_DESCRIPTION:
+                return QtCore.Qt.AlignRight | QtCore.Qt.AlignTop
+            return QtCore.Qt.AlignCenter
+        if role == QtCore.Qt.ForegroundRole:
+            if col == COL_NAME:
+                return ui.Color.SecondaryText()
+            if col == COL_DISPLAY_NAME:
+                return ui.Color.Text()
+            if col == COL_DESCRIPTION:
+                return ui.Color.SecondaryText()
+            return ui.Color.Text()
+
         return None
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
@@ -358,28 +384,13 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         col = index.column()
         val = index.data(QtCore.Qt.DisplayRole) or ''
 
-        o = ui.Size.Margin(0.5)
-        rect = QtCore.QRect(option.rect).adjusted(o, 0, -o, 0)
-
         if col == COL_NAME:
-            painter.setPen(ui.Color.Text())
-            font = QtGui.QFont(option.font)
-            font.setWeight(QtGui.QFont.ExtraBold)
-            painter.setFont(font)
-            painter.drawText(rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, str(val or ''))
+            super().paint(painter, option, index)
+            return
         elif col == COL_DISPLAY_NAME:
-            painter.setPen(ui.Color.Text())
-            font = QtGui.QFont(option.font)
-            font.setWeight(QtGui.QFont.Medium)
-            font.setItalic(True)
-            painter.setFont(font)
-            painter.drawText(rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, str(val or ''))
+            super().paint(painter, option, index)
         elif col == COL_DESCRIPTION:
-            painter.setPen(ui.Color.Text())
-            font = QtGui.QFont(option.font)
-            font.setWeight(QtGui.QFont.Light)
-            painter.setFont(font)
-            painter.drawText(rect, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, str(val or ''))
+            super().paint(painter, option, index)
         elif col == COL_ICON:
             icon_name = val if val else DEFAULT_ICON
 
@@ -417,6 +428,8 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRoundedRect(rect, o, o)
 
         elif col == COL_EXCLUDED:
+            super().paint(painter, option, index)
+
             is_excl = bool(val)
             text_val = '❌' if is_excl else '✅'
             painter.setPen(ui.Color.Text())
@@ -556,12 +569,6 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
                                   QtWidgets.QAbstractItemView.EditKeyPressed)
 
-        # Hide vertical header
-        self.view.verticalHeader().setVisible(False)
-
-        self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.view.horizontalHeader().setDefaultSectionSize(ui.Size.RowHeight(1.0))
-
         self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
@@ -586,6 +593,11 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.horizontalHeader().setSectionResizeMode(COL_ICON, QtWidgets.QHeaderView.Fixed)
         self.view.horizontalHeader().setSectionResizeMode(COL_COLOR, QtWidgets.QHeaderView.Fixed)
         self.view.horizontalHeader().setSectionResizeMode(COL_EXCLUDED, QtWidgets.QHeaderView.Fixed)
+
+        self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.view.horizontalHeader().setDefaultSectionSize(ui.Size.RowHeight(1.0))
+
+        self.view.verticalHeader().setVisible(False)
 
     def _init_actions(self):
         @QtCore.Slot()

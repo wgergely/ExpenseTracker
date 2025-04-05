@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from .. import lib
 from ...ui import ui
+from ...ui.actions import signals
 
 
 class DataMappingModel(QtCore.QAbstractTableModel):
@@ -23,7 +24,6 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         QtCore.QTimer.singleShot(150, self.init_data)
 
     def _connect_signals(self):
-        from ...ui.actions import signals
 
         @QtCore.Slot(str)
         def on_config_changed(section_name):
@@ -49,11 +49,12 @@ class DataMappingModel(QtCore.QAbstractTableModel):
     @QtCore.Slot()
     def init_data(self):
         self.beginResetModel()
-
-        v = lib.settings.get_section('data_header_mapping').copy()
-        self._mapping = {k: v.get(k, '') for k in lib.DATA_MAPPING_KEYS}
-
-        self.endResetModel()
+        self._mapping = {k: '' for k in lib.DATA_MAPPING_KEYS}
+        try:
+            v = lib.settings.get_section('data_header_mapping').copy()
+            self._mapping = {k: v.get(k, '') for k in lib.DATA_MAPPING_KEYS}
+        finally:
+            self.endResetModel()
 
     def rowCount(self, parent=QtCore.QModelIndex()):
         if parent.isValid():
@@ -226,9 +227,6 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         model.setData(index, text_val, QtCore.Qt.EditRole)
 
     def sizeHint(self, option, index):
-        """
-        Return a fixed row height from ui.Size.RowHeight(1.0).
-        """
         row_h = ui.Size.RowHeight(1.0)
         return QtCore.QSize(option.rect.width(), row_h)
 
@@ -268,6 +266,7 @@ class DataMappingEditor(QtWidgets.QWidget):
 
     def _init_actions(self):
         QtCore.Slot()
+
         def save_to_disk():
             lib.settings.set_section('data_header_mapping', self.view.modelw().get_current_section_data())
 

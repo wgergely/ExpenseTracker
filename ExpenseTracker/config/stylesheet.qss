@@ -196,6 +196,7 @@ QComboBox QListView::item {
     background-color: <DarkBackground>;
     padding-left: <Indicator@1.0>px;
     padding-right: <Indicator@1.0>px;
+    height: <RowHeight@0.8>px;
 }
 QComboBox QListView::item:hover {
     color: <SelectedText>;
@@ -334,7 +335,7 @@ QTableView {
     padding: <Margin@0.5>px;
     margin: 0px;
     background: <DarkBackground>;
-    alternate-background-color: <DarkBackground>;
+    alternate-background-color: <VeryDarkBackground>;
 }
 
 QTableView QTableCornerButton::section {
@@ -351,7 +352,7 @@ QTableView::item {
 }
 QTableView::item:selected {
     color: <SelectedText>;
-    background: <DarkBackground>;
+    background: <Background>;
 }
 QTableView::item:disabled {
     color: <DisabledText>;
@@ -359,7 +360,7 @@ QTableView::item:disabled {
 }
 QTableView::item:hover {
     color: <SelectedText>;
-    background: <DarkBackground>;
+    background: <LightBackground>;
 }
 
 
@@ -590,7 +591,13 @@ DataMappingEditor:focus,
 DataMappingEditor:focus:hover,
 DataMappingEditor QTableView,
 DataMappingEditor:focus QTableView,
-DataMappingEditor:focus:hover QTableView {
+DataMappingEditor:focus:hover QTableView,
+HeaderEditor,
+HeaderEditor:focus,
+HeaderEditor:focus:hover,
+HeaderEditor QTableView,
+HeaderEditor:focus QTableView,
+HeaderEditor:focus:hover QTableView {
     padding: 0px;
     margin: 0px;
     border: <Separator@2.0>px solid <Transparent>;
