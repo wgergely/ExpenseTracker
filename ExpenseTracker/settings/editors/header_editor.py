@@ -325,6 +325,7 @@ class HeaderEditor(QtWidgets.QWidget):
         self.layout().addWidget(self.view)
 
     def _connect_signals(self):
+        pass_
         # self.view.activated.connect(self.on_edit)
 
     def sizeHint(self):

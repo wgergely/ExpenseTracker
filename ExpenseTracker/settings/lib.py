@@ -116,13 +116,14 @@ DATA_MAPPING_KEYS = ['date', 'amount', 'description', 'category', 'account']
 HEADER_TYPES = ['string', 'int', 'float', 'date']
 
 LEDGER_SCHEMA = {
-    'id': {
-        'type': str,
-        'required': True
-    },
-    'sheet': {
-        'type': str,
-        'required': True
+    'spreadsheet': {
+        'type': dict,
+        'required': True,
+        'item_schema': {
+            'id': {'type': str, 'required': True},
+            'description': {'type': str, 'required': True},
+            'sheet': {'type': str, 'required': True}
+        }
     },
     'header': {
         'type': dict,

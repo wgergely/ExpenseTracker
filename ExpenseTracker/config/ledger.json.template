@@ -1,7 +1,8 @@
 {
   "spreadsheet": {
     "id": "",
-    "sheet": "Sheet1"
+    "sheet": "Sheet1",
+    "description": ""
   },
   "header": {
     "ID": "int",
