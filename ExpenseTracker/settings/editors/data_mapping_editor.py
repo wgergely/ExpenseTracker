@@ -36,6 +36,15 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         self.dataChanged.connect(
             lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
         )
+        self.rowsRemoved.connect(
+            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+        )
+        self.rowsInserted.connect(
+            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+        )
+        self.rowsMoved.connect(
+            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+        )
 
     @QtCore.Slot()
     def init_data(self):
@@ -265,24 +274,22 @@ class DataMappingEditor(QtWidgets.QWidget):
         action = QtGui.QAction('Save to Disk', self.view)
         action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
         action.triggered.connect(save_to_disk)
-
         self.view.addAction(action)
 
         @QtCore.Slot()
-        def reset_to_defaults():
+        def revert_to_defaults():
             lib.settings.revert_section('data_header_mapping')
 
-        action = QtGui.QAction('Reset to Defaults', self.view)
+        action = QtGui.QAction('Revert', self.view)
         action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
-        action.triggered.connect(reset_to_defaults)
-
+        action.triggered.connect(revert_to_defaults)
         self.view.addAction(action)
 
         @QtCore.Slot()
         def reload_from_disk():
             lib.settings.reload_section('data_header_mapping')
 
-        action = QtGui.QAction('Reload from Disk', self.view)
+        action = QtGui.QAction('Refresh', self.view)
         action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
         action.triggered.connect(reload_from_disk)
         self.view.addAction(action)

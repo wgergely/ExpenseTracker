@@ -312,7 +312,7 @@ def set_stylesheet(widget: QtWidgets.QWidget) -> None:
 
 
 @functools.lru_cache(maxsize=9999)
-def get_category_icon(category: str) -> QtGui.QIcon:
+def get_icon(category: str) -> QtGui.QIcon:
     """Get the icon for the given category.
 
     Args:
@@ -326,5 +326,8 @@ def get_category_icon(category: str) -> QtGui.QIcon:
     if not icon_path.is_file():
         logging.warning(f'Icon not found for category: {category}. Using default icon.')
         return QtGui.QIcon()
-    icon = QtGui.QIcon(str(icon_path))
+    
+    pixmap = QtGui.QPixmap(str(icon_path))
+    icon = QtGui.QIcon(pixmap)
+        
     return icon

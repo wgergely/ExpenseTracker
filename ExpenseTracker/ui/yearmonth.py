@@ -217,7 +217,7 @@ class RangeSelectorBar(QtWidgets.QToolBar):
 
     def _add_actions(self):
         button = QtWidgets.QToolButton(self)
-        icon = ui.get_category_icon('btn_date')
+        icon = ui.get_icon('btn_date')
         button.setIcon(icon)
         button.setDisabled(True)
         self.addWidget(button)

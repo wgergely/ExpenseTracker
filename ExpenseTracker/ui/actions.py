@@ -156,7 +156,7 @@ class SwitchViewAction(QtWidgets.QToolButton):
         super().__init__(parent=parent)
         self.setText('Switch View')
         self.setToolTip('Switch View')
-        self.setIcon(ui.get_category_icon('btn_switch'))
+        self.setIcon(ui.get_icon('btn_switch'))
         self.clicked.connect(signals.switchViewToggled)
 
 
@@ -169,7 +169,7 @@ class AuthGroupAction(QtWidgets.QToolButton):
         super().__init__(parent=parent)
         self.setText('Connect')
         self.setToolTip('Connect to Google')
-        self.setIcon(ui.get_category_icon('btn_authenticate'))
+        self.setIcon(ui.get_icon('btn_authenticate'))
         self.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
 
         menu = QtWidgets.QMenu(self)
@@ -179,7 +179,7 @@ class AuthGroupAction(QtWidgets.QToolButton):
         action.setText('Authenticate')
         action.setToolTip('Authenticate with Google')
         action.setStatusTip('Authenticate with Google')
-        action.setIcon(ui.get_category_icon('btn_authenticate'))
+        action.setIcon(ui.get_icon('btn_authenticate'))
         action.triggered.connect(self.emit_authenticate_requested)
         menu.addAction(action)
 
@@ -187,7 +187,7 @@ class AuthGroupAction(QtWidgets.QToolButton):
         action.setText('Unauthenticate')
         action.setToolTip('Unauthenticate from Google')
         action.setStatusTip('Unauthenticate from Google')
-        action.setIcon(ui.get_category_icon('btn_deauthenticate'))
+        action.setIcon(ui.get_icon('btn_deauthenticate'))
         action.triggered.connect(signals.deauthenticateRequested)
         menu.addAction(action)
 
@@ -209,7 +209,7 @@ class DataGroupAction(QtWidgets.QToolButton):
         super().__init__(parent=parent)
         self.setText('Reload')
         self.setToolTip('Reload data from Google')
-        self.setIcon(ui.get_category_icon('btn_reload'))
+        self.setIcon(ui.get_icon('btn_reload'))
         self.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
 
         menu = QtWidgets.QMenu(self)
@@ -219,7 +219,7 @@ class DataGroupAction(QtWidgets.QToolButton):
         action.setText('Reload Data')
         action.setToolTip('Reload data from Google')
         action.setStatusTip('Reload data from Google')
-        action.setIcon(ui.get_category_icon('btn_reload'))
+        action.setIcon(ui.get_icon('btn_reload'))
         action.triggered.connect(self.emit_data_fetch_requested)
         menu.addAction(action)
 
@@ -227,7 +227,7 @@ class DataGroupAction(QtWidgets.QToolButton):
         action.setText('Clear Data')
         action.setToolTip('Clear local data')
         action.setStatusTip('Clear local data')
-        action.setIcon(ui.get_category_icon('btn_clear'))
+        action.setIcon(ui.get_icon('btn_clear'))
         action.triggered.connect(signals.clearDataRequested)
         menu.addAction(action)
 
@@ -249,7 +249,7 @@ class ShowLedgerAction(QtWidgets.QToolButton):
         super().__init__(parent)
         self.setText('Open Ledger')
         self.setToolTip('Open Ledger')
-        self.setIcon(ui.get_category_icon('btn_ledger'))
+        self.setIcon(ui.get_icon('btn_ledger'))
         self.clicked.connect(signals.openLedgerRequested)
 
 

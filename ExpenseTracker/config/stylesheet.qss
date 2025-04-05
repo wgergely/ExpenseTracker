@@ -404,32 +404,26 @@ QLabel:disabled {
 }
 
 QMenu {
-    color: <SecondaryText>;
     background-color: <DarkBackground>;
     menu-scrollable: 1;
-    icon-size: <Margin@2.0>px;
-    margin: <Separator@1.0>px;
-    border: <Separator@2.0>px solid <Blue>;
+    icon-size: <Margin@1.0>px;
+    margin: 0px;
+    padding: 0px;
+    border: <Separator@2.0>px solid <Background>;
     border-radius: <Indicator@1.5>px;
-}
-
-QMenu::separator {
-    height: <Separator@2.0>px;
-    margin-top: <Indicator@2.0>px;
-    margin-bottom: <Indicator@2.0>px;
-    background-color: <Opaque>;
-    color: <Transparent>;
-    min-width: 1000px;
+    color: <SecondaryText>;
 }
 
 QMenu::item {
-    height: <Margin@1.5>px;
-    margin: 0;
-    padding: 0 <Margin@1.0>px;
+    background-color: transparent;
+    border-radius: 0px;
+    padding: <Margin@0.5>px <Margin@1.0>px;
+    margin: 0px;
 }
 
 QMenu::icon {
-    padding: <Margin@1.0>px;
+    padding: <Margin@0.5>px;
+    background-color: <Transparent>;
 }
 
 QMenu::item:hover,
@@ -445,6 +439,17 @@ QMenu::item:disabled {
     color: <DisabledText>;
     background-color: <Opaque>;
 }
+
+
+QMenu::separator {
+    height: <Separator@2.0>px;
+    margin-top: <Indicator@2.0>px;
+    margin-bottom: <Indicator@2.0>px;
+    background-color: <Opaque>;
+    color: <Transparent>;
+    min-width: 1000px;
+}
+
 
 QMenu::right-arrow {
     margin: 0;
@@ -488,26 +493,37 @@ QToolTip {
 
 QToolBar {
     font-size: <MediumText@1.0>px;
+    color: <SecondaryText>;
     background-color: <DarkBackground>;
     border: <Separator@2.0>px solid <DarkBackground>;
     border-radius: <Indicator@1.5>px;
-    spacing: <Indicator@4.0>px;
-    padding-left: <Margin@0.5>px;
-    padding-right: <Margin@0.5>px;
-    margin: 0;
+    spacing: <Indicator@1.0>px;
+
 }
 QToolBar::separator {
     margin: 0 <Indicator@8.0>px;
     padding: 0 <Indicator@8.0>px;
 }
 QToolBar QToolButton {
-    font-size: <MediumText@0.9>px;
+    font-size: <MediumText@1.0>px;
     color: <Text>;
-    height: <Margin@1.0>px;
+    font-weight: 700;
     text-align: center;
-    background-color: <Transparent>;
+    height: <Margin@1.0>px;
+    padding: <Indicator@1.0>px;
+    background-color: transparent;
     border-radius: <Indicator@1.5>px;
+    border : <Separator@2.0>px solid <Transparent>;
 }
+QToolBar QToolButton:disabled {
+    color: <DisabledText>;
+    background-color: <Transparent>;
+}
+QToolBar QToolButton:hover {
+    color: <SelectedText>;
+    border : <Separator@2.0>px solid <Background>;
+}
+
 QToolBar QToolButton::menu-button,
 QToolBar QToolButton::menu-indicator
 {

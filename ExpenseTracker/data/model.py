@@ -168,7 +168,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         if col == 0:
             if role == QtCore.Qt.DecorationRole:
-                return ui.get_category_icon(category)
+                return ui.get_icon(category)
             if role == QtCore.Qt.DisplayRole:
                 config = load_config()
                 categories = config.get('categories', {})
@@ -391,7 +391,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
         elif role == QtCore.Qt.DecorationRole:
             if col == 3:
-                return ui.get_category_icon(value)
+                return ui.get_icon(value)
 
         elif role == QtCore.Qt.FontRole:
             if index.column() == 0:
