@@ -579,3 +579,14 @@ TransactionListView:focus:hover {
 
 
 }
+
+CategoryEditor,
+CategoryEditor QTableView
+{
+    padding: 0px;
+    margin: 0px;
+}
+CategoryEditor:focus QTableView,
+CategoryEditor:focus:hover QTableView {
+    border: <Separator@2.0>px solid <Transparent>;
+}

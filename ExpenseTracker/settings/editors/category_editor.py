@@ -253,7 +253,12 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         else:
             return False
 
-        self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
+        try:
+            self._ignore_reload = True
+            self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
+        finally:
+            self._ignore_reload = False
+
         return True
 
     def flags(self, index):
@@ -459,7 +464,6 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
                 old_color,
                 editor.parentWidget(),
                 'Pick Color',
-                QtWidgets.QColorDialog.ShowAlphaChannel
             )
 
             if new_col.isValid():
@@ -474,6 +478,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             # toggle
             new_val = not bool(val)
             model.setData(index, new_val, QtCore.Qt.EditRole)
+            model.setData(index, new_val, QtCore.Qt.DisplayRole)
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
 
@@ -555,6 +560,8 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
+        self.setFocusProxy(self.view)
+
         self.layout().addWidget(self.view)
 
     def _connect_signals(self):
@@ -621,7 +628,6 @@ class CategoryEditor(QtWidgets.QWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
-
         @QtCore.Slot()
         def revert_to_defaults():
             # Confirm first
@@ -674,35 +680,35 @@ class CategoryEditor(QtWidgets.QWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
-    def on_edit(self):
-        idx = self.view.currentIndex()
-        if idx.isValid():
-            self.view.edit(idx)
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        action.setVisible(True)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
 
-    def on_restore(self):
-        # Confirm first
-        res = QtWidgets.QMessageBox.question(
-            self,
-            'Restore',
-            'Are you sure you want to restore the categories from the template?',
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
-        )
-        if res != QtWidgets.QMessageBox.Yes:
-            return
+        def exclude_action():
+            if not self.view.selectionModel().hasSelection():
+                logging.warning('No category selected.')
+                return
 
-        if not lib.settings.paths.ledger_template.exists():
-            QtWidgets.QMessageBox.warning(
-                self,
-                'Error',
-                'ledger.json.template not found.'
-            )
-            return
+            index = next(iter(self.view.selectionModel().selectedIndexes()), QtCore.QModelIndex())
 
-        cat_dict = lib.settings.get_section('categories')
-        self.model.load_from_categories_dict(cat_dict)
+            if not index.isValid():
+                logging.warning('No category selected.')
+                return
 
-        QtWidgets.QMessageBox.information(
-            self,
-            'Restored',
-            'Categories restored from template.'
-        )
+            index = index.sibling(index.row(), COL_EXCLUDED)
+
+            model = self.view.model()
+            model.setData(index, not model.data(index, QtCore.Qt.EditRole), QtCore.Qt.EditRole)
+
+        action = QtGui.QAction('Exclude', self)
+        action.setShortcut('Ctrl+E')
+        action.setStatusTip('Exclude selected category')
+        action.setIcon(ui.get_icon('btn_remove'))
+        action.triggered.connect(exclude_action)
+
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
