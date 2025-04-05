@@ -316,7 +316,7 @@ class SettingsAPI:
             logger.error(f'Failed to load client_secret: {e}')
             raise
 
-    def get_section(self, section_name):
+    def get_section(self, section_name: str):
         """
         Returns data for a ledger section or 'client_secret'.
         """

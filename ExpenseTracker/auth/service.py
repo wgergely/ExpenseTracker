@@ -45,6 +45,7 @@ def load_config(path: Optional[str] = None) -> Dict[str, str]:
 
     Raises:
         RuntimeError: If the file is missing, malformed, or lacks required fields.
+
     """
     if path is None:
         path = LEDGER_CONFIG_PATH

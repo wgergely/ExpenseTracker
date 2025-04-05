@@ -1,6 +1,8 @@
 {
-  "id": "<SPREADSHEET_ID>",
-  "sheet": "Sheet1",
+  "spreadsheet": {
+    "id": "",
+    "sheet": "Sheet1"
+  },
   "header": {
     "ID": "int",
     "Date":	"date",
