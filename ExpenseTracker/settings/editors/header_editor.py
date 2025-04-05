@@ -1,46 +1,11 @@
-"""
-Header editor module for ledger headers. Provides:
-- Model (HeaderItemModel) with drag reorder
-- Also supports external drag: sets 'application/x-headeritem' so other widgets can drop the header name
-- Delegate (HeaderItemDelegate) for custom inline editing
-- Main widget (HeaderEditor) with toolbar and context menu
-- Automatically loads headers from ledger.json or falls back to ledger.json.template
-- Each row's height set to ui.Size.RowHeight(1.0)
-- Editing can start via double-click or pressing Enter (activated signal)
+"""Header section editor for ledger.json.
+
 """
 
-import json
-import pathlib
-import tempfile
+from PySide6 import QtCore, QtWidgets
 
-from PySide6 import QtCore, QtGui, QtWidgets
-
-from ..ui import ui
-
-
-
-def load_ledger_headers() -> dict:
-    """
-    Loads the 'header' dict from LEDGER_PATH if available,
-    otherwise falls back to LEDGER_TEMPLATE.
-    Returns a dict of the form { 'Name': 'Type', ... } or an empty dict on failure.
-    """
-    def load_header_dict_from_path(path: pathlib.Path) -> dict:
-        if not path.exists():
-            return {}
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data.get('header', {})
-        except Exception:
-            return {}
-
-    header_dict = load_header_dict_from_path(LEDGER_PATH)
-    if header_dict:
-        return header_dict
-
-    fallback_dict = load_header_dict_from_path(LEDGER_TEMPLATE)
-    return fallback_dict or {}
+from .. import lib
+from ...ui import ui
 
 
 class HeaderItemModel(QtCore.QAbstractListModel):
@@ -251,7 +216,7 @@ class HeaderEditWidget(QtWidgets.QWidget):
 
         self._name_edit = QtWidgets.QLineEdit(self)
         self._type_combo = QtWidgets.QComboBox(self)
-        self._type_combo.addItems(HEADER_TYPES)
+        self._type_combo.addItems(lib.HEADER_TYPES)
 
         row_h = ui.Size.RowHeight(1.0)
         self._name_edit.setFixedHeight(row_h)
@@ -306,6 +271,9 @@ class HeaderEditor(QtWidgets.QWidget):
 
         self.delegate = HeaderItemDelegate()
 
+        self.toolbar = None
+        self.view = None
+
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Minimum,
             QtWidgets.QSizePolicy.MinimumExpanding
@@ -316,52 +284,19 @@ class HeaderEditor(QtWidgets.QWidget):
         )
 
         self._create_ui()
+        self._init_model()
+        self._init_action()
         self._connect_signals()
 
-    def _load_ledger_header(self) -> dict:
-        """
-        Loads the 'header' dict from LEDGER_PATH if available,
-        otherwise falls back to LEDGER_TEMPLATE,
-        returning an empty dict if neither is available.
-        """
-        def load_header_dict_from_path(path: pathlib.Path) -> dict:
-            if not path.exists():
-                return {}
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                return data.get('header', {})
-            except Exception:
-                return {}
-
-        header_dict = load_header_dict_from_path(LEDGER_PATH)
-        if header_dict:
-            return header_dict
-
-        fallback_dict = load_header_dict_from_path(LEDGER_TEMPLATE)
-        return fallback_dict or {}
-
     def _create_ui(self):
-        main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        QtWidgets.QVBoxLayout(self)
+        self.layout().setContentsMargins(0, 0, 0, 0)
 
+        self.toolbar = QtWidgets.QToolBar(parent=self)
         row_h = ui.Size.RowHeight(1.0)
-
-        self.toolbar = QtWidgets.QToolBar()
-        f = ui.Size.Indicator(2.0)
-        self.toolbar.setIconSize(QtCore.QSize(row_h - f, row_h - f))
         self.toolbar.setFixedHeight(row_h)
 
-        self.act_add = QtGui.QAction('Add', self)
-        self.act_remove = QtGui.QAction('Remove', self)
-        self.act_edit = QtGui.QAction('Edit', self)
-        self.act_restore = QtGui.QAction('Restore', self)
-
-        self.toolbar.addAction(self.act_add)
-        self.toolbar.addAction(self.act_remove)
-        self.toolbar.addAction(self.act_edit)
-        self.toolbar.addAction(self.act_restore)
-        main_layout.addWidget(self.toolbar)
+        self.layout().addWidget(self.toolbar)
 
         self.view = QtWidgets.QListView()
         self.view.setModel(self.model)
@@ -370,15 +305,11 @@ class HeaderEditor(QtWidgets.QWidget):
 
         self.view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
-        # By default, double-click or 'EditKeyPressed' triggers editing
         self.view.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked |
             QtWidgets.QAbstractItemView.EditKeyPressed
         )
-        # Pressing Enter on an item also triggers editing
-        self.view.activated.connect(self.on_edit)
 
-        # ** Key: allow external dragging:
         self.view.setDragEnabled(True)
         self.view.setAcceptDrops(True)
         self.view.setDropIndicatorShown(True)
@@ -387,76 +318,14 @@ class HeaderEditor(QtWidgets.QWidget):
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.view.setResizeMode(QtWidgets.QListView.Adjust)
 
+        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
-        main_layout.addWidget(self.view)
-        self.setLayout(main_layout)
+        self.setFocusProxy(self.view)
+
+        self.layout().addWidget(self.view)
 
     def _connect_signals(self):
-        self.act_add.triggered.connect(self.on_add)
-        self.act_remove.triggered.connect(self.on_remove)
-        self.act_edit.triggered.connect(self.on_edit)
-        self.act_restore.triggered.connect(self.on_restore)
-
-        # Context menu
-        self.view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.view.customContextMenuRequested.connect(self.show_context_menu)
-
-    def show_context_menu(self, pos):
-        menu = QtWidgets.QMenu(self)
-        menu.addAction(self.act_add)
-        menu.addAction(self.act_remove)
-        menu.addAction(self.act_edit)
-        menu.addAction(self.act_restore)
-        menu.exec_(self.view.mapToGlobal(pos))
-
-    def on_add(self):
-        row = self.model.rowCount()
-        self.model.insertRow(row, name='', type_='string')
-        idx = self.model.index(row)
-        self.view.setCurrentIndex(idx)
-        self.view.edit(idx)
-
-    def on_remove(self):
-        idx = self.view.currentIndex()
-        if idx.isValid():
-            self.model.removeRow(idx.row())
-
-    def on_edit(self):
-        idx = self.view.currentIndex()
-        if idx.isValid():
-            self.view.edit(idx)
-
-    def on_restore(self):
-        # Confirm first
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            'Restore Header',
-            'Are you sure you want to restore the header from the template?',
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            return
-
-        if not LEDGER_TEMPLATE.exists():
-            QtWidgets.QMessageBox.warning(self, 'Error', 'Ledger template not found.')
-            return
-
-        try:
-            with open(LEDGER_TEMPLATE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            header_dict = data.get('header', {})
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(self, 'Error', f'Failed to load template:\n{e}')
-            return
-        self.model.load_from_header_dict(header_dict)
-        QtWidgets.QMessageBox.information(self, 'Restored', 'Header restored from template.')
-
-    def get_header_as_dict(self):
-        """
-        Return the final header as a dict.
-        """
-        return self.model.to_header_dict()
+        # self.view.activated.connect(self.on_edit)
 
     def sizeHint(self):
         # Example size hint

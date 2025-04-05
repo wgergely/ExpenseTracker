@@ -63,7 +63,12 @@ class IconPickerDialog(QtWidgets.QDialog):
         self.view.setMovement(QtWidgets.QListView.Static)
         self.view.setFlow(QtWidgets.QListView.LeftToRight)
         self.view.setItemAlignment(QtCore.Qt.AlignCenter)
-        self.view.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+
+        self.view.setEditTriggers(
+            QtWidgets.QAbstractItemView.DoubleClicked |
+            QtWidgets.QAbstractItemView.EditKeyPressed
+        )
+
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.view.setSpacing(ui.Size.Margin(1.0))
 
@@ -559,8 +564,6 @@ class CategoryEditor(QtWidgets.QWidget):
 
         self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-
-        self.setFocusProxy(self.view)
 
         self.layout().addWidget(self.view)
 

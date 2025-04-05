@@ -295,7 +295,6 @@ class DataMappingEditor(QtWidgets.QWidget):
         self.view.addAction(action)
 
     def _create_ui(self):
-
         layout = QtWidgets.QVBoxLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
 
@@ -317,8 +316,6 @@ class DataMappingEditor(QtWidgets.QWidget):
         # Align column labels left
         self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft)
 
-        # Table is clickable for editing, but won't appear focused
-        self.view.setFocusPolicy(QtCore.Qt.NoFocus)
         # Allow double-click or Enter to edit
         self.view.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked |
