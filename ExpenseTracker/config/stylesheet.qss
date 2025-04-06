@@ -609,7 +609,6 @@ JsonPreviewWidget {
 
 
 QTextBrowser {
-    font-size: <MediumText@1.2>px;
     color: <SecondaryText>;
     font-weight: 500;
     margin: 0px;

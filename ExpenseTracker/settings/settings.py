@@ -5,18 +5,19 @@ Main settings GUI. Merges client_secret.json editing with ledger info configurat
 """
 
 import json
+
 from PySide6 import QtWidgets, QtCore
 
+from .category_editor import CategoryEditor
+from .data_mapping_editor import DataMappingEditor
 from .editor import JSONWidget
+from .header_editor import HeaderEditor
 from .model import (
     LedgerSettingsData,
     CLIENT_SECRET_PATH
 )
 from ..auth import auth, service
 from ..ui import ui
-from .header_editor import HeaderEditor
-from .data_mapping_editor import DataMappingEditor
-from .category_editor import CategoryEditor
 
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
@@ -54,7 +55,6 @@ class SettingsWidget(QtWidgets.QWidget):
         self._connect_signals()
 
         self.load_existing_secret()
-
 
     def sizeHint(self):
         # Return a fixed size hint for the scroll area
@@ -191,14 +191,11 @@ class SettingsWidget(QtWidgets.QWidget):
         data_mapping_form.setHorizontalSpacing(o)
         data_mapping_form.setVerticalSpacing(o)
 
-
         self.data_mapping_editor = DataMappingEditor(parent=self)
         data_mapping_form.addRow('Map Google Spreadsheet Columns', self.data_mapping_editor)
 
         # Add the data mapping editor to the container layout
         container_layout.addWidget(data_mapping_box)
-
-
 
         # SECTION 4) CATEGORIES
 
@@ -215,13 +212,11 @@ class SettingsWidget(QtWidgets.QWidget):
         category_form.setHorizontalSpacing(o)
         category_form.setVerticalSpacing(o)
 
-
         self.category_editor = CategoryEditor(parent=self)
         category_form.addRow('', self.category_editor)
 
         # Add the header editor to the container layout
         container_layout.addWidget(category_box)
-
 
         # Place our container in the custom scroll area
         self._scroll_area.setWidget(container)

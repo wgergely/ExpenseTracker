@@ -5,6 +5,7 @@ import re
 import shutil
 import tempfile
 import zipfile
+from typing import Dict, Any
 
 from PySide6 import QtGui, QtCore
 
@@ -29,16 +30,6 @@ def is_valid_hex_color(value):
     return bool(re.fullmatch(r'#[0-9A-Fa-f]{6}', value))
 
 
-def validate_client_secret_data(data):
-    """
-    Ensures client_secret data is a dictionary. Raises ValueError if invalid.
-    """
-    if not isinstance(data, dict):
-        msg = f'client_secret data must be a dictionary, got {type(data)}'
-        logger.error(msg)
-        raise ValueError(msg)
-
-
 class ConfigPaths:
     """
     Holds file/directory paths and ensures they exist.
@@ -54,9 +45,9 @@ class ConfigPaths:
         self.config_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
         self.client_secret_path = self.config_dir / 'client_secret.json'
         self.ledger_path = self.config_dir / 'ledger.json'
-
-
-        self.presets_dir = self.template_dir / 'presets'
+        self.presets_dir = self.config_dir / 'presets'
+        self.auth_dir = self.config_dir / 'auth'
+        self.creds_path = self.auth_dir / 'creds.json'
 
         self._verify_and_prepare()
 
@@ -79,14 +70,23 @@ class ConfigPaths:
             logger.error(msg)
             raise FileNotFoundError(msg)
 
+        # Create directories
         if not self.config_dir.exists():
             logger.info(f'Creating config directory: {self.config_dir}')
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
+        if not self.auth_dir.exists():
+            logger.info(f'Creating auth directory: {self.auth_dir}')
+            self.auth_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.presets_dir.exists():
+            logger.info(f'Creating presets directory: {self.presets_dir}')
+            self.presets_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure valid configs exists even if we haven't yet set them up
         if not self.client_secret_path.exists():
             logger.info(f'Copying default client_secret from template to {self.client_secret_path}')
             shutil.copy(self.client_secret_template, self.client_secret_path)
-
         if not self.ledger_path.exists():
             logger.info(f'Copying default ledger from template to {self.ledger_path}')
             shutil.copy(self.ledger_template, self.ledger_path)
@@ -261,6 +261,7 @@ class SettingsAPI:
     Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
     Also supports presets for these files.
     """
+    required_client_secret_keys = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
     def __init__(self, ledger_path=None, client_secret_path=None):
         self.paths = ConfigPaths()
@@ -324,18 +325,44 @@ class SettingsAPI:
         try:
             with self.client_secret_path.open('r', encoding='utf-8') as f:
                 data = json.load(f)
-            validate_client_secret_data(data)
+            self.validate_client_secret(data)
             return data
         except (ValueError, json.JSONDecodeError) as e:
             logger.error(f'Failed to load client_secret: {e}')
             raise
+
+    @classmethod
+    def validate_client_secret(cls, client_config: Dict[str, Any]) -> str:
+        """
+        Validate that the client configuration is for an OAuth client.
+        Accept either an "installed" or "web" configuration.
+
+        Returns:
+            The key used ("installed" or "web").
+
+        Raises:
+            RuntimeError: If neither configuration is present or required fields are missing.
+
+        """
+        if 'installed' in client_config:
+            key = 'installed'
+        elif 'web' in client_config:
+            key = 'web'
+        else:
+            raise RuntimeError('Client configuration does not contain an \'installed\' or \'web\' section.')
+
+        config_section = client_config[key]
+        missing = [k for k in cls.required_client_secret_keys if k not in config_section]
+        if missing:
+            raise RuntimeError(f"Missing required fields in the '{key}' section: {missing}.")
+        return key
 
     def get_section(self, section_name: str):
         """
         Returns data for a ledger section or 'client_secret'.
         """
         if section_name == 'client_secret':
-            return self.client_secret_data
+            return self.client_secret_data.copy()
         return self.ledger_data[section_name].copy()
 
     def set_section(self, section_name, new_data):
@@ -346,9 +373,10 @@ class SettingsAPI:
 
         if section_name == 'client_secret':
             logger.info('Setting entire client_secret data.')
-            validate_client_secret_data(new_data)
+            self.validate_client_secret(new_data)
             self.client_secret_data = new_data
             self.save_section('client_secret')
+            signals.configSectionChanged.emit(section_name)
             return
 
         if section_name not in self.ledger_data:
@@ -437,7 +465,7 @@ class SettingsAPI:
         # Virtual section
         if section_name == 'client_secret':
             logger.info(f'Saving client_secret to "{self.client_secret_path}"')
-            validate_client_secret_data(self.client_secret_data)
+            self.validate_client_secret(self.client_secret_data)
             try:
                 with self.client_secret_path.open('w', encoding='utf-8') as f:
                     json.dump(self.client_secret_data, f, indent=2, ensure_ascii=False)
@@ -481,7 +509,7 @@ class SettingsAPI:
             self.ledger_data = original_ledger_data
             raise
 
-        validate_client_secret_data(self.client_secret_data)
+        self.validate_client_secret(self.client_secret_data)
         try:
             with self.client_secret_path.open('w', encoding='utf-8') as f:
                 json.dump(self.client_secret_data, f, indent=2, ensure_ascii=False)
