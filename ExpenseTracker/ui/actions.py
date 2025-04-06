@@ -107,7 +107,7 @@ class Signals(QtCore.QObject):
     def fetch_data():
         from ..database import database
 
-        database.get_remote_data()
+        database.cache_remote_data()
         signals.dataFetched.emit()
 
     @staticmethod

@@ -37,10 +37,19 @@ class SettingsScrollArea(QtWidgets.QScrollArea):
             self.widget().setFixedWidth(self.viewport().width())
 
 
-class SettingsWidget(QtWidgets.QWidget):
+class SettingsWidget(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.setObjectName('SettingsWidget')
+        self.setWindowTitle('Settings')
+
+        self.setWindowFlags(
+            QtCore.Qt.Window |
+            QtCore.Qt.WindowCloseButtonHint |
+            QtCore.Qt.WindowMinMaxButtonsHint
+        )
 
         self._sections = []
 

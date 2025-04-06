@@ -149,7 +149,7 @@ def fetch_sheet(
             )
 
 
-def get_data(force: bool = False) -> pd.DataFrame:
+def fetch_data(force: bool = False) -> pd.DataFrame:
     """
     Retrieves ledger data as a pandas DataFrame using the configuration in ledger.json.
 

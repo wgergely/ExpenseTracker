@@ -16,9 +16,10 @@ import pandas as pd
 from PySide6 import QtCore
 
 from .data import get_monthly_expenses
-from ..database.database import load_config
 from ..ui import ui
 from ..ui.actions import signals
+from ..settings import lib
+
 
 # Custom roles
 TransactionsRole = QtCore.Qt.UserRole + 1
@@ -170,10 +171,10 @@ class ExpenseModel(QtCore.QAbstractTableModel):
             if role == QtCore.Qt.DecorationRole:
                 return ui.get_icon(category)
             if role == QtCore.Qt.DisplayRole:
-                config = load_config()
-                categories = config.get('categories', {})
+                categories = lib.settings.get_section('categories')
                 if not categories:
                     return category
+
                 if category in categories:
                     display_name = categories[category]['display_name']
                 else:
@@ -197,8 +198,10 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
-            config = load_config()
-            mapping = config.get('data_header_mapping', {})
+            mapping = lib.settings.get_section('data_header_mapping')
+            if not mapping:
+                return None
+
             if section == 0:
                 return mapping.get('category', 'Category')
             elif section == 1:
@@ -292,14 +295,13 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
             return
 
-        config = load_config()
-        mapping = config.get('data_header_mapping', {})
+        mapping = lib.settings.get_section('data_header_mapping')
         if mapping:
             rename_map = {source: dest for dest, source in mapping.items()}
             missing_sources = [src for src in rename_map if src not in df.columns]
             if missing_sources:
                 logging.warning(
-                    f"TransactionsModel: Missing source columns {missing_sources} in data."
+                    f'TransactionsModel: Missing source columns {missing_sources} in data.'
                 )
             else:
                 df = df.rename(columns=rename_map)
@@ -377,10 +379,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 3:
-                config = load_config()
-                categories = config.get('categories', {})
+                categories = lib.settings.get_section('categories')
                 if not categories:
                     return f'{value}'
+
                 if value in categories:
                     display_name = categories[value]['display_name']
                 else:

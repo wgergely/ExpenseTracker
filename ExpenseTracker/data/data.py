@@ -13,7 +13,8 @@ import logging
 
 import pandas as pd
 
-from ..database.database import load_config, get_cached_data
+from ..database.database import get_cached_data
+from ..settings import lib
 
 logging.basicConfig(level=logging.INFO)
 
@@ -37,21 +38,17 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
     if df.empty:
         return df
 
-    # Load configuration to get header mapping and category exclusions.
-    config = load_config()
-    mapping = config.get('data_header_mapping', {})
+    mapping = lib.settings.get_section('data_header_mapping')
     if not mapping:
         logging.error('No data_header_mapping found in config; returning empty DataFrame.')
         return pd.DataFrame()
 
-    # Ensure required analytic fields are defined in the config.
     analytics_required = {"date", "amount", "category"}
     missing_required = analytics_required - set(mapping.keys())
     if missing_required:
         logging.error("Config missing required analytic fields: " + ", ".join(missing_required))
         return pd.DataFrame()
 
-    # Build a source-to-destination renaming map.
     rename_map = {source: dest for dest, source in mapping.items()}
     missing_sources = [src for src in rename_map if src not in df.columns]
     if missing_sources:
@@ -62,7 +59,6 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
         return pd.DataFrame()
     df.rename(columns=rename_map, inplace=True)
 
-    # Verify that the required analytic columns exist after renaming.
     for col in analytics_required:
         if col not in df.columns:
             logging.warning(f"No '{col}' column found after renaming; returning empty DataFrame.")
@@ -75,15 +71,17 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
         return pd.DataFrame()
     df = df.dropna(subset=['date'])
 
-    today = datetime.datetime.utcnow().date()
+    today = datetime.datetime.now(datetime.timezone.utc)
     try:
         cutoff_date = today.replace(year=today.year - years_back)
     except ValueError:
         cutoff_date = today - datetime.timedelta(days=years_back * 365)
     df = df[df['date'] >= pd.to_datetime(cutoff_date)]
 
-    # Load excluded categories from config.
-    categories_config = config.get('categories', {})
+    categories_config = lib.settings.get_section('categories')
+    if not categories_config:
+        logging.error('No categories found in config; returning empty DataFrame.')
+        return pd.DataFrame()
     excluded_categories = {cat for cat, info in categories_config.items() if info.get('excluded', False)}
     df['category'] = df['category'].fillna('Miscellaneous')
     df = df[~df['category'].isin(excluded_categories)]
@@ -141,11 +139,9 @@ def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: i
     if df_month.empty:
         return pd.DataFrame(columns=['category', 'total', 'transactions'])
 
-    # Remove positive amounts from df_month (we're only interested in expenses)
     df_month = df_month[df_month['amount'] < 0]
 
-    config = load_config()
-    mapping = config.get('data_header_mapping', {})
+    mapping = lib.settings.get_section('data_header_mapping')
     desired_keys = list(mapping.keys())
 
     breakdown = (
@@ -156,10 +152,6 @@ def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: i
         }))
         .reset_index()
     )
-
-    # Filter out uncategorized transactions (where category is NaN or empty)
     breakdown = breakdown[breakdown['category'].notna() & (breakdown['category'] != '')]
-
-    # Sort the breakdown DataFrame by the specified column
     breakdown = breakdown.sort_values(sort_column, ascending=True).reset_index(drop=True)
     return breakdown

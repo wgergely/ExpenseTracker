@@ -42,12 +42,17 @@ class ConfigPaths:
         self.ledger_template = self.template_dir / 'ledger.json.template'
         self.gcp_help_path = self.template_dir / 'gcp.md'
 
+        # Config directories
         self.config_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-        self.client_secret_path = self.config_dir / 'client_secret.json'
-        self.ledger_path = self.config_dir / 'ledger.json'
         self.presets_dir = self.config_dir / 'presets'
         self.auth_dir = self.config_dir / 'auth'
+        self.db_dir = self.config_dir / 'db'
+
+        # Config files
+        self.client_secret_path = self.config_dir / 'client_secret.json'
+        self.ledger_path = self.config_dir / 'ledger.json'
         self.creds_path = self.auth_dir / 'creds.json'
+        self.db_path = self.db_dir / 'cache.db'
 
         self._verify_and_prepare()
 
@@ -78,6 +83,10 @@ class ConfigPaths:
         if not self.auth_dir.exists():
             logger.info(f'Creating auth directory: {self.auth_dir}')
             self.auth_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.db_dir.exists():
+            logger.info(f'Creating db directory: {self.db_dir}')
+            self.db_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.presets_dir.exists():
             logger.info(f'Creating presets directory: {self.presets_dir}')
