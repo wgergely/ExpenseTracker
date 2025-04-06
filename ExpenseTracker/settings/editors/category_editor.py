@@ -134,7 +134,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
     """
     HEADERS = {
-        COL_NAME: 'Name',
+        COL_NAME: 'Spreadsheet Value',
         COL_DISPLAY_NAME: 'Display Name',
         COL_DESCRIPTION: 'Description',
         COL_ICON: '',
@@ -534,13 +534,10 @@ class CategoryEditor(QtWidgets.QWidget):
         self.toolbar = None
         self.view = None
 
-        self.setMinimumSize(
-            ui.Size.Margin(2.0),
-            ui.Size.RowHeight(12.0)
-        )
+        self.setMinimumHeight(ui.Size.RowHeight(1.0) * 15)
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred,
-            QtWidgets.QSizePolicy.Expanding
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Maximum
         )
 
         ui.set_stylesheet(self)
@@ -605,6 +602,7 @@ class CategoryEditor(QtWidgets.QWidget):
             self.view.model().add_new()
 
         action = QtGui.QAction('Add', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+N')
         action.setStatusTip('Add a new category')
         action.setIcon(ui.get_icon('btn_add'))
@@ -627,6 +625,7 @@ class CategoryEditor(QtWidgets.QWidget):
             self.view.model().removeRow(index.row())
 
         action = QtGui.QAction('Remove', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Delete')
         action.setStatusTip('Remove selected category')
         action.setIcon(ui.get_icon('btn_delete'))
@@ -636,6 +635,7 @@ class CategoryEditor(QtWidgets.QWidget):
 
         # Separator
         action = QtGui.QAction(self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -677,6 +677,7 @@ class CategoryEditor(QtWidgets.QWidget):
                 return
 
         action = QtGui.QAction('Revert', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+Shift+R')
         action.setStatusTip('Restore categories from template')
 
@@ -689,6 +690,7 @@ class CategoryEditor(QtWidgets.QWidget):
             lib.settings.reload_section('categories')
 
         action = QtGui.QAction('Refresh', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+R')
         action.setStatusTip('Reload categories from disk')
         action.triggered.connect(reload_from_disk)
@@ -697,6 +699,7 @@ class CategoryEditor(QtWidgets.QWidget):
 
         # Separator
         action = QtGui.QAction(self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -720,6 +723,7 @@ class CategoryEditor(QtWidgets.QWidget):
             model.setData(index, not model.data(index, QtCore.Qt.EditRole), QtCore.Qt.EditRole)
 
         action = QtGui.QAction('Exclude', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+E')
         action.setStatusTip('Exclude selected category')
         action.setIcon(ui.get_icon('btn_remove'))

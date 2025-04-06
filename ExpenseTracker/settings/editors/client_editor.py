@@ -297,6 +297,7 @@ class ClientEditor(QtWidgets.QWidget):
 
     def _init_actions(self):
         action = QtGui.QAction('Import Google OAuth Client Secret', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setToolTip('Import Google OAuth Client Secret')
         action.setShortcut('Ctrl+I')
         action.setIcon(ui.get_icon('btn_ledger'))

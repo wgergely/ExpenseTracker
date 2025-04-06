@@ -11,7 +11,7 @@ from ...ui.actions import signals
 
 
 class DataMappingModel(QtCore.QAbstractTableModel):
-    HEADERS = ['Data Column', 'Spreadsheet Column']  # column 0, column 1
+    HEADERS = ['Field To Map To', 'Spreadsheet Column to Map From']  # column 0, column 1
     MIME_HEADER = 'application/x-headeritem'
 
     def __init__(self, parent=None):
@@ -76,10 +76,8 @@ class DataMappingModel(QtCore.QAbstractTableModel):
 
         if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
             if col == 0:
-                # Data column name (read-only)
-                return key
+                return f'{key.title()}  =>'
             else:
-                # Spreadsheet Column
                 return self._mapping.get(key, '')
         return None
 
@@ -106,7 +104,7 @@ class DataMappingModel(QtCore.QAbstractTableModel):
 
         # Column 0 is read-only
         if col == 0:
-            return (base_flags | QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable) & ~QtCore.Qt.ItemIsEditable
+            return QtCore.Qt.NoItemFlags
 
         # Column 1 is editable + droppable
         return (base_flags
@@ -176,24 +174,6 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-    def paint(self, painter, option, index):
-        if index.column() == 1:
-            painter.setBrush(ui.Color.VeryDarkBackground())
-            painter.setPen(QtCore.Qt.NoPen)
-            painter.drawRect(option.rect)
-
-            # Draw the text with a custom color
-            text = index.data(QtCore.Qt.DisplayRole)
-            rect = QtCore.QRect(option.rect)
-            rect.adjust(ui.Size.Margin(1.0), 0, -ui.Size.Margin(1.0), 0)
-
-            if text:
-                painter.setPen(ui.Color.Text())
-                painter.drawText(rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, text)
-        else:
-            # Read-only column, use default paint
-            super().paint(painter, option, index)
-
     def createEditor(self, parent, option, index):
         if index.column() != 1:
             return None
@@ -226,10 +206,6 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         text_val = editor.text()
         model.setData(index, text_val, QtCore.Qt.EditRole)
 
-    def sizeHint(self, option, index):
-        row_h = ui.Size.RowHeight(1.0)
-        return QtCore.QSize(option.rect.width(), row_h)
-
     def updateEditorGeometry(self, editor, option, index):
         """
         Explicitly set the editor geometry to match the cell area.
@@ -246,14 +222,10 @@ class DataMappingEditor(QtWidgets.QWidget):
         self.view = None
 
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Minimum,
-            QtWidgets.QSizePolicy.MinimumExpanding
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Maximum
         )
-
-        self.setMinimumSize(
-            ui.Size.Margin(1.0),
-            ui.Size.RowHeight(7.5)
-        )
+        self.setMinimumHeight(ui.Size.RowHeight(1.0) * 6.5)
 
         ui.set_stylesheet(self)
 
@@ -264,35 +236,6 @@ class DataMappingEditor(QtWidgets.QWidget):
         self._init_actions()
         self._connect_signals()
 
-    def _init_actions(self):
-        QtCore.Slot()
-
-        def save_to_disk():
-            lib.settings.set_section('data_header_mapping', self.view.modelw().get_current_section_data())
-
-        action = QtGui.QAction('Save to Disk', self.view)
-        action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
-        action.triggered.connect(save_to_disk)
-        self.view.addAction(action)
-
-        @QtCore.Slot()
-        def revert_to_defaults():
-            lib.settings.revert_section('data_header_mapping')
-
-        action = QtGui.QAction('Revert', self.view)
-        action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
-        action.triggered.connect(revert_to_defaults)
-        self.view.addAction(action)
-
-        @QtCore.Slot()
-        def reload_from_disk():
-            lib.settings.reload_section('data_header_mapping')
-
-        action = QtGui.QAction('Refresh', self.view)
-        action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
-        action.triggered.connect(reload_from_disk)
-        self.view.addAction(action)
-
     def _create_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
@@ -302,26 +245,11 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
-        # Hide vertical header for clarity
-        self.view.verticalHeader().setVisible(False)
-
-        # Fix row height
-        self.view.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
-        row_h = ui.Size.RowHeight(1.0)
-        self.view.verticalHeader().setDefaultSectionSize(row_h)
-
-        # Let columns expand proportionally
-        self.view.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        # Align column labels left
-        self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft)
-
-        # Allow double-click or Enter to edit
         self.view.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked |
             QtWidgets.QAbstractItemView.EditKeyPressed
         )
 
-        # Enable drop acceptance
         self.view.setAcceptDrops(True)
         self.view.setDragDropMode(QtWidgets.QAbstractItemView.DropOnly)
         self.view.setDropIndicatorShown(True)
@@ -329,9 +257,53 @@ class DataMappingEditor(QtWidgets.QWidget):
         layout.addWidget(self.view)
         self.setLayout(layout)
 
+    def _init_actions(self):
+        QtCore.Slot()
+
+        def save_to_disk():
+            lib.settings.set_section('data_header_mapping', self.view.modelw().get_current_section_data())
+
+        action = QtGui.QAction('Save to Disk', self.view)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
+        action.triggered.connect(save_to_disk)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def revert_to_defaults():
+            lib.settings.revert_section('data_header_mapping')
+
+        action = QtGui.QAction('Revert', self.view)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
+        action.triggered.connect(revert_to_defaults)
+        self.view.addAction(action)
+
+        @QtCore.Slot()
+        def reload_from_disk():
+            lib.settings.reload_section('data_header_mapping')
+
+        action = QtGui.QAction('Refresh', self.view)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
+        action.triggered.connect(reload_from_disk)
+        self.view.addAction(action)
+
     def _init_model(self):
         model = DataMappingModel()
         self.view.setModel(model)
+
+        rh = ui.Size.RowHeight(1.0)
+        self.view.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        self.view.verticalHeader().setDefaultSectionSize(rh)
+        self.view.verticalHeader().setVisible(False)
+
+
+        self.view.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.view.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.view.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
 
     def _connect_signals(self):
         pass

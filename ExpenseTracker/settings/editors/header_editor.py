@@ -44,6 +44,10 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
 
         signals.configSectionChanged.connect(on_config_changed)
 
+        self.dataChanged.connect(
+            lambda: lib.settings.set_section('header', self.get_current_section_data())
+        )
+
         @QtCore.Slot()
         def on_layout_changed():
             # We only want to write to disk but not reset the model
@@ -344,6 +348,7 @@ class HeaderEditor(QtWidgets.QWidget):
             ui.Size.Margin(1.0),
             ui.Size.RowHeight(7.5)
         )
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         ui.set_stylesheet(self)
 
@@ -363,9 +368,10 @@ class HeaderEditor(QtWidgets.QWidget):
         self.layout().addWidget(self.toolbar, 1)
 
         self.view = QtWidgets.QTableView(parent=self)
+
         delegate = HeaderItemDelegate(self.view)
         self.view.setItemDelegate(delegate)
-        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self.view.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
 
         self.view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
@@ -410,12 +416,13 @@ class HeaderEditor(QtWidgets.QWidget):
             self.view.setCurrentIndex(index)
 
         action = QtGui.QAction('Add', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+N')
         action.setStatusTip('Add a new header')
         action.setIcon(ui.get_icon('btn_add'))
         action.triggered.connect(add_action)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def remove_action():
@@ -427,19 +434,21 @@ class HeaderEditor(QtWidgets.QWidget):
                 self.view.model().removeRow(index.row())
 
         action = QtGui.QAction('Remove', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Delete')
         action.setStatusTip('Remove selected header')
         action.setIcon(ui.get_icon('btn_delete'))
         action.triggered.connect(remove_action)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         action = QtGui.QAction(self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def reset_action():
@@ -462,29 +471,32 @@ class HeaderEditor(QtWidgets.QWidget):
                 return
 
         action = QtGui.QAction('Revert', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+Shift+R')
         action.setStatusTip('Restore header definitions from template')
         action.triggered.connect(reset_action)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def reload_action():
             lib.settings.reload_section('header')
 
         action = QtGui.QAction('Refresh', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+R')
         action.setStatusTip('Reload header definitions from disk')
         action.triggered.connect(reload_action)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         action = QtGui.QAction(self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def move_up():
@@ -500,12 +512,13 @@ class HeaderEditor(QtWidgets.QWidget):
             model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), dest_row)
 
         action = QtGui.QAction('Move Up', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+Up')
         action.setStatusTip('Move selected header up')
         action.setIcon(ui.get_icon('arrow_up'))
         action.triggered.connect(move_up)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def move_down():
@@ -529,12 +542,13 @@ class HeaderEditor(QtWidgets.QWidget):
                 self.view.setCurrentIndex(new_index)
 
         action = QtGui.QAction('Move Down', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setShortcut('Ctrl+Down')
         action.setStatusTip('Move selected header down')
         action.setIcon(ui.get_icon('arrow_down'))
         action.triggered.connect(move_down)
         self.toolbar.addAction(action)
-        self.view.addAction(action)
+        self.addAction(action)
 
     def _connect_signals(self):
         pass
