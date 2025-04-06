@@ -6,6 +6,10 @@ import shutil
 import tempfile
 import zipfile
 
+from PySide6 import QtGui, QtCore
+
+from ..ui.actions import signals
+
 """
 Manages settings for ledger.json and client_secret.json files. Provides
 schema validation, unified get/set/revert/save methods, and logs important
@@ -268,9 +272,16 @@ class SettingsAPI:
         )
 
         self.ledger_data = {}
+        for k in LEDGER_SCHEMA.keys():
+            self.ledger_data[k] = {}
+
         self.client_secret_data = {}
 
+        self._connect_signals()
         self.init_data()
+
+    def _connect_signals(self):
+        signals.openSpreadsheetRequested.connect(self.open_spreadsheet)
 
     def init_data(self):
         logger.info('Initializing SettingsAPI.')
@@ -533,6 +544,24 @@ class SettingsAPI:
         except Exception as e:
             logger.error(f'Failed to load preset "{preset_name}": {e}')
             raise
+
+    @QtCore.Slot()
+    def open_spreadsheet(self):
+        """
+        Opens the spreadsheet in the default browser.
+        """
+        if not self.ledger_data['spreadsheet']['id']:
+            logger.error('No spreadsheet ID found.')
+            return
+
+        spreadsheet_id = self.ledger_data['spreadsheet']['id']
+        sheet_name = self.ledger_data['spreadsheet']['sheet']
+
+        url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
+        if sheet_name:
+            url += f'&sheet={sheet_name}'
+        logger.info(f'Opening spreadsheet: {url}')
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
 
 settings = SettingsAPI()

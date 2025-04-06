@@ -152,8 +152,7 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return list(set(base + [self.MIME_INTERNAL, self.MIME_EXTERNAL]))
 
     def mimeData(self, indexes):
-        """
-        For the first valid index, store the row in 'application/vnd.text.list'
+        """For the first valid index, store the row in 'application/vnd.text.list'
         (for internal reorder) and the item['name'] in 'application/x-headeritem'
         (for external usage).
         """
@@ -176,8 +175,7 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return mime_data
 
     def dropMimeData(self, data, action, row, column, parent):
-        """
-        Handle internal reordering.
+        """Handle internal reordering.
         """
         if action == QtCore.Qt.IgnoreAction:
             return True
@@ -204,10 +202,9 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return False
 
     def insertRow(self, row, parent=QtCore.QModelIndex()):
-        """
-        Insert a new row at the specified row.
-        """
+        """Insert a new row at the specified row.
 
+        """
         default_type = 'string'
         default_name = 'NewColumn'
 
@@ -222,24 +219,32 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         self._headers.insert(row, item)
         self.endInsertRows()
 
-    def moveRow(self, source_parent: QtCore.QModelIndex, source_row: int, destination_parent: QtCore.QModelIndex,
-                destination_row: int):
-        """
-        Move the row from source to destination.
-        """
-        if source_row == destination_row and source_parent == destination_parent:
-            return True
+    def moveRow(self, source_parent: QtCore.QModelIndex, row: int, destination_parent: QtCore.QModelIndex,
+                dest_row: int):
+        """Move the row from source to destination.
 
-        self.beginMoveRows(source_parent, source_row, source_row, destination_parent, destination_row)
-        item = self._headers.pop(source_row)
-        self._headers.insert(destination_row, item)
+        """
+        parent = QtCore.QModelIndex()
+
+        if dest_row < 0 or dest_row > self.rowCount():
+            return False
+
+        self.beginMoveRows(parent, row, row, parent, dest_row)
+        self._ignore_reload = True
+        # Adjust the destination index for internal list modification.
+        if dest_row > row:
+            new_index = dest_row - 1
+        else:
+            new_index = dest_row
+        self._headers.insert(new_index, self._headers.pop(row))
+        self._ignore_reload = False
         self.endMoveRows()
 
         return True
 
     def removeRow(self, row, parent=QtCore.QModelIndex()):
-        """
-        Remove the row at the specified index.
+        """Remove the row at the specified index.
+
         """
         if row < 0 or row >= len(self._headers):
             return False
@@ -250,8 +255,8 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return True
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
-        """
-        Provide header data for the model.
+        """Provide header data for the model.
+
         """
         if role == QtCore.Qt.DisplayRole:
             if orientation == QtCore.Qt.Horizontal:
@@ -261,8 +266,8 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return None
 
     def get_current_section_data(self):
-        """
-        Return the current section data as a dictionary.
+        """Return the current section data as a dictionary.
+
         """
         return {item['name']: item['type'] for item in self._headers}
 
@@ -284,8 +289,8 @@ class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
             return editor
 
     def updateEditorGeometry(self, editor, option, index):
-        """
-        Explicitly set the editor geometry to match the cell area.
+        """Explicitly set the editor geometry to match the cell area.
+
         """
         editor.setGeometry(option.rect)
         editor.setStyleSheet(f'height: {option.rect.height()}px')
@@ -404,10 +409,10 @@ class HeaderEditor(QtWidgets.QWidget):
             index = model.index(row, 0)
             self.view.setCurrentIndex(index)
 
-        action = QtGui.QAction("Add", self)
-        action.setShortcut("Ctrl+N")
-        action.setStatusTip("Add a new header")
-        action.setIcon(ui.get_icon("btn_add"))
+        action = QtGui.QAction('Add', self)
+        action.setShortcut('Ctrl+N')
+        action.setStatusTip('Add a new header')
+        action.setIcon(ui.get_icon('btn_add'))
         action.triggered.connect(add_action)
         self.toolbar.addAction(action)
         self.view.addAction(action)
@@ -421,10 +426,10 @@ class HeaderEditor(QtWidgets.QWidget):
             if index.isValid():
                 self.view.model().removeRow(index.row())
 
-        action = QtGui.QAction("Remove", self)
-        action.setShortcut("Delete")
-        action.setStatusTip("Remove selected header")
-        action.setIcon(ui.get_icon("btn_delete"))
+        action = QtGui.QAction('Remove', self)
+        action.setShortcut('Delete')
+        action.setStatusTip('Remove selected header')
+        action.setIcon(ui.get_icon('btn_delete'))
         action.triggered.connect(remove_action)
         self.toolbar.addAction(action)
         self.view.addAction(action)
@@ -440,36 +445,36 @@ class HeaderEditor(QtWidgets.QWidget):
         def reset_action():
             res = QtWidgets.QMessageBox.question(
                 self,
-                "Restore",
-                "Are you sure you want to restore the header definitions from the template?",
+                'Restore',
+                'Are you sure you want to restore the header definitions from the template?',
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
             )
             if res != QtWidgets.QMessageBox.Yes:
                 return
             try:
-                lib.settings.revert_section("header")
+                lib.settings.revert_section('header')
             except Exception as e:
                 QtWidgets.QMessageBox.critical(
                     self,
-                    "Error",
-                    f"Failed to restore header definitions: {e}"
+                    'Error',
+                    f'Failed to restore header definitions: {e}'
                 )
                 return
 
-        action = QtGui.QAction("Revert", self)
-        action.setShortcut("Ctrl+Shift+R")
-        action.setStatusTip("Restore header definitions from template")
+        action = QtGui.QAction('Revert', self)
+        action.setShortcut('Ctrl+Shift+R')
+        action.setStatusTip('Restore header definitions from template')
         action.triggered.connect(reset_action)
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
         @QtCore.Slot()
         def reload_action():
-            lib.settings.reload_section("header")
+            lib.settings.reload_section('header')
 
-        action = QtGui.QAction("Refresh", self)
-        action.setShortcut("Ctrl+R")
-        action.setStatusTip("Reload header definitions from disk")
+        action = QtGui.QAction('Refresh', self)
+        action.setShortcut('Ctrl+R')
+        action.setStatusTip('Reload header definitions from disk')
         action.triggered.connect(reload_action)
         self.toolbar.addAction(action)
         self.view.addAction(action)
@@ -490,17 +495,14 @@ class HeaderEditor(QtWidgets.QWidget):
             if not index.isValid():
                 return
             row = index.row()
-            if row <= 0:
-                return
             model = self.view.model()
-            if model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), row - 1):
-                new_index = model.index(row - 1, index.column())
-                self.view.setCurrentIndex(new_index)
+            dest_row = row - 1
+            model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), dest_row)
 
-        action = QtGui.QAction("Move Up", self)
-        action.setShortcut("Ctrl+Up")
-        action.setStatusTip("Move selected header up")
-        action.setIcon(ui.get_icon("arrow_up"))
+        action = QtGui.QAction('Move Up', self)
+        action.setShortcut('Ctrl+Up')
+        action.setStatusTip('Move selected header up')
+        action.setIcon(ui.get_icon('arrow_up'))
         action.triggered.connect(move_up)
         self.toolbar.addAction(action)
         self.view.addAction(action)
@@ -517,14 +519,19 @@ class HeaderEditor(QtWidgets.QWidget):
             model = self.view.model()
             if row >= model.rowCount() - 1:
                 return
-            if model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), row + 1):
+            # When moving down, we want to move the row from 'row' to 'row+1'.
+            # Because Qt expects dest_row as the row BEFORE which to insert,
+            # and if moving downward, it will subtract one,
+            # we pass row + 2 so that internally the new index becomes row + 1.
+            dest_row = row + 2
+            if model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), dest_row):
                 new_index = model.index(row + 1, index.column())
                 self.view.setCurrentIndex(new_index)
 
-        action = QtGui.QAction("Move Down", self)
-        action.setShortcut("Ctrl+Down")
-        action.setStatusTip("Move selected header down")
-        action.setIcon(ui.get_icon("arrow_down"))
+        action = QtGui.QAction('Move Down', self)
+        action.setShortcut('Ctrl+Down')
+        action.setStatusTip('Move selected header down')
+        action.setIcon(ui.get_icon('arrow_down'))
         action.triggered.connect(move_down)
         self.toolbar.addAction(action)
         self.view.addAction(action)

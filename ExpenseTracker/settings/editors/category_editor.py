@@ -1,4 +1,4 @@
-"""Category editor module for ledger.json's "categories" section.
+"""Config editor for ledger.json's "categories" section.
 
 """
 import functools

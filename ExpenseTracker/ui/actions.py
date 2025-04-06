@@ -28,7 +28,7 @@ class Signals(QtCore.QObject):
 
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
 
-    openLedgerRequested = QtCore.Signal()
+    openSpreadsheetRequested = QtCore.Signal()
 
     categorySelectionChanged = QtCore.Signal()
 
@@ -42,7 +42,6 @@ class Signals(QtCore.QObject):
         self._connect_signals()
 
     def _connect_signals(self):
-        self.openLedgerRequested.connect(self.show_ledger)
         self.authenticateRequested.connect(self.authenticate)
         self.deauthenticateRequested.connect(self.unauthenticate)
 
@@ -54,17 +53,6 @@ class Signals(QtCore.QObject):
 
         self.configSectionChanged.connect(lambda s: print(f'Config section changed: {s}'))
 
-    @staticmethod
-    @QtCore.Slot()
-    def show_ledger():
-        from ..database import database
-
-        config = database.load_config()
-        spreadsheet_id = config.get('id', None)
-        if not spreadsheet_id:
-            raise ValueError("No spreadsheet ID found in the configuration.")
-        url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
     @staticmethod
     @QtCore.Slot(bool)
@@ -238,68 +226,3 @@ class DataGroupAction(QtWidgets.QToolButton):
                                   QtCore.Qt.AltModifier |
                                   QtCore.Qt.ControlModifier))
         signals.dataFetchRequested.emit(force)
-
-
-class ShowLedgerAction(QtWidgets.QToolButton):
-    """
-    Button to open the Google spreadsheet (ledger) in the default browser.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setText('Open Ledger')
-        self.setToolTip('Open Ledger')
-        self.setIcon(ui.get_icon('btn_ledger'))
-        self.clicked.connect(signals.openLedgerRequested)
-
-
-#
-# New actions for sorting and filtering:
-#
-
-class SortExpenseAction(QtGui.QAction):
-    """
-    Sort expense model by given column (0=Category, 2=Amount) and direction.
-    """
-    def __init__(self, text, column, ascending=True, parent=None):
-        super().__init__(text, parent)
-        self.column = column
-        self.ascending = ascending
-        self.triggered.connect(self.emit_sort)
-
-    @QtCore.Slot()
-    def emit_sort(self):
-        signals.sortExpenseRequested.emit(self.column, self.ascending)
-
-
-class SortTransactionsAction(QtGui.QAction):
-    """
-    Sort transaction model by the given column and direction.
-    """
-    def __init__(self, text, column, ascending=True, parent=None):
-        super().__init__(text, parent)
-        self.column = column
-        self.ascending = ascending
-        self.triggered.connect(self.emit_sort)
-
-    @QtCore.Slot()
-    def emit_sort(self):
-        signals.sortTransactionRequested.emit(self.column, self.ascending)
-
-
-class FilterTransactionsAction(QtGui.QAction):
-    """
-    Action to filter transactions by description.
-    Prompts the user for text input to filter the proxy model.
-    """
-    def __init__(self, text='Filter Transactions', parent=None):
-        super().__init__(text, parent)
-        self.triggered.connect(self.ask_filter)
-
-    @QtCore.Slot()
-    def ask_filter(self):
-        from ..ui import parent
-        text, ok = QtWidgets.QInputDialog.getText(parent(), "Filter Transactions",
-                                                  "Enter text to filter (description):")
-        if ok:
-            signals.filterTransactionsRequested.emit(text)

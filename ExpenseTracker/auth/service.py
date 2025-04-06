@@ -21,61 +21,6 @@ from . import auth
 
 logging.basicConfig(level=logging.INFO)
 
-LEDGER_CONFIG_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(__file__),
-    '..',
-    'config',
-    'ledger.json'
-))
-
-
-def load_config(path: Optional[str] = None) -> Dict[str, str]:
-    """
-    Loads the ledger configuration from a JSON file containing:
-    {
-      "id": "<spreadsheet_id>",
-      "sheet": "<worksheet_name>"
-    }
-
-    Args:
-        path: Optional path to the ledger.json file.
-
-    Returns:
-        A dictionary with 'id' (spreadsheet ID) and 'sheet' (worksheet name).
-
-    Raises:
-        RuntimeError: If the file is missing, malformed, or lacks required fields.
-
-    """
-    if path is None:
-        path = LEDGER_CONFIG_PATH
-
-    if not os.path.exists(path):
-        raise RuntimeError(
-            f'No ledger.json file found at {path}. This file must contain '
-            'at least the "id" (spreadsheet ID) and "sheet" (worksheet name).'
-        )
-
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError as ex:
-        raise RuntimeError(
-            f'Invalid JSON in {path}. Error details: {ex}'
-        ) from ex
-
-    if not isinstance(data, dict):
-        raise RuntimeError('Expected a JSON object in ledger.json.')
-
-    if not data.get('id'):
-        raise RuntimeError('The "id" field is missing or empty in ledger.json.')
-    if not data.get('sheet'):
-        raise RuntimeError('The "sheet" field is missing or empty in ledger.json.')
-
-    return {
-        'id': str(data['id']).strip(),
-        'sheet': str(data['sheet']).strip()
-    }
 
 
 def create_sheets_service(force: bool = False):
@@ -214,8 +159,11 @@ def get_data(force: bool = False) -> pd.DataFrame:
     Returns:
         A pandas DataFrame containing the ledger data.
     """
-    config = load_config()
-    spreadsheet_id = config['id']
+    from ..settings import lib
+
+    spreadsheet_config = lib.settings.get_section('spreadsheet')
+
+    spreadsheet_id = lib.settings.get('spreadsheet', 'id')
     worksheet_name = config['sheet']
 
     service = create_sheets_service(force=force)

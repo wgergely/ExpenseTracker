@@ -602,3 +602,8 @@ HeaderEditor:focus:hover QTableView {
     margin: 0px;
     border: <Separator@2.0>px solid <Transparent>;
 }
+
+JsonPreviewWidget {
+    font-weight: 300;
+    color: <LightBlue>;
+}
