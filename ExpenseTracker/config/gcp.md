@@ -1,15 +1,20 @@
 # Google Cloud Project, API & Client Setup
 
+<br />
+
 The app requires a valid
 [Google API client ID](https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid) to connect
 with your account and Google Sheet document.  Follow these steps to set up your Google Cloud project and obtain the 
 necessary credentials:
+
+<br />
 
 #### Google Cloud Project
 
 - Set up a new [Google Cloud project](https://developers.google.com/workspace/guides/create-project), or use an existing one.
 - Enable the required [Google Sheets API](https://cloud.google.com/endpoints/docs/openapi/enable-api) in the [API Library](https://console.cloud.google.com/apis/library).
 
+<br />
 
 #### Client ID
 
@@ -18,8 +23,9 @@ Set up a new OAuth client ID in the [Credentials](https://console.cloud.google.c
 - Click on "Create credentials" and select "OAuth client ID".
   - Configure the consent screen with the necessary information.
   - Choose "Desktop app" as the app type.
-  - Copy top clipboard or download the generated client secret JSON.
+  - Copy to the clipboard or download the generated client secret JSON.
 
+<br />
 
 The generated JSON should look something like this:
 

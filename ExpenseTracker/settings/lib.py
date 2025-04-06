@@ -49,10 +49,12 @@ class ConfigPaths:
         self.icon_dir = self.template_dir / 'icons'
         self.client_secret_template = self.template_dir / 'client_secret.json.template'
         self.ledger_template = self.template_dir / 'ledger.json.template'
+        self.gcp_help_path = self.template_dir / 'gcp.md'
 
         self.config_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
         self.client_secret_path = self.config_dir / 'client_secret.json'
         self.ledger_path = self.config_dir / 'ledger.json'
+
 
         self.presets_dir = self.template_dir / 'presets'
 

@@ -205,8 +205,7 @@ QComboBox QListView::item:hover {
 
 QLineEdit,
 QTextEdit,
-QPlainTextEdit,
-QTextBrowser {
+QPlainTextEdit {
     background-color: <DarkBackground>;
     border: <Separator@1.0>px solid <Transparent>;
     border-radius: <Indicator@1.5>px;
@@ -606,4 +605,14 @@ HeaderEditor:focus:hover QTableView {
 JsonPreviewWidget {
     font-weight: 300;
     color: <LightBlue>;
+}
+
+
+QTextBrowser {
+    font-size: <MediumText@1.2>px;
+    color: <SecondaryText>;
+    font-weight: 500;
+    margin: 0px;
+    padding: <Margin@1.0>px;
+    background-color: <DarkBackground>;
 }
