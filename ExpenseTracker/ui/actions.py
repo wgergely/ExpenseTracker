@@ -1,28 +1,13 @@
-#!/usr/bin/env python3
-"""
-Actions Module.
+"""Actions Module.
 
-Defines the toolbar actions used in the application. In particular, it
-groups the authentication actions (Connect/Disconnect) and the data actions
-(Reload/Clear Data) under single tool buttons with drop‐down menus.
 """
 
-from PySide6 import QtCore, QtWidgets, QtGui
-
-from . import ui
+from PySide6 import QtCore, QtWidgets
 
 
 class Signals(QtCore.QObject):
-    configSectionChanged = QtCore.Signal(str) # Section, config
+    configSectionChanged = QtCore.Signal(str)  # Section, config
 
-    switchViewToggled = QtCore.Signal()
-
-    authenticateRequested = QtCore.Signal(bool)
-    deauthenticateRequested = QtCore.Signal()
-
-    clearDataRequested = QtCore.Signal()
-
-    dataFetchRequested = QtCore.Signal(bool)
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal()
 
@@ -32,31 +17,17 @@ class Signals(QtCore.QObject):
 
     categorySelectionChanged = QtCore.Signal()
 
-    # New signals for sorting/filtering
-    sortExpenseRequested = QtCore.Signal(int, bool)        # column, ascending?
-    sortTransactionRequested = QtCore.Signal(int, bool)    # column, ascending?
-    filterTransactionsRequested = QtCore.Signal(str)
-
     def __init__(self):
         super().__init__()
         self._connect_signals()
 
     def _connect_signals(self):
-        self.authenticateRequested.connect(self.authenticate)
-        self.deauthenticateRequested.connect(self.unauthenticate)
-
-        self.dataFetchRequested.connect(self.fetch_data)
-        self.clearDataRequested.connect(self.clear_data)
-
         self.dataRangeChanged.connect(self.categorySelectionChanged)
         self.dataFetched.connect(self.categorySelectionChanged)
 
-        self.configSectionChanged.connect(lambda s: print(f'Config section changed: {s}'))
-
-
     @staticmethod
-    @QtCore.Slot(bool)
-    def authenticate(force=False):
+    @QtCore.Slot()
+    def authenticate():
         from ..auth import auth
         from ..ui import parent
 
@@ -68,9 +39,13 @@ class Signals(QtCore.QObject):
             return
 
         auth.authenticate(force=True)
-        msg = 'Authentication successful.'
-        QtWidgets.QMessageBox.information(parent(), 'Authentication', msg,
-                                          QtWidgets.QMessageBox.Ok)
+
+        QtWidgets.QMessageBox.information(
+            parent(),
+            'Authentication',
+            'Authentication successful.',
+             QtWidgets.QMessageBox.Ok
+        )
 
     @staticmethod
     @QtCore.Slot()
@@ -133,96 +108,3 @@ class Signals(QtCore.QObject):
 
 # Create a singleton instance of Signals
 signals = Signals()
-
-
-class SwitchViewAction(QtWidgets.QToolButton):
-    """
-    Button to toggle between graph and pie-chart views.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.setText('Switch View')
-        self.setToolTip('Switch View')
-        self.setIcon(ui.get_icon('btn_switch'))
-        self.clicked.connect(signals.switchViewToggled)
-
-
-class AuthGroupAction(QtWidgets.QToolButton):
-    """
-    Grouped authentication action.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.setText('Connect')
-        self.setToolTip('Connect to Google')
-        self.setIcon(ui.get_icon('btn_authenticate'))
-        self.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
-
-        menu = QtWidgets.QMenu(self)
-        self.setMenu(menu)
-
-        action = QtGui.QAction(parent=menu)
-        action.setText('Authenticate')
-        action.setToolTip('Authenticate with Google')
-        action.setStatusTip('Authenticate with Google')
-        action.setIcon(ui.get_icon('btn_authenticate'))
-        action.triggered.connect(self.emit_authenticate_requested)
-        menu.addAction(action)
-
-        action = QtGui.QAction(parent=menu)
-        action.setText('Unauthenticate')
-        action.setToolTip('Unauthenticate from Google')
-        action.setStatusTip('Unauthenticate from Google')
-        action.setIcon(ui.get_icon('btn_deauthenticate'))
-        action.triggered.connect(signals.deauthenticateRequested)
-        menu.addAction(action)
-
-    @QtCore.Slot()
-    def emit_authenticate_requested(self):
-        modifiers = QtWidgets.QApplication.keyboardModifiers()
-        force = bool(modifiers & (QtCore.Qt.ShiftModifier |
-                                  QtCore.Qt.AltModifier |
-                                  QtCore.Qt.ControlModifier))
-        signals.authenticateRequested.emit(force)
-
-
-class DataGroupAction(QtWidgets.QToolButton):
-    """
-    Grouped data action.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.setText('Reload')
-        self.setToolTip('Reload data from Google')
-        self.setIcon(ui.get_icon('btn_reload'))
-        self.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
-
-        menu = QtWidgets.QMenu(self)
-        self.setMenu(menu)
-
-        action = QtGui.QAction(parent=menu)
-        action.setText('Reload Data')
-        action.setToolTip('Reload data from Google')
-        action.setStatusTip('Reload data from Google')
-        action.setIcon(ui.get_icon('btn_reload'))
-        action.triggered.connect(self.emit_data_fetch_requested)
-        menu.addAction(action)
-
-        action = QtGui.QAction(parent=menu)
-        action.setText('Clear Data')
-        action.setToolTip('Clear local data')
-        action.setStatusTip('Clear local data')
-        action.setIcon(ui.get_icon('btn_clear'))
-        action.triggered.connect(signals.clearDataRequested)
-        menu.addAction(action)
-
-    @QtCore.Slot()
-    def emit_data_fetch_requested(self):
-        modifiers = QtWidgets.QApplication.keyboardModifiers()
-        force = bool(modifiers & (QtCore.Qt.ShiftModifier |
-                                  QtCore.Qt.AltModifier |
-                                  QtCore.Qt.ControlModifier))
-        signals.dataFetchRequested.emit(force)

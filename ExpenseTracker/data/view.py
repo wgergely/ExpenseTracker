@@ -99,17 +99,23 @@ class ExpenseView(QtWidgets.QTableView):
         super().__init__(parent)
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
+
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
+
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setShowGrid(False)
         self.setAlternatingRowColors(False)
         self.setWordWrap(True)
         self.setTextElideMode(QtCore.Qt.ElideRight)
+
+        self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
+
         ui.set_stylesheet(self)
+
         self._init_delegates()
         self._connect_signals()
 

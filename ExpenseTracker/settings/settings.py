@@ -1,7 +1,5 @@
-"""
-Main settings GUI. Merges client_secret.json editing with ledger info configuration.
+"""The main settings widget for the app.
 
-.. seealso:: :mod:`settings.model`, :mod:`settings.editor`
 """
 
 from PySide6 import QtWidgets, QtCore
@@ -13,6 +11,22 @@ from .editors import header_editor
 from .editors import spreadsheet_editor
 from ..ui import ui
 
+settings_widget = None
+
+
+def show_settings_widget(parent=None):
+    """
+    Show the settings widget.
+
+    Args:
+        parent (QWidget, optional): Parent widget.
+    """
+    global settings_widget
+    if settings_widget is None:
+        settings_widget = SettingsWidget(parent=parent)
+    settings_widget.open()
+    return settings_widget
+
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
     """
@@ -23,18 +37,19 @@ class SettingsScrollArea(QtWidgets.QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWidgetResizable(True)
+
         # Only vertical scroll. Hide the horizontal scroll.
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
 
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        # Force container to match our viewport width after each resize
-        if self.widget():
-            self.widget().setFixedWidth(self.viewport().width())
+    #
+    # def resizeEvent(self, event):
+    #     super().resizeEvent(event)
+    #     # Force container to match our viewport width after each resize
+    #     if self.widget():
+    #         self.widget().setFixedWidth(self.viewport().width())
 
 
 class SettingsWidget(QtWidgets.QDialog):

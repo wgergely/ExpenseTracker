@@ -207,7 +207,7 @@ class RangeSelectorBar(QtWidgets.QToolBar):
 
         ui.set_stylesheet(self)
 
-        self._add_actions()
+        self._init_actions()
         self._init_min_max_dates()
         self._connect_signals()
 
@@ -215,7 +215,7 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         self.start_selector.yearMonthChanged.connect(self._start_changed)
         self.end_selector.yearMonthChanged.connect(self._end_changed)
 
-    def _add_actions(self):
+    def _init_actions(self):
         button = QtWidgets.QToolButton(self)
         icon = ui.get_icon('btn_date')
         button.setIcon(icon)

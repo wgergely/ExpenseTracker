@@ -5,13 +5,10 @@ Provides functions to load ledger configuration, authenticate with Google Sheets
 and retrieve the specified worksheet as a pandas DataFrame.
 """
 
-import json
 import logging
-import os
 import socket
 import ssl
 import time
-from typing import Dict, Optional
 
 import pandas as pd
 from googleapiclient.discovery import build
@@ -20,7 +17,6 @@ from googleapiclient.errors import HttpError
 from . import auth
 
 logging.basicConfig(level=logging.INFO)
-
 
 
 def create_sheets_service(force: bool = False):

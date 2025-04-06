@@ -311,8 +311,10 @@ def set_stylesheet(widget: QtWidgets.QWidget) -> None:
     widget.setStyleSheet(qss)
 
 
-@functools.lru_cache(maxsize=9999)
-def get_icon(category: str) -> QtGui.QIcon:
+icon_cache = {}
+
+
+def get_icon(category: str, color: QtGui.QColor = None) -> QtGui.QIcon:
     """Get the icon for the given category.
 
     Args:
@@ -322,12 +324,26 @@ def get_icon(category: str) -> QtGui.QIcon:
         QtGui.QIcon: The icon for the category.
 
     """
+    k = f'{category}:{color}'
+    if k in icon_cache:
+        return icon_cache[k]
+
     icon_path = CATEGORY_ICON_PATH / f'{category}.png'
     if not icon_path.is_file():
         logging.warning(f'Icon not found for category: {category}. Using default icon.')
-        return QtGui.QIcon()
-    
+        v = QtGui.QIcon()
+        icon_cache[k] = v
+        return v
+
     pixmap = QtGui.QPixmap(str(icon_path))
+
+    if color:
+        painter = QtGui.QPainter(pixmap)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), color)
+        painter.end()
+
     icon = QtGui.QIcon(pixmap)
-        
+    icon_cache[k] = icon
+
     return icon

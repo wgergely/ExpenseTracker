@@ -13,8 +13,7 @@ or the flow does not complete within 60 seconds, the process is aborted.
 
 import json
 import logging
-import os
-from typing import Optional, List
+from typing import Optional
 
 import google.auth.exceptions
 import google.auth.transport.requests
@@ -27,6 +26,19 @@ from ..settings import lib
 logging.basicConfig(level=logging.INFO)
 
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+
+def check_creds() -> bool:
+    """Check if the credentials file exists and is valid.
+
+    Returns:
+        bool: True if the credentials file exists and is valid, False otherwise.
+    """
+    try:
+        creds = get_creds()
+        return creds and creds.valid
+    except (FileNotFoundError, ValueError):
+        return False
 
 
 def get_creds() -> Optional[google.oauth2.credentials.Credentials]:
