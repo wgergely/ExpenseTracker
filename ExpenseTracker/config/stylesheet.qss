@@ -359,7 +359,6 @@ QTableView::item:disabled {
 }
 QTableView::item:hover {
     color: <SelectedText>;
-    background: <LightBackground>;
 }
 
 

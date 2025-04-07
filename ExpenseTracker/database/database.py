@@ -93,7 +93,7 @@ def cache_remote_data(force: bool = False) -> None:
 
     logging.info('Fetching remote data...')
     try:
-        data = service.fetch_data(force=force)
+        data = service.fetch_data()
     except (RuntimeError, HttpError) as ex:
         invalidate_cache(reason=f'Remote data pull failed: {ex}')
         raise RuntimeError(f'Failed to fetch remote data. Reason: {ex}') from ex

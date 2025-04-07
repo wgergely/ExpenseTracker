@@ -62,6 +62,8 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         signals.dataRangeChanged.connect(self.on_range_changed)
         signals.dataFetched.connect(self.init_data)
 
+        signals.configSectionChanged.connect(self.init_data)
+
     def _load_data(self) -> None:
         # Retrieve the breakdown DataFrame for the target period using the new data API.
         breakdown = get_monthly_expenses(self.year_month, span=self.span)
@@ -269,17 +271,14 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         QtCore.QTimer.singleShot(1, self.init_data)
 
     def _connect_signals(self) -> None:
+        signals.dataAboutToBeFetched.connect(self.clear_data)
         signals.dataFetched.connect(self.init_data)
         signals.dataRangeChanged.connect(self.init_data)
 
-        signals.authenticateRequested.connect(self.clear_data)
-        signals.deauthenticateRequested.connect(self.clear_data)
-        signals.dataAboutToBeFetched.connect(self.clear_data)
-
+        signals.configSectionChanged.connect(self.init_data)
         signals.categorySelectionChanged.connect(self.init_data)
 
     def _load_data(self) -> None:
-        # Get index from the main widget'
         from .. import ui
         index = ui.index()
 

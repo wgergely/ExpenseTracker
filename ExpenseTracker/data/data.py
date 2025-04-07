@@ -23,7 +23,7 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
     """
     Prepares a DataFrame for expense analytics by:
       - Renaming columns based on the ledger.json "data_header_mapping" configuration.
-      - Parsing the date column as datetime.
+      - Parsing the date column as datetime and removing UTC timezone information.
       - Filtering out rows older than 'years_back' years.
       - Excluding rows with categories marked as excluded in the config.
       - Converting the amount column to numeric and dropping invalid rows.
@@ -65,18 +65,20 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
             return pd.DataFrame()
 
     try:
-        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+        # Parse dates as UTC-aware then remove timezone to yield naive datetimes
+        df['date'] = pd.to_datetime(df['date'], errors='coerce', utc=True).dt.tz_localize(None)
     except Exception as ex:
         logging.error(f'Error parsing dates: {ex}')
         return pd.DataFrame()
     df = df.dropna(subset=['date'])
 
-    today = datetime.datetime.now(datetime.timezone.utc)
+    # Use a naive datetime for cutoff_date by removing timezone info
+    today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     try:
         cutoff_date = today.replace(year=today.year - years_back)
     except ValueError:
         cutoff_date = today - datetime.timedelta(days=years_back * 365)
-    df = df[df['date'] >= pd.to_datetime(cutoff_date)]
+    df = df[df['date'] >= cutoff_date]
 
     categories_config = lib.settings.get_section('categories')
     if not categories_config:
@@ -98,6 +100,7 @@ def _prepare_expenses_dataframe(df: pd.DataFrame, years_back: int = 5) -> pd.Dat
         f'excluding categories: {sorted(excluded_categories)}.'
     )
     return df
+
 
 
 def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: int = 1) -> pd.DataFrame:

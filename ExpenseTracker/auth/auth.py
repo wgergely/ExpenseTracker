@@ -28,16 +28,18 @@ logging.basicConfig(level=logging.INFO)
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 
-def check_creds() -> bool:
-    """Check if the credentials file exists and is valid.
+def verify_creds() -> bool:
+    """Check if the credential file exists and is valid.
 
     Returns:
-        bool: True if the credentials file exists and is valid, False otherwise.
+        bool: True if the credential file exists and is valid, False otherwise.
+
     """
     try:
         creds = get_creds()
         return creds and creds.valid
-    except (FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError) as ex:
+        logging.error(f'Error verifying credentials: {ex}')
         return False
 
 
@@ -60,9 +62,13 @@ def get_creds() -> Optional[google.oauth2.credentials.Credentials]:
 
 
 def save_creds(creds: google.oauth2.credentials.Credentials) -> None:
-    """Save the given credentials to the specified token path."""
+    """Save the given credentials to the specified token path.
+
+    """
     with open(lib.settings.paths.creds_path, 'w', encoding='utf-8') as token_file:
-        token_file.write(creds.to_json())
+        data = creds.to_json()
+        token_file.write(data)
+
     logging.info(f'Credentials saved to {lib.settings.paths.creds_path}.')
 
 
@@ -94,19 +100,15 @@ class AuthFlowWorker(QtCore.QThread):
 
 
 class AuthProgressDialog(QtWidgets.QDialog):
-    """
-    A dialog that shows authentication progress. It includes instructions,
-    a live countdown of the remaining time (which will be replaced with a timeout
-    message upon expiry), and a Cancel button.
+    """Authentication progress dialog.
+
     """
     cancelled = QtCore.Signal()
 
     def __init__(self, timeout_seconds: int = 60, parent=None):
         from .. import ui
-        print("Parent:", ui.parent())
-
         super().__init__(parent=ui.parent())
-        self.setWindowTitle("Authenticating with Google")
+        self.setWindowTitle('Authenticating with Google')
         self.setModal(True)
         self.resize(400, 180)
         self.timeout_seconds = timeout_seconds
@@ -115,19 +117,19 @@ class AuthProgressDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
 
         instructions = QtWidgets.QLabel(
-            "A browser window should have opened for Google sign-in.\n"
-            "Please complete sign-in in your browser.\n"
-            "Waiting for you to sign in..."
+            'A browser window should have opened for Google sign-in.\n'
+            'Please complete sign-in in your browser.\n'
+            'Waiting for you to sign in...'
         )
         layout.addWidget(instructions)
 
-        self.countdownLabel = QtWidgets.QLabel(f"Time remaining: {self.remaining} seconds")
+        self.countdownLabel = QtWidgets.QLabel(f'Time remaining: {self.remaining} seconds')
         layout.addWidget(self.countdownLabel)
 
-        self.statusLabel = QtWidgets.QLabel("")
+        self.statusLabel = QtWidgets.QLabel('')
         layout.addWidget(self.statusLabel)
 
-        cancelButton = QtWidgets.QPushButton("Cancel")
+        cancelButton = QtWidgets.QPushButton('Cancel')
         cancelButton.clicked.connect(self.on_cancel)
         layout.addWidget(cancelButton)
 
@@ -138,7 +140,7 @@ class AuthProgressDialog(QtWidgets.QDialog):
 
     def update_countdown(self):
         self.remaining -= 1
-        self.countdownLabel.setText(f"Time remaining: {self.remaining} seconds")
+        self.countdownLabel.setText(f'Time remaining: {self.remaining} seconds')
         if self.remaining <= 0:
             self.countdownTimer.stop()
 
@@ -147,7 +149,7 @@ class AuthProgressDialog(QtWidgets.QDialog):
         self.reject()
 
     def show_timeout_message(self):
-        self.countdownLabel.setText("Authentication timed out. Please try again.")
+        self.countdownLabel.setText('Authentication timed out. Please try again.')
         self.countdownTimer.stop()
 
 
@@ -185,11 +187,11 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
         logging.info('Cached credentials expired; attempting refresh.')
         try:
             creds.refresh(google.auth.transport.requests.Request())
-            logging.info("Successfully refreshed credentials.")
+            logging.info('Successfully refreshed credentials.')
             save_creds(creds)
             return creds
         except google.auth.exceptions.RefreshError as ex:
-            logging.warning(f"Refresh failed: {ex}")
+            logging.warning(f'Refresh failed: {ex}')
             creds = None
 
     logging.info('Starting new OAuth flow...')
@@ -209,7 +211,7 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
     # OPen progress dialog
     dialog = AuthProgressDialog(timeout_seconds=60)
     auth_worker = AuthFlowWorker(flow)
-    result = {"creds": None, "error": None}
+    result = {'creds': None, 'error': None}
     loop = QtCore.QEventLoop()
 
     auth_worker.resultReady.connect(lambda c: (result.update({'creds': c}), loop.quit()))
@@ -235,8 +237,8 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
     dialog.close()
 
     if result['error']:
-        raise RuntimeError('OAuth flow failed: ' + result['error'])
-    if not result["creds"]:
+        raise RuntimeError(f'OAuth flow failed: {result["error"]}')
+    if not result['creds']:
         raise RuntimeError('Authentication was cancelled or timed out.')
 
     creds = result['creds']

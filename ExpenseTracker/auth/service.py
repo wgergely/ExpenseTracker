@@ -11,7 +11,7 @@ import ssl
 import time
 
 import pandas as pd
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build, Resource
 from googleapiclient.errors import HttpError
 
 from . import auth
@@ -20,17 +20,14 @@ from ..settings import lib
 logging.basicConfig(level=logging.INFO)
 
 
-def create_sheets_service(force: bool = False):
+def get_service() -> Resource:
     """
     Builds and returns a Google Sheets service client.
-
-    Args:
-        force: If True, forces new OAuth credentials instead of using cached credentials.
 
     Returns:
         A Sheets API service client.
     """
-    creds = auth.authenticate(force=force)
+    creds = auth.authenticate(force=not auth.verify_creds())
     return build('sheets', 'v4', credentials=creds)
 
 
@@ -54,7 +51,9 @@ def verify_sheet_access(service) -> None:
     if 'worksheet' not in spreadsheet_config:
         raise ValueError('Worksheet name not found in configuration.')
 
-    spreadsheet_id = spreadsheet_config.get['id']
+    spreadsheet_id = spreadsheet_config.get('id', '')
+    if not spreadsheet_id:
+        raise ValueError('Spreadsheet ID is empty in configuration.')
 
     try:
         service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
@@ -156,12 +155,9 @@ def _fetch_data(
     return pd.DataFrame()
 
 
-def fetch_data(force: bool = False) -> pd.DataFrame:
+def fetch_data() -> pd.DataFrame:
     """
     Retrieves ledger data as a pandas DataFrame using the configuration in ledger.json.
-
-    Args:
-        force: If True, forces new OAuth credentials.
 
     Returns:
         A pandas DataFrame containing the ledger data.
@@ -181,7 +177,7 @@ def fetch_data(force: bool = False) -> pd.DataFrame:
         return pd.DataFrame()
 
     try:
-        service = create_sheets_service(force=force)
+        service = get_service()
     except RuntimeError as ex:
         logging.error(f'Could not fetch data, failed to create Google Sheets API service: {ex}')
         return pd.DataFrame()

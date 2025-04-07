@@ -44,9 +44,11 @@ def authenticate():
         return
 
     signals.dataAboutToBeFetched.emit()
+
     database.clear_local_cache()
     auth.authenticate(force=True)
     database.cache_remote_data()
+
     signals.dataFetched.emit()
 
     QtWidgets.QMessageBox.information(
@@ -71,15 +73,19 @@ def unauthenticate():
         return
 
     signals.dataAboutToBeFetched.emit()
+
     try:
         auth.unauthenticate()
     except Exception as e:
         msg = f'Error during unauthentication: {str(e)}'
         QtWidgets.QMessageBox.critical(parent(), 'Error', msg,
                                        QtWidgets.QMessageBox.Ok)
+
+        signals.dataFetched.emit()
         return
 
     database.clear_local_cache()
+
     signals.dataFetched.emit()
 
     msg = 'Unauthentication successful.'

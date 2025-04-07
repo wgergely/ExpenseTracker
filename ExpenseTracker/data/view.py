@@ -11,8 +11,8 @@ class TransactionsDialog(QtWidgets.QDockWidget):
     It initializes the view and sets up the layout for displaying transactions.
     """
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__("Transactions", parent)
-        self.setObjectName("ExpenseTrackerTransactionsDialog")
+        super().__init__('Transactions', parent=parent)
+        self.setObjectName('ExpenseTrackerTransactionsDialog')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
             QtWidgets.QDockWidget.DockWidgetFloatable
@@ -28,13 +28,16 @@ class TransactionsDialog(QtWidgets.QDockWidget):
 
     def _create_ui(self) -> None:
         content = QtWidgets.QWidget(self)
-        layout = QtWidgets.QVBoxLayout(content)
-        margin = ui.Size.Margin(1.0)
-        layout.setContentsMargins(margin, margin, margin, margin)
-        layout.setSpacing(margin)
+        QtWidgets.QVBoxLayout(content)
+
+        o = ui.Size.Margin(1.0)
+        content.layout().setContentsMargins(o, o, o, o)
+        content.layout().setSpacing(o)
+
         self.view = TransactionsView(content)
-        self.view.setObjectName("ExpenseTrackerTransactionsView")
-        layout.addWidget(self.view, 1)
+        self.view.setObjectName('ExpenseTrackerTransactionsView')
+        content.layout().addWidget(self.view, 1)
+
         self.setWidget(content)
 
     def _init_model(self) -> None:
@@ -53,7 +56,9 @@ class TransactionsDialog(QtWidgets.QDockWidget):
         )
 
 class GraphDelegate(QtWidgets.QStyledItemDelegate):
-    """A custom delegate to draw a simple bar chart for the chart column."""
+    """A custom delegate to draw a simple bar chart for the chart column.
+
+    """
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
         super().paint(painter, option, index)
@@ -127,7 +132,7 @@ class ExpenseView(QtWidgets.QTableView):
 
     def setModel(self, model):
         if not isinstance(model, ExpenseModel) and not isinstance(model, QtCore.QSortFilterProxyModel):
-            raise TypeError("Expected an ExpenseModel or its QSortFilterProxyModel wrapper.")
+            raise TypeError('Expected an ExpenseModel or its QSortFilterProxyModel wrapper.')
         super().setModel(model)
         self._init_section_sizing()
         if isinstance(model, ExpenseModel):
@@ -162,10 +167,10 @@ class ExpenseView(QtWidgets.QTableView):
             return
 
         main = self.window()
-        if main is None or not hasattr(main, "addDockWidget"):
+        if main is None or not hasattr(main, 'addDockWidget'):
             return
 
-        if not hasattr(main, "transactions_view") or main.transactions_view is None:
+        if not hasattr(main, 'transactions_view') or main.transactions_view is None:
             main.transactions_view = TransactionsDialog(parent=main)
             main.addDockWidget(QtCore.Qt.RightDockWidgetArea, main.transactions_view)
         elif main.transactions_view.isVisible():
@@ -213,8 +218,10 @@ class TransactionsView(QtWidgets.QTableView):
         self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
 
     def sizeHint(self) -> QtCore.QSize:
-        """Returns the preferred size for the view."""
-        return QtCore.QSize(800, 400)
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(1.0)
+        )
 
     def _init_header(self) -> None:
         header = self.horizontalHeader()
