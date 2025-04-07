@@ -76,30 +76,33 @@ def unauthenticate():
 
     try:
         auth.unauthenticate()
+        msg = 'Unauthentication successful.'
+        QtWidgets.QMessageBox.information(parent(), 'Unauthentication', msg,
+                                          QtWidgets.QMessageBox.Ok)
     except Exception as e:
         msg = f'Error during unauthentication: {str(e)}'
         QtWidgets.QMessageBox.critical(parent(), 'Error', msg,
                                        QtWidgets.QMessageBox.Ok)
-
+    finally:
+        database.clear_local_cache()
         signals.dataFetched.emit()
-        return
-
-    database.clear_local_cache()
-
-    signals.dataFetched.emit()
-
-    msg = 'Unauthentication successful.'
-    QtWidgets.QMessageBox.information(parent(), 'Unauthentication', msg,
-                                      QtWidgets.QMessageBox.Ok)
 
 
 @QtCore.Slot()
 def fetch_data():
     from ..database import database
+    from .. import ui
 
     signals.dataAboutToBeFetched.emit()
-    database.cache_remote_data()
-    signals.dataFetched.emit()
+    try:
+        database.cache_remote_data()
+    except Exception as e:
+        msg = f'Error fetching data: {str(e)}'
+        QtWidgets.QMessageBox.critical(ui.parent(), 'Error', msg,
+                                       QtWidgets.QMessageBox.Ok)
+        raise RuntimeError('Error fetching data') from e
+    finally:
+        signals.dataFetched.emit()
 
 
 @QtCore.Slot()
@@ -115,9 +118,14 @@ def clear_data():
         return
 
     signals.dataAboutToBeFetched.emit()
-    database.clear_local_cache()
-    signals.dataFetched.emit()
-
-    msg = 'Local data cleared successfully.'
-    QtWidgets.QMessageBox.information(parent(), 'Clear Data', msg,
-                                      QtWidgets.QMessageBox.Ok)
+    try:
+        database.clear_local_cache()
+        msg = 'Local data cleared successfully.'
+        QtWidgets.QMessageBox.information(parent(), 'Clear Data', msg,
+                                          QtWidgets.QMessageBox.Ok)
+    except Exception as e:
+        msg = f'Error clearing local data: {str(e)}'
+        QtWidgets.QMessageBox.critical(parent(), 'Error', msg,
+                                       QtWidgets.QMessageBox.Ok)
+    finally:
+        signals.dataFetched.emit()

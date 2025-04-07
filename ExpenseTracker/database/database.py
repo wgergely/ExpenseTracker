@@ -27,35 +27,42 @@ TABLE_TRANSACTIONS = 'transactions'
 TABLE_META = 'cache_meta'
 CACHE_MAX_AGE_DAYS = 7
 
+DATE_LOCALES = {
+    'en_GB': '%d/%m/%Y',
+    'de_DE': '%d.%m.%Y',
+    'en_US': '%m/%d/%Y',
+    'hu_HU': '%Y.%m.%d',
+    'jp_JP': '%Y/%m/%d',
+}
 
-def verify_db() -> bool:
+DATABASE_DATE_FORMAT = '%Y-%m-%d'
+
+
+def verify_db() -> None:
     """Checks whether the local cache database is present and valid."""
     if not lib.settings.paths.db_path.exists():
-        logging.info('No local cache DB path found.')
-        return False
+        logging.error('No local cache DB path found.')
+        raise RuntimeError('No local cache DB path found.')
 
     try:
         with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
             if not table_exists(conn, TABLE_TRANSACTIONS):
-                logging.info('The "transactions" table is missing.')
-                return False
+                logging.error('The "transactions" table is missing.')
+                raise RuntimeError('The "transactions" table is missing.')
 
             state = get_cache_state(conn)
             if not state['is_valid']:
-                logging.info('Cache is marked invalid.')
-                return False
+                logging.warning('Cache is marked invalid.')
 
             if is_stale(state['last_sync']):
-                logging.info('Cache is older than the allowed threshold and will be invalidated.')
+                logging.warning('Cache is older than the allowed threshold and will be invalidated.')
                 invalidate_cache(reason='Cache is older than 7 days')
-                return False
 
-            logging.info('The cache is valid.')
-            return True
+        logging.info('The cache is valid.')
 
     except sqlite3.Error as ex:
-        logging.warning(f'Error while verifying the local DB: {ex}')
-        return False
+        logging.error(f'Error while verifying the local DB: {ex}')
+        raise RuntimeError(f'Error while verifying the local DB: {ex}') from ex
 
 
 def create_db() -> None:
@@ -127,8 +134,10 @@ def get_cached_data(force: bool = False) -> pd.DataFrame:
         A DataFrame with all columns from the transaction table, or an empty DataFrame if the
         database is invalid or an error occurs during loading.
     """
-    if not verify_db():
-        logging.warning('Local cache DB is invalid or missing. Returning an empty DataFrame.')
+    try:
+        verify_db()
+    except RuntimeError as ex:
+        logging.error(f'Local cache DB is invalid: {ex}')
         return pd.DataFrame()
 
     if force:
@@ -287,7 +296,7 @@ def recreate_transactions_table(
 
     for header in headers:
         col_name_raw = _sanitize_column_name(header)
-        col_type = _infer_sqlite_type(header, header_data)
+        col_type = get_sqlite_type(header, header_data)
         col_name_escaped = col_name_raw.replace('"', '""')
         defs_list.append(f'"{col_name_escaped}" {col_type}')
     create_sql = f'CREATE TABLE "{TABLE_TRANSACTIONS}" (\n  {",".join(defs_list)}\n)'
@@ -331,11 +340,11 @@ def _sanitize_column_name(header: str) -> str:
     return header
 
 
-def _infer_sqlite_type(raw_header: str, header_data: Dict[str, str]) -> str:
+def get_sqlite_type(header: str, header_data: Dict[str, str]) -> str:
     """
-    Determines the appropriate SQLite type for 'raw_header' using the ledger.json type map.
+    Determines the appropriate SQLite type for 'header' using the ledger.json type map.
     """
-    declared_type = get_declared_type(raw_header, header_data)
+    declared_type = header_data.get(header, 'string')
     if declared_type == 'int':
         return 'INTEGER'
     elif declared_type == 'float':
@@ -347,70 +356,93 @@ def _infer_sqlite_type(raw_header: str, header_data: Dict[str, str]) -> str:
     return 'TEXT'
 
 
-def convert_value(raw_header: str, value: Any, header_data: Dict[str, str]) -> Any:
+def convert_value(header: str, value: Any, header_data: Dict[str, str]) -> Any:
     """
     Converts 'value' to an appropriate Python type based on the ledger.json config.
     """
     if value is None:
         return None
 
-    text_val = str(value).strip()
-    declared_type = get_declared_type(raw_header, header_data)
+    try:
+        text_val = str(value)
+    except:
+        logging.warning(f'Failed to convert value "{value}" to string for column "{header}". Storing None')
+        return None
+
+    declared_type = header_data.get(header, 'string')
+
     if declared_type == 'int':
+        if isinstance(value, (bool, int)):
+            return value
+
         if text_val == '':
             return 0
+
         try:
             return int(text_val)
         except ValueError:
-            logging.warning(f'Failed to parse "{text_val}" as integer for column "{raw_header}". Storing None.')
-            return None
-    if declared_type == 'float':
+            logging.warning(f'Failed to parse "{text_val}" as integer for column "{header}". Storing 0.')
+            return 0
+
+    elif declared_type == 'float':
+        if isinstance(value, float):
+            return value
+
         if text_val == '':
             return 0.0
-        text_val = text_val.replace(',', '').replace('£', '').replace('$', '').replace('€', '')
+
         try:
             return float(text_val)
         except ValueError:
-            logging.warning(f'Failed to parse "{text_val}" as float for column "{raw_header}". Storing None.')
-            return None
+            logging.warning(f'Failed to parse "{text_val}" as float for column "{header}". Storing 0.0.')
+            return 0.0
+
     if declared_type == 'date':
-        if text_val == '':
-            return ''
-        try:
-            serial_float = float(text_val)
-            return google_serial_date_to_iso(serial_float)
-        except ValueError:
-            pass
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+        if isinstance(value, (int, float)):
             try:
-                dt = datetime.datetime.strptime(text_val, fmt)
-                return dt.strftime('%Y-%m-%d')
+                return google_serial_date_to_iso(float(value))
             except ValueError:
-                continue
-        logging.warning(f'Unable to parse "{text_val}" as a date for column "{raw_header}". Storing raw.')
-        return text_val
-    return text_val
+                logging.warning(f'Failed to parse "{value}" as date for column "{header}". Storing None.')
+                return None
+        elif isinstance(value, str):
+            try:
+                return google_serial_date_to_iso(float(text_val))
+            except:
+                pass
+
+            # Try to parse the date string by guessing the locale of the date format
+            for locale, fmt in DATE_LOCALES.items():
+                try:
+                    dt = datetime.datetime.strptime(text_val, fmt)
+                    return dt.strftime('%Y-%m-%d')
+                except ValueError:
+                    continue
+
+            logging.warning(f'Unable to parse "{text_val}" as a date for column "{header}". Storing None')
+    elif declared_type == 'string':
+        if isinstance(value, str):
+            return value
+
+        try:
+            return text_val
+        except ValueError:
+            logging.warning(f'Failed to convert "{value}" to string for column "{header}". Storing None')
+
+    return None
+
+    return None
 
 
 def google_serial_date_to_iso(serial: float) -> str:
-    """
-    Converts a Google Sheets date serial to an ISO 'YYYY-MM-DD' string.
+    """Converts a Google Sheets date serial to an ISO 'YYYY-MM-DD' string.
+
     """
     base_date = datetime.datetime(1899, 12, 30)
     day_offset = int(serial)
+
     if day_offset < -10000:
         logging.warning(f'Serial date "{serial}" is suspiciously negative. Storing blank.')
         return ''
+
     converted_date = base_date + datetime.timedelta(days=day_offset)
-    return converted_date.strftime('%Y-%m-%d')
-
-
-def get_declared_type(raw_header: str, header_data: Dict[str, str]) -> str:
-    """
-    Returns the declared type from the ledger.json config for the specified header.
-    Defaults to 'string' if nothing is declared.
-    """
-    lower_header = raw_header.lower().strip()
-    if lower_header in header_data:
-        return header_data[lower_header]
-    return 'string'
+    return converted_date.strftime(DATABASE_DATE_FORMAT)

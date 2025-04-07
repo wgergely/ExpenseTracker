@@ -24,47 +24,6 @@ def show_main_window():
     return main_window
 
 
-class Status(enum.Enum):
-    UnknownStatus = enum.auto()
-    ClientSecretNotFound = enum.auto()
-    ClientSecretInvalid = enum.auto()
-    SpreadsheetIdNotConfigured = enum.auto()
-    SpreadsheetWorksheetNotConfigured = enum.auto()
-    NotAuthenticated = enum.auto()
-    ServiceUnavailable = enum.auto()
-    CacheInvalid = enum.auto()
-    StatusOkay = enum.auto()
-
-
-@QtCore.Slot()
-def check_status() -> Status:
-    if not lib.settings.paths.client_secret_path.exists():
-        return Status.ClientSecretNotFound
-
-    try:
-        client_secret = lib.settings.get_section('client_secret')
-        lib.settings.validate_client_secret(client_secret)
-    except:
-        return Status.ClientSecretInvalid
-
-    if not auth.verify_creds():
-        return Status.NotAuthenticated
-
-    config = lib.settings.get_section('spreadsheet')
-    if not config.get('id'):
-        return Status.SpreadsheetIdNotConfigured
-    if not config.get('worksheet'):
-        return Status.SpreadsheetWorksheetNotConfigured
-
-    try:
-        service.get_service()
-    except:
-        return Status.ServiceUnavailable
-
-    if not database.verify_db():
-        return Status.CacheInvalid
-
-    return Status.StatusOkay
 
 
 class StatusIndicator(QtWidgets.QWidget):
@@ -83,7 +42,7 @@ class StatusIndicator(QtWidgets.QWidget):
             ui.Size.RowHeight(1.0)
         )
 
-        self._status = Status.UnknownStatus
+        self._status = lib.Status.UnknownStatus
         self._watcher = QtCore.QFileSystemWatcher(self)
 
         self._connect_signals()
@@ -130,7 +89,7 @@ class StatusIndicator(QtWidgets.QWidget):
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         pressed = option.state & QtWidgets.QStyle.State_Sunken
 
-        if self._status == Status.StatusOkay:
+        if self._status == lib.Status.StatusOkay:
             color = ui.Color.Green()
             icon = ui.get_icon('btn_ok', color=color)
         else:
@@ -176,7 +135,7 @@ class StatusIndicator(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def update_status(self):
-        self._status = check_status()
+        self._status = lib.settings.get_status()
 
     @QtCore.Slot()
     def action(self):
@@ -185,40 +144,40 @@ class StatusIndicator(QtWidgets.QWidget):
         # Update the status before taking action
         self.update_status()
 
-        if self._status == Status.ClientSecretNotFound:
+        if self._status == lib.Status.ClientSecretNotFound:
             msg = 'Google authentication information is missing, check the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             settings.show_settings_widget(parent=self)
             return
 
-        if self._status == Status.ClientSecretInvalid:
+        if self._status == lib.Status.ClientSecretInvalid:
             settings.show_settings_widget(parent=self.window())
             msg = 'Google Client Secret was not found or is invalid, check the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             return
 
-        if self._status == Status.SpreadsheetIdNotConfigured:
+        if self._status == lib.Status.SpreadsheetIdNotConfigured:
             settings.show_settings_widget(parent=self.window())
             msg = 'Make sure a valid spreadsheet ID is configured in the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             return
 
-        if self._status == Status.SpreadsheetWorksheetNotConfigured:
+        if self._status == lib.Status.SpreadsheetWorksheetNotConfigured:
             settings.show_settings_widget(parent=self.window())
             msg = 'Make sure a valid worksheet name is configured in the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             return
 
-        if self._status == Status.ServiceUnavailable:
+        if self._status == lib.Status.ServiceUnavailable:
             msg = 'The Google Sheets service is unavailable, please check your connection.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             return
 
-        if self._status == Status.NotAuthenticated:
-            actions.authenticate(foprce=True)
+        if self._status == lib.Status.NotAuthenticated:
+            actions.authenticate()
             return
 
-        if self._status == Status.CacheInvalid:
+        if self._status == lib.Status.CacheInvalid:
             msg = 'The remote data needs to be fetched again, please wait...'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
             actions.fetch_data()
@@ -303,6 +262,19 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
         action.setStatusTip('Open Settings')
         action.triggered.connect(open_settings)
+        self.addAction(action)
+        self.toolbar.addAction(action)
+
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        action = QtGui.QAction('Refresh Data', self)
+        action.setIcon(ui.get_icon('btn_sync'))
+        action.setShortcut('Ctrl+R')
+        action.setStatusTip('Refresh Data')
+        action.triggered.connect(actions.fetch_data)
         self.addAction(action)
         self.toolbar.addAction(action)
 

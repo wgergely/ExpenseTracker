@@ -17,7 +17,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         super().__init__(parent=parent)
 
         self.id_editor = None
-        self.sheet_editor = None
+        self.worksheet_editor = None
         self.description_editor = None
 
         self.text_changed_timer = QtCore.QTimer(self)
@@ -48,9 +48,9 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         self.id_editor.setPlaceholderText('e.g. "1a2b3c4d5e6f7g8h9i0j"')
         self.layout().addRow('Spreadsheet Id', self.id_editor)
 
-        self.sheet_editor = QtWidgets.QLineEdit(self)
-        self.sheet_editor.setPlaceholderText('e.g. "Sheet1"')
-        self.layout().addRow('Worksheet', self.sheet_editor)
+        self.worksheet_editor = QtWidgets.QLineEdit(self)
+        self.worksheet_editor.setPlaceholderText('e.g. "Sheet1"')
+        self.layout().addRow('Worksheet', self.worksheet_editor)
 
         self.description_editor = QtWidgets.QLineEdit(self)
         self.description_editor.setPlaceholderText('e.g. private expenses')
@@ -101,7 +101,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         signals.configSectionChanged.connect(on_section_changed)
 
         self.id_editor.textChanged.connect(self.text_changed_timer.start)
-        self.sheet_editor.textChanged.connect(self.text_changed_timer.start)
+        self.worksheet_editor.textChanged.connect(self.text_changed_timer.start)
         self.description_editor.textChanged.connect(self.text_changed_timer.start)
 
         self.text_changed_timer.timeout.connect(self.verify_id)
@@ -116,7 +116,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
     def get_current_section_data(self):
         return {
             'id': self.id_editor.text(),
-            'worksheet': self.sheet_editor.text(),
+            'worksheet': self.worksheet_editor.text(),
             'description': self.description_editor.text(),
         }
 

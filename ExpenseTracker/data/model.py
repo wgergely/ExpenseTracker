@@ -16,10 +16,9 @@ import pandas as pd
 from PySide6 import QtCore
 
 from .data import get_monthly_expenses
+from ..settings import lib
 from ..ui import ui
 from ..ui.actions import signals
-from ..settings import lib
-
 
 # Custom roles
 TransactionsRole = QtCore.Qt.UserRole + 1
@@ -177,7 +176,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 if not categories:
                     return category
 
-                if category in categories:
+                if category in categories and categories[category]['display_name']:
                     display_name = categories[category]['display_name']
                 else:
                     display_name = category
@@ -283,7 +282,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         index = ui.index()
 
         if not index.isValid():
-            logging.warning('TransactionsModel: Invalid index.')
             self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
             return
 
@@ -294,19 +292,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
             return
 
-        mapping = lib.settings.get_section('data_header_mapping')
-        if mapping:
-            rename_map = {source: dest for dest, source in mapping.items()}
-            missing_sources = [src for src in rename_map if src not in df.columns]
-            if missing_sources:
-                logging.warning(
-                    f'TransactionsModel: Missing source columns {missing_sources} in data.'
-                )
-            else:
-                df = df.rename(columns=rename_map)
-
-        # Sort by amount from largest absolute to smallest (descending by absolute value).
-        # We'll do final sort logic in the proxy; here keep as-is ascending for raw.
         df = df.sort_values(by='amount', ascending=True)
         self.data_df = df.copy()
 
@@ -405,6 +390,34 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
         elif role == QtCore.Qt.EditRole:
             return value
+
+        elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+            if col == 0:
+                if isinstance(value, pd.Timestamp):
+                    return value.strftime('%d/%m/%Y')
+                else:
+                    return f'{value}'
+            elif col == 1:
+                if isinstance(value, float):
+                    return f'€{abs(value):.2f}'
+                elif isinstance(value, int):
+                    return f'€{abs(value)}.00'
+                else:
+                    return f'{value}'
+            elif col == 2:
+                if isinstance(value, str):
+                    return f'{value}'
+            elif col == 3:
+                categories = lib.settings.get_section('categories')
+                if not categories:
+                    return f'{value}'
+
+                if value in categories:
+                    display_name = categories[value]['display_name']
+                else:
+                    display_name = f'{value}'
+                return f'{display_name} ({value})'
+
         return None
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
@@ -432,6 +445,7 @@ class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     Allows sorting by either Category (column 0) or Amount (column 2).
     For filtering, not used by default, but can be extended.
     """
+
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
         if left.column() == 2 and right.column() == 2:
             # Sort by absolute numeric value
@@ -446,6 +460,7 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     Sort/Filter proxy for TransactionsModel.
     Sorts by absolute amount for column 1. Allows text filtering on description (column 2).
     """
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setDynamicSortFilter(True)

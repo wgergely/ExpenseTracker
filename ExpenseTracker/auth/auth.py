@@ -2,13 +2,11 @@
 Google OAuth2 Authentication Module.
 
 This module provides a high-level interface for authenticating
-Google services and obtaining valid credentials. Credentials are cached
-locally in an OS-specific temporary directory to avoid repeated logins.
+Google services and getting valid credentials.
 
 This implementation uses a QThread to run the OAuth web flow asynchronously,
-and a custom QDialog to show authentication progress. The dialog displays
-a live countdown of the remaining time and a Cancel button. If the user cancels
-or the flow does not complete within 60 seconds, the process is aborted.
+and a custom QDialog to show authentication progress.
+
 """
 
 import json
@@ -28,19 +26,22 @@ logging.basicConfig(level=logging.INFO)
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 
-def verify_creds() -> bool:
+def verify_creds():
     """Check if the credential file exists and is valid.
 
-    Returns:
-        bool: True if the credential file exists and is valid, False otherwise.
+    Raises:
+        RuntimeError: If the credentials are invalid or expired.
 
     """
     try:
         creds = get_creds()
-        return creds and creds.valid
     except (FileNotFoundError, ValueError) as ex:
         logging.error(f'Error verifying credentials: {ex}')
-        return False
+        raise RuntimeError(f'Error verifying credentials: {ex}') from ex
+
+    if not creds or not creds.valid:
+        logging.error('Credentials are invalid or expired.')
+        raise RuntimeError('Credentials are invalid or expired.')
 
 
 def get_creds() -> Optional[google.oauth2.credentials.Credentials]:

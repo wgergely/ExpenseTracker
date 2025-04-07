@@ -1,3 +1,4 @@
+import enum
 import json
 import logging
 import pathlib
@@ -21,6 +22,18 @@ operations and errors. Supports creating, removing, listing, and loading
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+class Status(enum.Enum):
+    UnknownStatus = enum.auto()
+    ClientSecretNotFound = enum.auto()
+    ClientSecretInvalid = enum.auto()
+    SpreadsheetIdNotConfigured = enum.auto()
+    SpreadsheetWorksheetNotConfigured = enum.auto()
+    NotAuthenticated = enum.auto()
+    ServiceUnavailable = enum.auto()
+    CacheInvalid = enum.auto()
+    StatusOkay = enum.auto()
 
 
 def is_valid_hex_color(value):
@@ -128,6 +141,8 @@ class ConfigPaths:
 
 
 DATA_MAPPING_KEYS = ['date', 'amount', 'description', 'category', 'account']
+DATA_MAPPING_SEPARATOR_CHARS = ['|', '+']
+
 HEADER_TYPES = ['string', 'int', 'float', 'date']
 
 LEDGER_SCHEMA = {
@@ -477,7 +492,7 @@ class SettingsAPI:
             self.validate_client_secret(self.client_secret_data)
             try:
                 with self.client_secret_path.open('w', encoding='utf-8') as f:
-                    json.dump(self.client_secret_data, f, indent=2, ensure_ascii=False)
+                    json.dump(self.client_secret_data, f, indent=4, ensure_ascii=False)
 
             except Exception as e:
                 logger.error(f'Error saving client_secret: {e}')
@@ -501,7 +516,7 @@ class SettingsAPI:
         new_data[section_name] = self.ledger_data[section_name]
 
         with self.ledger_path.open('w', encoding='utf-8') as f:
-            json.dump(new_data, f, indent=2, ensure_ascii=False)
+            json.dump(new_data, f, indent=4, ensure_ascii=False)
 
     def save_all(self):
         """
@@ -512,7 +527,7 @@ class SettingsAPI:
         try:
             validate_ledger_data(self.ledger_data)
             with self.ledger_path.open('w', encoding='utf-8') as f:
-                json.dump(self.ledger_data, f, indent=2, ensure_ascii=False)
+                json.dump(self.ledger_data, f, indent=4, ensure_ascii=False)
         except (ValueError, TypeError) as e:
             logger.error(f'Failed to save ledger: {e}. Rolling back.')
             self.ledger_data = original_ledger_data
@@ -521,10 +536,50 @@ class SettingsAPI:
         self.validate_client_secret(self.client_secret_data)
         try:
             with self.client_secret_path.open('w', encoding='utf-8') as f:
-                json.dump(self.client_secret_data, f, indent=2, ensure_ascii=False)
+                json.dump(self.client_secret_data, f, indent=4, ensure_ascii=False)
         except Exception as e:
             logger.error(f'Error saving client_secret: {e}')
             raise
+
+    def get_status(self) -> Status:
+        """Get the configuration state of the application.
+
+        """
+        from ..auth import auth
+        from ..auth import service
+        from ..database import database
+
+        if not self.paths.client_secret_path.exists():
+            return Status.ClientSecretNotFound
+
+        try:
+            client_secret = self.get_section('client_secret')
+            self.validate_client_secret(client_secret)
+        except:
+            return Status.ClientSecretInvalid
+
+        try:
+            auth.verify_creds()
+        except RuntimeError:
+            return Status.NotAuthenticated
+
+        config = self.get_section('spreadsheet')
+        if not config.get('id'):
+            return Status.SpreadsheetIdNotConfigured
+        if not config.get('worksheet'):
+            return Status.SpreadsheetWorksheetNotConfigured
+
+        try:
+            service.get_service()
+        except:
+            return Status.ServiceUnavailable
+
+        try:
+            database.verify_db()
+        except RuntimeError:
+            return Status.CacheInvalid
+
+        return Status.StatusOkay
 
     def list_presets(self):
         """

@@ -5,6 +5,7 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import lib
+from ...auth import service
 from ...ui import ui
 from ...ui.actions import signals
 
@@ -441,6 +442,66 @@ class HeaderEditor(QtWidgets.QWidget):
         action.triggered.connect(remove_action)
         self.toolbar.addAction(action)
         self.addAction(action)
+
+        action = QtGui.QAction(self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        action.setVisible(True)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def sync_action():
+            try:
+                headers = service.fetch_headers()
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    'Error',
+                    f'Failed to load header definitions: {e}'
+                )
+                raise RuntimeError(f'Failed to load header definitions: {e}') from e
+
+            lib.settings.set_section('header', headers)
+
+        action = QtGui.QAction('Sync', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setShortcut('Ctrl+L')
+        action.setIcon(ui.get_icon('btn_sync'))
+        action.setStatusTip('Load header definitions from the remote Google spreadsheet')
+        action.triggered.connect(sync_action)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def verify_headers_action():
+            try:
+                service.verify_headers()
+                msg = 'Header definitions are valid.'
+                QtWidgets.QMessageBox.information(
+                    self,
+                    'Verify Headers',
+                    msg,
+                    QtWidgets.QMessageBox.Ok
+                )
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    'Error',
+                    f'Failed to verify header definitions: {e}'
+                )
+
+        action = QtGui.QAction('Verify', self)
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setShortcut('Ctrl+I')
+        action.setStatusTip('Verify header definitions')
+        action.setIcon(ui.get_icon('btn_ok'))
+        action.triggered.connect(verify_headers_action)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+
 
         action = QtGui.QAction(self)
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
