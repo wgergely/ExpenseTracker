@@ -15,6 +15,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from . import auth
+from ..settings import lib
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,17 +34,28 @@ def create_sheets_service(force: bool = False):
     return build('sheets', 'v4', credentials=creds)
 
 
-def verify_sheet_access(service, spreadsheet_id: str) -> None:
+def verify_sheet_access(service) -> None:
     """
     Verifies that the authenticated user can access the specified spreadsheet.
 
     Args:
         service: The Sheets API service client.
-        spreadsheet_id: The unique ID of the target spreadsheet.
 
     Raises:
         RuntimeError: If the spreadsheet cannot be found or access is denied.
+        ValueError: If the spreadsheet ID or worksheet name is not found in the configuration.
+
     """
+
+    spreadsheet_config = lib.settings.get_section('spreadsheet')
+    if 'id' not in spreadsheet_config:
+        raise ValueError('Spreadsheet ID not found in configuration.')
+
+    if 'worksheet' not in spreadsheet_config:
+        raise ValueError('Worksheet name not found in configuration.')
+
+    spreadsheet_id = spreadsheet_config.get['id']
+
     try:
         service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         logging.info(f'Access confirmed for spreadsheet "{spreadsheet_id}".')
@@ -64,7 +76,7 @@ def verify_sheet_access(service, spreadsheet_id: str) -> None:
             ) from ex
 
 
-def fetch_sheet(
+def _fetch_data(
         service,
         spreadsheet_id: str,
         worksheet_name: str,
@@ -121,14 +133,11 @@ def fetch_sheet(
                 f'Error details: {http_err}'
             )
             logging.error(msg)
-            raise RuntimeError(msg) from http_err
-
         except (socket.timeout, ssl.SSLError, TimeoutError) as to_err:
             logging.warning(
                 f'Timeout or SSL error on attempt {attempt} of {max_attempts} while fetching '
                 f'sheet "{worksheet_name}". Details: {to_err}'
             )
-
         except (ConnectionError, socket.gaierror, OSError) as conn_err:
             logging.warning(
                 f'Connection error on attempt {attempt} of {max_attempts} while fetching '
@@ -139,10 +148,12 @@ def fetch_sheet(
             logging.info(f'Retrying in {wait_seconds} seconds...')
             time.sleep(wait_seconds)
         else:
-            raise RuntimeError(
+            logging.warning(
                 f'All {max_attempts} attempts to fetch sheet "{worksheet_name}" have failed. '
                 'Check your network connection, spreadsheet permissions, or try again later.'
             )
+
+    return pd.DataFrame()
 
 
 def fetch_data(force: bool = False) -> pd.DataFrame:
@@ -159,9 +170,29 @@ def fetch_data(force: bool = False) -> pd.DataFrame:
 
     spreadsheet_config = lib.settings.get_section('spreadsheet')
 
-    spreadsheet_id = lib.settings.get('spreadsheet', 'id')
-    worksheet_name = config['sheet']
+    spreadsheet_id = spreadsheet_config.get('id', '')
+    if not spreadsheet_id:
+        logging.error('Could not fetch data, spreadsheet ID is empty.')
+        return pd.DataFrame()
 
-    service = create_sheets_service(force=force)
-    verify_sheet_access(service, spreadsheet_id)
-    return fetch_sheet(service, spreadsheet_id, worksheet_name)
+    worksheet_name = spreadsheet_config.get('worksheet', '')
+    if not worksheet_name:
+        logging.error('Could not fetch data, worksheet name is empty.')
+        return pd.DataFrame()
+
+    try:
+        service = create_sheets_service(force=force)
+    except RuntimeError as ex:
+        logging.error(f'Could not fetch data, failed to create Google Sheets API service: {ex}')
+        return pd.DataFrame()
+
+    try:
+        verify_sheet_access(service)
+    except RuntimeError as ex:
+        logging.error(f'Could not fetch data, failed to verify sheet access: {ex}')
+        return pd.DataFrame()
+    except ValueError as ex:
+        logging.error(f'Could not fetch data, missing configuration: {ex}')
+        return pd.DataFrame()
+
+    return _fetch_data(service, spreadsheet_id, worksheet_name)

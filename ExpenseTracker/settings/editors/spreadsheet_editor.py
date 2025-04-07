@@ -50,7 +50,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         self.sheet_editor = QtWidgets.QLineEdit(self)
         self.sheet_editor.setPlaceholderText('e.g. "Sheet1"')
-        self.layout().addRow('Sheet Name', self.sheet_editor)
+        self.layout().addRow('Worksheet', self.sheet_editor)
 
         self.description_editor = QtWidgets.QLineEdit(self)
         self.description_editor.setPlaceholderText('e.g. private expenses')
@@ -116,7 +116,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
     def get_current_section_data(self):
         return {
             'id': self.id_editor.text(),
-            'sheet': self.sheet_editor.text(),
+            'worksheet': self.sheet_editor.text(),
             'description': self.description_editor.text(),
         }
 

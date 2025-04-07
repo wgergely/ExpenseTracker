@@ -9,6 +9,8 @@ from ..data import model
 from ..data import view
 from ..database import database
 from ..settings import lib
+from ..ui import actions
+from ..ui.actions import signals
 
 main_window = None
 
@@ -75,6 +77,9 @@ class StatusIndicator(QtWidgets.QWidget):
 
     def _connect_signals(self):
         self.clicked.connect(self.action)
+        signals.configSectionChanged.connect(self.get_status)
+        signals.dataFetched.connect(self.get_status)
+
 
     def _init_watcher(self):
         self._watcher.addPath(str(lib.settings.paths.config_dir))
@@ -89,8 +94,6 @@ class StatusIndicator(QtWidgets.QWidget):
 
         self._watcher.directoryChanged.connect(self.get_status)
         self._watcher.fileChanged.connect(self.get_status)
-
-
 
     def mouseReleaseEvent(self, event):
         if not self.rect().contains(event.pos()):
@@ -166,33 +169,28 @@ class StatusIndicator(QtWidgets.QWidget):
         from ..settings import settings
 
         if self._status == Status.ClientSecretNotFound:
-            msg = 'Client secret file not found. Please set it up in the settings.'
+            msg = 'Google authentication information is missing, check the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
-
-            # Open settings dialog
             settings.show_settings_widget(parent=self)
-
             return
 
         if self._status == Status.ClientSecretInvalid:
-            msg = 'Client secret file is invalid. Please check the settings.'
+            msg = 'Google authentication information is missing, check the settings.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
-
             settings.show_settings_widget(parent=self)
-
             return
 
         if self._status == Status.NotAuthenticated:
-            msg = 'You are not authenticated. Please authenticate in the settings.'
+            msg = 'You are not authenticated, attempting to log in and fetch data...'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
+            actions.authenticate()
             return
 
         if self._status == Status.CacheIsInvalid:
-            msg = 'Cache is invalid. Please refresh the data.'
+            msg = 'Cache is invalid, refreshing data.'
             QtWidgets.QMessageBox.critical(self, 'Error', msg)
+            actions.fetch_data()
             return
-
-        # If everything is okay, do nothing.
 
 
 class MainWindow(QtWidgets.QMainWindow):

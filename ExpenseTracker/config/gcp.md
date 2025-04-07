@@ -4,7 +4,7 @@
 
 The app requires a valid
 [Google API client ID](https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid) to connect
-with your account and Google Sheet document.  Follow these steps to set up your Google Cloud project and obtain the 
+with your account and Google Sheets document. Follow these steps to set up your Google Cloud project and obtain the 
 necessary credentials:
 
 <br />

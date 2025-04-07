@@ -25,86 +25,93 @@ class Signals(QtCore.QObject):
         self.dataRangeChanged.connect(self.categorySelectionChanged)
         self.dataFetched.connect(self.categorySelectionChanged)
 
-    @staticmethod
-    @QtCore.Slot()
-    def authenticate():
-        from ..auth import auth
-        from ..ui import parent
-
-        msg = 'Are you sure you want to authenticate with Google?'
-        reply = QtWidgets.QMessageBox.question(parent(), 'Authenticate', msg,
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                               QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.No:
-            return
-
-        auth.authenticate(force=True)
-
-        QtWidgets.QMessageBox.information(
-            parent(),
-            'Authentication',
-            'Authentication successful.',
-             QtWidgets.QMessageBox.Ok
-        )
-
-    @staticmethod
-    @QtCore.Slot()
-    def unauthenticate():
-        from ..auth import auth
-        from ..database import database
-        from ..ui import parent
-
-        msg = 'Are you sure you want to disconnect from the current Google account?'
-        reply = QtWidgets.QMessageBox.question(parent(), 'Unauthenticate', msg,
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                               QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.No:
-            return
-
-        signals.dataAboutToBeFetched.emit()
-        try:
-            auth.unauthenticate()
-        except Exception as e:
-            msg = f'Error during unauthentication: {str(e)}'
-            QtWidgets.QMessageBox.critical(parent(), 'Error', msg,
-                                           QtWidgets.QMessageBox.Ok)
-            return
-
-        database.clear_local_cache()
-        signals.dataFetched.emit()
-
-        msg = 'Unauthentication successful.'
-        QtWidgets.QMessageBox.information(parent(), 'Unauthentication', msg,
-                                          QtWidgets.QMessageBox.Ok)
-
-    @staticmethod
-    @QtCore.Slot()
-    def fetch_data():
-        from ..database import database
-
-        database.cache_remote_data()
-        signals.dataFetched.emit()
-
-    @staticmethod
-    @QtCore.Slot()
-    def clear_data():
-        from ..database import database
-        from ..ui import parent
-
-        msg = 'Are you sure you want to clear all local data?'
-        reply = QtWidgets.QMessageBox.question(parent(), 'Clear Data', msg,
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                               QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.No:
-            return
-
-        signals.dataAboutToBeFetched.emit()
-        database.clear_local_cache()
-        signals.dataFetched.emit()
-        msg = 'Local data cleared successfully.'
-        QtWidgets.QMessageBox.information(parent(), 'Clear Data', msg,
-                                          QtWidgets.QMessageBox.Ok)
-
 
 # Create a singleton instance of Signals
 signals = Signals()
+
+
+@QtCore.Slot()
+def authenticate():
+    from ..auth import auth
+    from ..ui import parent
+    from ..database import database
+
+    msg = 'Are you sure you want to authenticate with Google?'
+    reply = QtWidgets.QMessageBox.question(parent(), 'Authenticate', msg,
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                           QtWidgets.QMessageBox.No)
+    if reply == QtWidgets.QMessageBox.No:
+        return
+
+    signals.dataAboutToBeFetched.emit()
+    database.clear_local_cache()
+    auth.authenticate(force=True)
+    database.cache_remote_data()
+    signals.dataFetched.emit()
+
+    QtWidgets.QMessageBox.information(
+        parent(),
+        'Authentication',
+        'Authentication successful.',
+        QtWidgets.QMessageBox.Ok
+    )
+
+
+@QtCore.Slot()
+def unauthenticate():
+    from ..auth import auth
+    from ..database import database
+    from ..ui import parent
+
+    msg = 'Are you sure you want to disconnect from the current Google account?'
+    reply = QtWidgets.QMessageBox.question(parent(), 'Unauthenticate', msg,
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                           QtWidgets.QMessageBox.No)
+    if reply == QtWidgets.QMessageBox.No:
+        return
+
+    signals.dataAboutToBeFetched.emit()
+    try:
+        auth.unauthenticate()
+    except Exception as e:
+        msg = f'Error during unauthentication: {str(e)}'
+        QtWidgets.QMessageBox.critical(parent(), 'Error', msg,
+                                       QtWidgets.QMessageBox.Ok)
+        return
+
+    database.clear_local_cache()
+    signals.dataFetched.emit()
+
+    msg = 'Unauthentication successful.'
+    QtWidgets.QMessageBox.information(parent(), 'Unauthentication', msg,
+                                      QtWidgets.QMessageBox.Ok)
+
+
+@QtCore.Slot()
+def fetch_data():
+    from ..database import database
+
+    signals.dataAboutToBeFetched.emit()
+    database.cache_remote_data()
+    signals.dataFetched.emit()
+
+
+@QtCore.Slot()
+def clear_data():
+    from ..database import database
+    from ..ui import parent
+
+    msg = 'Are you sure you want to clear all local data?'
+    reply = QtWidgets.QMessageBox.question(parent(), 'Clear Data', msg,
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                           QtWidgets.QMessageBox.No)
+    if reply == QtWidgets.QMessageBox.No:
+        return
+
+    signals.dataAboutToBeFetched.emit()
+    database.clear_local_cache()
+    signals.dataFetched.emit()
+
+    msg = 'Local data cleared successfully.'
+    QtWidgets.QMessageBox.information(parent(), 'Clear Data', msg,
+                                      QtWidgets.QMessageBox.Ok)

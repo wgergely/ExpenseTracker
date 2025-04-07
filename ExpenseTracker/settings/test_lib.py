@@ -43,8 +43,7 @@ class TestSettingsAPI(unittest.TestCase):
     def test_ledger_validation_fail_revert(self):
         original_ledger = dict(settings.ledger_data)
         invalid_ledger = {
-            'sheet': 'Sheet1'
-            # Missing 'id', 'header', 'data_header_mapping', 'categories'
+            'worksheet': 'Sheet1'
         }
         with self.assertRaises(ValueError):
             settings.set_section('ledger', invalid_ledger)
