@@ -1,19 +1,20 @@
 """Actions Module.
 
 """
+import logging
+from PySide6 import QtCore, QtWidgets, QtGui
 
-from PySide6 import QtCore, QtWidgets
+logger = logging.getLogger(__name__)
 
 
 class Signals(QtCore.QObject):
+    configFileChanged = QtCore.Signal(str)
     configSectionChanged = QtCore.Signal(str)  # Section, config
 
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal()
 
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
-
-    openSpreadsheetRequested = QtCore.Signal()
 
     categorySelectionChanged = QtCore.Signal()
 
@@ -129,3 +130,22 @@ def clear_data():
                                        QtWidgets.QMessageBox.Ok)
     finally:
         signals.dataFetched.emit()
+
+
+@QtCore.Slot()
+def open_spreadsheet(self) -> None:
+    """
+    Opens the spreadsheet in the default browser.
+    """
+    if not self.ledger_data['spreadsheet']['id']:
+        logger.error('No spreadsheet ID found.')
+        return
+
+    spreadsheet_id: str = self.ledger_data['spreadsheet']['id']
+    sheet_name: str = self.ledger_data['spreadsheet']['sheet']
+
+    url: str = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
+    if sheet_name:
+        url += f'&sheet={sheet_name}'
+    logger.info(f'Opening spreadsheet: {url}')
+    QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))

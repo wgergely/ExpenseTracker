@@ -7,6 +7,7 @@ import re
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import lib
+from ...ui import actions
 from ...ui import ui
 from ...ui.actions import signals
 
@@ -63,8 +64,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         action.setShortcut('Ctrl+Shift+O')
         action.setToolTip('Open spreadsheet in browser')
         action.setIcon(ui.get_icon('btn_ledger'))
-        action.triggered.connect(signals.openSpreadsheetRequested)
-        action.triggered.connect(lambda: print('signals.openSpreadsheetRequested'))
+        action.triggered.connect(actions.open_spreadsheet)
         self.addAction(action)
         self.id_editor.addAction(action, QtWidgets.QLineEdit.TrailingPosition)
 

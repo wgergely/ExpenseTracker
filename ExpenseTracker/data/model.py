@@ -260,7 +260,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
-        self.data_df: pd.DataFrame = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+        self.data_df: pd.DataFrame = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
 
         self._connect_signals()
 
@@ -279,14 +279,14 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         index = ui.index()
 
         if not index.isValid():
-            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
             return
 
         df = index.data(TransactionsRole)
 
         if df.empty:
             logging.warning('TransactionsModel: No data available.')
-            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
             return
 
         df = df.sort_values(by='amount', ascending=True)
@@ -299,7 +299,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self._load_data()
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
-            self.data_df = pd.DataFrame(columns=['date', 'amount', 'description', 'category'])
+            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
         finally:
             self.endResetModel()
 
@@ -386,6 +386,18 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             if index.column() == 2:
                 font, _ = ui.Font.MediumFont(ui.Size.SmallText(1.0))
                 return font
+
+        elif role == QtCore.Qt.ForegroundRole:
+            if index.column() == 1:
+                if not isinstance(value, (int, float)):
+                    return None
+                if value < 0:
+                    return ui.Color.Red()
+                if value == 0:
+                    return ui.Color.DisabledText()
+                if value > 0:
+                    return ui.Color.Green()
+
 
         elif role == QtCore.Qt.EditRole:
             return value

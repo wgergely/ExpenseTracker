@@ -5,10 +5,9 @@ import pathlib
 import re
 import shutil
 import tempfile
-import zipfile
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
-from PySide6 import QtGui, QtCore
+from PySide6 import QtCore
 
 from ..ui.actions import signals
 
@@ -23,8 +22,8 @@ operations and errors. Supports creating, removing, listing, and loading
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-organization_name = 'ExpenseTracker'
-app_name = 'ExpenseTracker'
+organization_name: str = 'ExpenseTracker'
+app_name: str = 'ExpenseTracker'
 
 
 class Status(enum.StrEnum):
@@ -39,7 +38,7 @@ class Status(enum.StrEnum):
     StatusOkay = enum.auto()
 
 
-status_user_strings = {
+status_user_strings: Dict[Status, str] = {
     Status.ClientSecretNotFound: 'Google authentication information has not been set up. Please check the settings.',
     Status.ClientSecretInvalid: 'Google Client Secret was not found or is invalid. Please check the settings.',
     Status.SpreadsheetIdNotConfigured: 'Spreadsheet ID is has not yet been set. Make sure you set a valid spreadsheet ID in the settings.',
@@ -51,7 +50,7 @@ status_user_strings = {
 }
 
 
-def is_valid_hex_color(value):
+def is_valid_hex_color(value: str) -> bool:
     """
     Checks if a string is a valid #RRGGBB color format.
     """
@@ -63,32 +62,32 @@ class ConfigPaths:
     Holds file/directory paths and ensures they exist.
     """
 
-    def __init__(self):
-        self.template_dir = pathlib.Path(__file__).parent.parent / 'config'
-        self.icon_dir = self.template_dir / 'icons'
-        self.client_secret_template = self.template_dir / 'client_secret.json.template'
-        self.ledger_template = self.template_dir / 'ledger.json.template'
-        self.gcp_help_path = self.template_dir / 'gcp.md'
+    def __init__(self) -> None:
+        self.template_dir: pathlib.Path = pathlib.Path(__file__).parent.parent / 'config'
+        self.icon_dir: pathlib.Path = self.template_dir / 'icons'
+        self.client_secret_template: pathlib.Path = self.template_dir / 'client_secret.json.template'
+        self.ledger_template: pathlib.Path = self.template_dir / 'ledger.json.template'
+        self.gcp_help_path: pathlib.Path = self.template_dir / 'gcp.md'
 
         # Config directories
-        self.config_dir = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-        self.presets_dir = self.config_dir / 'presets'
-        self.auth_dir = self.config_dir / 'auth'
-        self.db_dir = self.config_dir / 'db'
+        self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
+        self.presets_dir: pathlib.Path = self.config_dir / 'presets'
+        self.auth_dir: pathlib.Path = self.config_dir / 'auth'
+        self.db_dir: pathlib.Path = self.config_dir / 'db'
 
         # Config files
-        self.client_secret_path = self.config_dir / 'client_secret.json'
-        self.ledger_path = self.config_dir / 'ledger.json'
-        self.creds_path = self.auth_dir / 'creds.json'
-        self.db_path = self.db_dir / 'cache.db'
-        self.usersettings_path = self.config_dir / 'settings.ini'
+        self.client_secret_path: pathlib.Path = self.config_dir / 'client_secret.json'
+        self.ledger_path: pathlib.Path = self.config_dir / 'ledger.json'
+        self.creds_path: pathlib.Path = self.auth_dir / 'creds.json'
+        self.db_path: pathlib.Path = self.db_dir / 'cache.db'
+        self.usersettings_path: pathlib.Path = self.config_dir / 'settings.ini'
 
         self._verify_and_prepare()
 
-    def _verify_and_prepare(self):
+    def _verify_and_prepare(self) -> None:
         logger.info(f'Verifying required directories and templates in {self.template_dir}')
         if not self.template_dir.exists():
-            msg = f'Missing template directory: {self.template_dir}'
+            msg: str = f'Missing template directory: {self.template_dir}'
             logger.error(msg)
             raise FileNotFoundError(msg)
         if not self.icon_dir.exists():
@@ -133,37 +132,49 @@ class ConfigPaths:
             logger.info(f'Creating presets directory: {self.presets_dir}')
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
-    def revert_ledger_to_template(self):
+    def revert_ledger_to_template(self) -> None:
         """
         Restores ledger.json from the ledger template.
         """
         logger.info(f'Reverting ledger to template: {self.ledger_template}')
         if not self.ledger_template.exists():
-            msg = f'Ledger template not found: {self.ledger_template}'
+            msg: str = f'Ledger template not found: {self.ledger_template}'
             logger.error(msg)
             raise FileNotFoundError(msg)
         shutil.copy(self.ledger_template, self.ledger_path)
 
-    def revert_client_secret_to_template(self):
+    def revert_client_secret_to_template(self) -> None:
         """
         Restores client_secret.json from the client_secret template.
         """
         logger.info(f'Reverting client_secret to template: {self.client_secret_template}')
         if not self.client_secret_template.exists():
-            msg = f'Client_secret template not found: {self.client_secret_template}'
+            msg: str = f'Client_secret template not found: {self.client_secret_template}'
             logger.error(msg)
             raise FileNotFoundError(msg)
         shutil.copy(self.client_secret_template, self.client_secret_path)
 
 
-EXPENSE_DATA_COLUMNS = ['category', 'total', 'transactions']
+EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions']
+TRANSACTION_DATA_COLUMNS: List[str] = ['date', 'amount', 'description', 'category', 'account']
 
-DATA_MAPPING_KEYS = ['date', 'amount', 'description', 'category', 'account']
-DATA_MAPPING_SEPARATOR_CHARS = ['|', '+']
+DATA_MAPPING_KEYS: List[str] = ['date', 'amount', 'description', 'category', 'account']
+DATA_MAPPING_SEPARATOR_CHARS: List[str] = ['|', '+']
 
-HEADER_TYPES = ['string', 'int', 'float', 'date']
+HEADER_TYPES: List[str] = ['string', 'int', 'float', 'date']
 
-LEDGER_SCHEMA = {
+METADATA_KEYS: List[str] = [
+    'currency',
+    'date_format',
+    'summary_mode',
+    'hide_empty_categories',
+    'exclude_negative',
+    'exclude_zero',
+    'exclude_positive',
+    'show_transactions_window',
+]
+
+LEDGER_SCHEMA: Dict[str, Any] = {
     'spreadsheet': {
         'type': dict,
         'required': True,
@@ -177,6 +188,21 @@ LEDGER_SCHEMA = {
         'type': dict,
         'required': True,
         'allowed_values': HEADER_TYPES
+    },
+    'metadata': {
+        'type': dict,
+        'required': True,
+        'required_keys': METADATA_KEYS,
+        'item_schema': {
+            'currency': {'type': str, 'required': True},
+            'date_format': {'type': str, 'required': True},
+            'summary_mode': {'type': str, 'required': True},
+            'hide_empty_categories': {'type': bool, 'required': True},
+            'exclude_negative': {'type': bool, 'required': True},
+            'exclude_zero': {'type': bool, 'required': True},
+            'exclude_positive': {'type': bool, 'required': True},
+            'show_transactions_window': {'type': bool, 'required': True},
+        }
     },
     'data_header_mapping': {
         'type': dict,
@@ -198,14 +224,14 @@ LEDGER_SCHEMA = {
 }
 
 
-def validate_ledger_data(ledger_data):
+def validate_ledger_data(ledger_data: Dict[str, Any]) -> None:
     """
     Validates that ledger_data conforms to LEDGER_SCHEMA. Raises if invalid.
     """
     logger.debug('Validating ledger data against schema.')
     for field, specs in LEDGER_SCHEMA.items():
         if specs.get('required') and field not in ledger_data:
-            msg = f'Missing required field: {field}'
+            msg: str = f'Missing required field: {field}'
             logger.error(msg)
             raise ValueError(msg)
 
@@ -225,10 +251,10 @@ def validate_ledger_data(ledger_data):
             _validate_categories(ledger_data[field], specs['item_schema'])
 
 
-def _validate_header(header_dict, allowed_values):
+def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
     logger.debug('Validating "header" section.')
     if not isinstance(header_dict, dict):
-        msg = 'header must be a dict.'
+        msg: str = 'header must be a dict.'
         logger.error(msg)
         raise TypeError(msg)
     for k, v in header_dict.items():
@@ -246,11 +272,11 @@ def _validate_header(header_dict, allowed_values):
             raise ValueError(msg)
 
 
-def _validate_data_header_mapping(mapping_dict, specs):
+def _validate_data_header_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
     logger.debug('Validating "data_header_mapping" section.')
     required_keys = set(specs['required_keys'])
     if set(mapping_dict.keys()) != required_keys:
-        msg = (
+        msg: str = (
             f'data_header_mapping must have keys {required_keys}, '
             f'got {set(mapping_dict.keys())}.'
         )
@@ -258,15 +284,15 @@ def _validate_data_header_mapping(mapping_dict, specs):
         raise ValueError(msg)
     for val in mapping_dict.values():
         if not isinstance(val, specs['value_type']):
-            msg = 'All data_header_mapping values must be strings.'
+            msg: str = 'All data_header_mapping values must be strings.'
             logger.error(msg)
             raise TypeError(msg)
 
 
-def _validate_categories(categories_dict, item_schema):
+def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
     logger.debug('Validating "categories" section.')
     if not isinstance(categories_dict, dict):
-        msg = '"categories" must be a dict.'
+        msg: str = '"categories" must be a dict.'
         logger.error(msg)
         raise TypeError(msg)
     for cat_name, cat_info in categories_dict.items():
@@ -303,32 +329,47 @@ class SettingsAPI:
     Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
     Also supports presets for these files.
     """
-    required_client_secret_keys = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
+    required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
-    def __init__(self, ledger_path=None, client_secret_path=None):
-        self.paths = ConfigPaths()
+    def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
+        self.paths: ConfigPaths = ConfigPaths()
 
-        self.ledger_path = pathlib.Path(ledger_path) if ledger_path else self.paths.ledger_path
+        self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.paths.ledger_path
 
-        self.client_secret_path = (
+        self.client_secret_path: pathlib.Path = (
             pathlib.Path(client_secret_path)
             if client_secret_path
             else self.paths.client_secret_path
         )
 
-        self.ledger_data = {}
+        self.ledger_data: Dict[str, Any] = {}
         for k in LEDGER_SCHEMA.keys():
             self.ledger_data[k] = {}
 
-        self.client_secret_data = {}
+        self.client_secret_data: Dict[str, Any] = {}
+        self._watcher: QtCore.QFileSystemWatcher = QtCore.QFileSystemWatcher()
 
+        self._init_watcher()
         self._connect_signals()
+
         self.init_data()
 
-    def _connect_signals(self):
-        signals.openSpreadsheetRequested.connect(self.open_spreadsheet)
+    def _init_watcher(self):
+        self._watcher.addPath(str(self.paths.config_dir))
+        self._watcher.addPath(str(self.paths.presets_dir))
+        self._watcher.addPath(str(self.paths.auth_dir))
+        self._watcher.addPath(str(self.paths.db_dir))
 
-    def init_data(self):
+        self._watcher.addPath(str(self.paths.client_secret_path))
+        self._watcher.addPath(str(self.paths.ledger_path))
+        self._watcher.addPath(str(self.paths.creds_path))
+        self._watcher.addPath(str(self.paths.db_path))
+
+    def _connect_signals(self) -> None:
+        self._watcher.directoryChanged.connect(signals.configFileChanged)
+        self._watcher.fileChanged.connect(signals.configFileChanged)
+
+    def init_data(self) -> None:
         logger.info('Initializing SettingsAPI.')
 
         try:
@@ -343,30 +384,30 @@ class SettingsAPI:
             logger.error(f'Failed to load client_secret data: {e}')
             raise
 
-    def _load_ledger(self):
+    def _load_ledger(self) -> Dict[str, Any]:
         logger.info(f'Loading ledger from "{self.ledger_path}"')
         if not self.ledger_path.exists():
-            msg = f'Ledger file not found: {self.ledger_path}'
+            msg: str = f'Ledger file not found: {self.ledger_path}'
             logger.error(msg)
             raise FileNotFoundError(msg)
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
-                data = json.load(f)
+                data: Dict[str, Any] = json.load(f)
             validate_ledger_data(data)
             return data
         except (ValueError, TypeError, json.JSONDecodeError) as e:
             logger.error(f'Failed to load ledger: {e}')
             raise
 
-    def _load_client_secret(self):
+    def _load_client_secret(self) -> Dict[str, Any]:
         logger.info(f'Loading client_secret from "{self.client_secret_path}"')
         if not self.client_secret_path.exists():
-            msg = f'Client secret file not found: {self.client_secret_path}'
+            msg: str = f'Client secret file not found: {self.client_secret_path}'
             logger.error(msg)
             raise FileNotFoundError(msg)
         try:
             with self.client_secret_path.open('r', encoding='utf-8') as f:
-                data = json.load(f)
+                data: Dict[str, Any] = json.load(f)
             self.validate_client_secret(data)
             return data
         except (ValueError, json.JSONDecodeError) as e:
@@ -387,46 +428,53 @@ class SettingsAPI:
 
         """
         if 'installed' in client_config:
-            key = 'installed'
+            key: str = 'installed'
         elif 'web' in client_config:
             key = 'web'
         else:
             raise RuntimeError('Client configuration does not contain an \'installed\' or \'web\' section.')
 
-        config_section = client_config[key]
-        missing = [k for k in cls.required_client_secret_keys if k not in config_section]
+        config_section: Dict[str, Any] = client_config[key]
+        missing: List[str] = [k for k in cls.required_client_secret_keys if k not in config_section]
         if missing:
             raise RuntimeError(f"Missing required fields in the '{key}' section: {missing}.")
         return key
 
-    def get_section(self, section_name: str):
+    def get_section(self, section_name: str) -> Dict[str, Any]:
         """
         Returns data for a ledger section or 'client_secret'.
         """
+        if section_name == 'metadata':
+            raise RuntimeError('Metadata section is not directly accessible.')
+
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
         return self.ledger_data[section_name].copy()
 
-    def set_section(self, section_name, new_data):
-        """
-        Sets data for a ledger section or 'client_secret' and commits to disk.
+    def set_section(self, section_name: str, new_data: Dict[str, Any]) -> None:
+        """Sets data for a ledger section or 'client_secret' and commits to disk.
+
         """
         from ..ui.actions import signals
+
+        if section_name == 'metadata':
+            raise RuntimeError('Metadata section is not directly accessible.')
 
         if section_name == 'client_secret':
             logger.info('Setting entire client_secret data.')
             self.validate_client_secret(new_data)
             self.client_secret_data = new_data
             self.save_section('client_secret')
+
             signals.configSectionChanged.emit(section_name)
             return
 
         if section_name not in self.ledger_data:
-            msg = f'Unknown section_name for set: "{section_name}"'
+            msg: str = f'Unknown section_name for set: "{section_name}"'
             logger.error(msg)
             raise ValueError(msg)
 
-        current_section_data = self.ledger_data.get(section_name).copy()
+        current_section_data: Dict[str, Any] = self.ledger_data.get(section_name).copy()
 
         self.ledger_data[section_name] = new_data
         try:
@@ -439,25 +487,29 @@ class SettingsAPI:
             self.ledger_data[section_name] = current_section_data
             raise
 
-    def reload_section(self, section_name):
-        """
-        Reload the current section from disk.
+    def reload_section(self, section_name: str) -> None:
+        """Reload the current section from disk.
+
         """
         from ..ui.actions import signals
+
+        if section_name == 'metadata':
+            raise RuntimeError('Metadata section is not directly accessible.')
+
         if section_name == 'client_secret':
             logger.info('Reloading client_secret from disk.')
             self.client_secret_data = self._load_client_secret()
             return
 
         if section_name not in self.ledger_data:
-            msg = f'Unknown section_name for reload: "{section_name}"'
+            msg: str = f'Unknown section_name for reload: "{section_name}"'
             logger.error(msg)
             raise ValueError(msg)
 
         logger.info(f'Reloading section "{section_name}" from disk.')
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
-                data = json.load(f)
+                data: Dict[str, Any] = json.load(f)
             validate_ledger_data(data)
             self.ledger_data[section_name] = data[section_name]
 
@@ -467,11 +519,14 @@ class SettingsAPI:
             logger.error(f'Failed to reload section "{section_name}": {e}')
             raise
 
-    def revert_section(self, section_name):
+    def revert_section(self, section_name: str) -> None:
         """
         Reverts the given section from its template.
         """
         from ..ui.actions import signals
+
+        if section_name == 'metadata':
+            raise RuntimeError('Metadata section is not directly accessible.')
 
         if section_name == 'client_secret':
             logger.info('Reverting client_secret to template.')
@@ -480,13 +535,13 @@ class SettingsAPI:
             return
 
         if section_name not in self.ledger_data:
-            msg = f'Unknown section_name for revert: "{section_name}"'
+            msg: str = f'Unknown section_name for revert: "{section_name}"'
             logger.error(msg)
             raise ValueError(msg)
 
         # Load template data
         with self.paths.ledger_template.open('r', encoding='utf-8') as f:
-            template_data = json.load(f)
+            template_data: Dict[str, Any] = json.load(f)
 
         if section_name not in template_data:
             msg = f'No template-based revert logic for section "{section_name}".'
@@ -499,12 +554,13 @@ class SettingsAPI:
 
         signals.configSectionChanged.emit(section_name)
 
-    def save_section(self, section_name):
+    def save_section(self, section_name: str) -> None:
         """
         Saves the given section to disk.
         """
+        if section_name == 'metadata':
+            raise RuntimeError('Metadata section is not directly accessible.')
 
-        # Virtual section
         if section_name == 'client_secret':
             logger.info(f'Saving client_secret to "{self.client_secret_path}"')
             self.validate_client_secret(self.client_secret_data)
@@ -518,30 +574,30 @@ class SettingsAPI:
             return
 
         if section_name not in self.ledger_data:
-            msg = f'Unknown section_name for save: "{section_name}"'
+            msg: str = f'Unknown section_name for save: "{section_name}"'
             logger.error(msg)
             raise ValueError(msg)
 
         with self.ledger_path.open('r', encoding='utf-8') as f:
-            original_data = json.load(f)
+            original_data: Dict[str, Any] = json.load(f)
 
         if section_name not in original_data:
             msg = f'Unknown section_name for save: "{section_name}"'
             logger.error(msg)
             raise ValueError(msg)
 
-        new_data = original_data.copy()
+        new_data: Dict[str, Any] = original_data.copy()
         new_data[section_name] = self.ledger_data[section_name]
 
         with self.ledger_path.open('w', encoding='utf-8') as f:
             json.dump(new_data, f, indent=4, ensure_ascii=False)
 
-    def save_all(self):
+    def save_all(self) -> None:
         """
         Saves ledger and client_secret. Rolls back ledger on validation failure.
         """
         logger.info('Saving all settings.')
-        original_ledger_data = dict(self.ledger_data)
+        original_ledger_data: Dict[str, Any] = dict(self.ledger_data)
         try:
             validate_ledger_data(self.ledger_data)
             with self.ledger_path.open('w', encoding='utf-8') as f:
@@ -560,8 +616,11 @@ class SettingsAPI:
             raise
 
     def get_status(self) -> Status:
-        """Get the configuration state of the application.
+        """
+        Get the configuration state of the application.
 
+        Returns:
+            A Status value indicating the configuration state.
         """
         from ..auth import auth
         from ..auth import service
@@ -571,7 +630,7 @@ class SettingsAPI:
             return Status.ClientSecretNotFound
 
         try:
-            client_secret = self.get_section('client_secret')
+            client_secret: Dict[str, Any] = self.get_section('client_secret')
             self.validate_client_secret(client_secret)
         except:
             return Status.ClientSecretInvalid
@@ -581,7 +640,7 @@ class SettingsAPI:
         except RuntimeError:
             return Status.NotAuthenticated
 
-        config = self.get_section('spreadsheet')
+        config: Dict[str, Any] = self.get_section('spreadsheet')
         if not config.get('id'):
             return Status.SpreadsheetIdNotConfigured
         if not config.get('worksheet'):
@@ -599,89 +658,13 @@ class SettingsAPI:
 
         return Status.StatusOkay
 
-    def list_presets(self):
-        """
-        Lists all preset zip filenames (without .zip extension).
-        """
-        return [p.stem for p in self.paths.presets_dir.glob('*.zip')]
 
-    def create_preset(self, preset_name):
-        """
-        Creates a preset zip with current ledger.json and client_secret.json.
-        """
-        preset_zip_path = self.paths.presets_dir / f'{preset_name}.zip'
-        if preset_zip_path.exists():
-            logger.info(f'Overwriting existing preset: {preset_zip_path}')
-        try:
-            with zipfile.ZipFile(preset_zip_path, 'w') as zf:
-                zf.write(self.client_secret_path, arcname='client_secret.json')
-                zf.write(self.ledger_path, arcname='ledger.json')
-            logger.info(f'Created preset: {preset_zip_path}')
-        except Exception as e:
-            logger.error(f'Failed to create preset "{preset_name}": {e}')
-            raise
-
-    def remove_preset(self, preset_name):
-        """
-        Removes a preset zip file.
-        """
-        preset_zip_path = self.paths.presets_dir / f'{preset_name}.zip'
-        if not preset_zip_path.exists():
-            logger.warning(f'Preset not found for removal: {preset_zip_path}')
-            return
-        try:
-            preset_zip_path.unlink()
-            logger.info(f'Removed preset: {preset_zip_path}')
-        except Exception as e:
-            logger.error(f'Failed to remove preset "{preset_name}": {e}')
-            raise
-
-    def load_preset(self, preset_name):
-        """
-        Loads a preset, overwriting existing ledger.json and client_secret.json.
-        """
-        preset_zip_path = self.paths.presets_dir / f'{preset_name}.zip'
-        if not preset_zip_path.exists():
-            msg = f'Preset zip not found: {preset_zip_path}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-
-        try:
-            with zipfile.ZipFile(preset_zip_path, 'r') as zf:
-                zf.extract('client_secret.json', path=self.paths.config_dir)
-                zf.extract('ledger.json', path=self.paths.config_dir)
-            logger.info(f'Loaded preset: {preset_name}')
-            self.ledger_data = self._load_ledger()
-            self.client_secret_data = self._load_client_secret()
-        except Exception as e:
-            logger.error(f'Failed to load preset "{preset_name}": {e}')
-            raise
-
-    @QtCore.Slot()
-    def open_spreadsheet(self):
-        """
-        Opens the spreadsheet in the default browser.
-        """
-        if not self.ledger_data['spreadsheet']['id']:
-            logger.error('No spreadsheet ID found.')
-            return
-
-        spreadsheet_id = self.ledger_data['spreadsheet']['id']
-        sheet_name = self.ledger_data['spreadsheet']['sheet']
-
-        url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
-        if sheet_name:
-            url += f'&sheet={sheet_name}'
-        logger.info(f'Opening spreadsheet: {url}')
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
-
-
-settings = SettingsAPI()
+settings: SettingsAPI = SettingsAPI()
 
 
 class UserSettings(QtCore.QSettings):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(organization_name, app_name)
 
         self.setPath(
@@ -693,11 +676,11 @@ class UserSettings(QtCore.QSettings):
         self.setFallbacksEnabled(True)
         self._connect_signals()
 
-    def _connect_signals(self):
+    def _connect_signals(self) -> None:
         signals.dataRangeChanged.connect(self.save_data_range)
 
     @QtCore.Slot(str, int)
-    def save_data_range(self, start_date, span):
+    def save_data_range(self, start_date: str, span: int) -> None:
         """Saves the data range to settings.
 
         """
@@ -705,4 +688,4 @@ class UserSettings(QtCore.QSettings):
         self.setValue('data_range/span', span)
 
 
-state = UserSettings()
+state: UserSettings = UserSettings()

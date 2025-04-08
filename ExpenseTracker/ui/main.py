@@ -64,7 +64,7 @@ class LoadIndicator(QtWidgets.QDialog):
         r.setHeight(ui.Size.Margin(1.5))
         r.moveCenter(self.rect().center())
 
-        text = 'Loading...'
+        text = 'Fetching data...'
         font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
         painter.setFont(font)
         painter.setPen(ui.Color.SecondaryText())
@@ -91,30 +91,18 @@ class StatusIndicator(QtWidgets.QWidget):
         )
 
         self._status = lib.Status.UnknownStatus
-        self._watcher = QtCore.QFileSystemWatcher(self)
 
         self._connect_signals()
-        self._init_watcher()
+
         QtCore.QTimer.singleShot(0, self.update_status)
 
     def _connect_signals(self):
         self.clicked.connect(self.action)
+
+        signals.configFileChanged.connect(self.update_status)
         signals.configSectionChanged.connect(self.update_status)
+        signals.dataAboutToBeFetched.connect(self.update_status)
         signals.dataFetched.connect(self.update_status)
-
-    def _init_watcher(self):
-        self._watcher.addPath(str(lib.settings.paths.config_dir))
-        self._watcher.addPath(str(lib.settings.paths.presets_dir))
-        self._watcher.addPath(str(lib.settings.paths.auth_dir))
-        self._watcher.addPath(str(lib.settings.paths.db_dir))
-
-        self._watcher.addPath(str(lib.settings.paths.client_secret_path))
-        self._watcher.addPath(str(lib.settings.paths.ledger_path))
-        self._watcher.addPath(str(lib.settings.paths.creds_path))
-        self._watcher.addPath(str(lib.settings.paths.db_path))
-
-        self._watcher.directoryChanged.connect(self.update_status)
-        self._watcher.fileChanged.connect(self.update_status)
 
     def mouseReleaseEvent(self, event):
         if not self.rect().contains(event.pos()):
@@ -301,10 +289,10 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setEnabled(False)
         self.addAction(action)
 
-        action = QtGui.QAction('Refresh Data', self)
+        action = QtGui.QAction('Fetch Remote Data', self)
         action.setIcon(ui.get_icon('btn_sync'))
         action.setShortcut('Ctrl+R')
-        action.setStatusTip('Refresh Data')
+        action.setStatusTip('Fetch the data from the remote spreadsheet')
         action.triggered.connect(actions.fetch_data)
         self.addAction(action)
         self.toolbar.addAction(action)

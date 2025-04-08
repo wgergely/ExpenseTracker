@@ -124,6 +124,7 @@ class ExpenseView(QtWidgets.QTableView):
         self.setWordWrap(True)
         self.setTextElideMode(QtCore.Qt.ElideRight)
 
+
         self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
 
         ui.set_stylesheet(self)
@@ -223,21 +224,20 @@ class TransactionsView(QtWidgets.QTableView):
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.setShowGrid(True)
         self.setAlternatingRowColors(False)
+
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
 
-    def sizeHint(self) -> QtCore.QSize:
-        return QtCore.QSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
-
     def setModel(self, model: QtCore.QAbstractItemModel) -> None:
         """Sets the model for the view and initializes the header."""
         super().setModel(model)
+        self.model().modelAboutToBeReset.connect(self._init_headers)
+        self.model().modelReset.connect(self._init_headers)
 
+    @QtCore.Slot()
+    def _init_headers(self) -> None:
         header = self.horizontalHeader()
         header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         header.setStretchLastSection(False)
