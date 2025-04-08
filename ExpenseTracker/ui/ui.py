@@ -337,11 +337,11 @@ def get_icon(category: str, color: QtGui.QColor = None) -> QtGui.QIcon:
 
     pixmap = QtGui.QPixmap(str(icon_path))
 
-    if color:
-        painter = QtGui.QPainter(pixmap)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), color)
-        painter.end()
+    color = color if color else Color.SecondaryText()
+    painter = QtGui.QPainter(pixmap)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), color)
+    painter.end()
 
     icon = QtGui.QIcon(pixmap)
     icon_cache[k] = icon

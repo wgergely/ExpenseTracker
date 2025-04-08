@@ -137,12 +137,18 @@ def open_spreadsheet(self) -> None:
     """
     Opens the spreadsheet in the default browser.
     """
-    if not self.ledger_data['spreadsheet']['id']:
-        logger.error('No spreadsheet ID found.')
-        return
+    from ..settings import lib
+    from .. import ui
 
-    spreadsheet_id: str = self.ledger_data['spreadsheet']['id']
-    sheet_name: str = self.ledger_data['spreadsheet']['sheet']
+    config = lib.settings.get_section('spreadsheet')
+
+    try:
+        spreadsheet_id: str = config['id']
+        sheet_name: str = config['worksheet']
+    except Exception as ex:
+        logger.error(f'Error retrieving spreadsheet config: {ex}')
+        QtWidgets.QMessageBox.critical(ui.parent(), 'Error', 'Invalid spreadsheet configuration.')
+        raise
 
     url: str = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
     if sheet_name:

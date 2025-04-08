@@ -126,8 +126,8 @@ class StatusIndicator(QtWidgets.QWidget):
         pressed = option.state & QtWidgets.QStyle.State_Sunken
 
         if self._status == lib.Status.StatusOkay:
-            color = ui.Color.Green()
-            icon = ui.get_icon('btn_ok', color=color)
+            icon = ui.get_icon('btn_ok', color=ui.Color.Green())
+            color = ui.Color.Transparent()
         else:
             color = ui.Color.Yellow()
             icon = ui.get_icon('btn_alert', color=color)
@@ -276,18 +276,19 @@ class MainWindow(QtWidgets.QMainWindow):
         w.setStyleSheet('background: transparent;')
         self.toolbar.addWidget(w)
 
-        action = QtGui.QAction('Open Settings...', self)
-        action.setIcon(ui.get_icon('btn_settings'))
-        action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
-        action.setStatusTip('Open Settings')
-        action.triggered.connect(open_settings)
-        self.addAction(action)
-        self.toolbar.addAction(action)
 
         action = QtGui.QAction(self)
         action.setSeparator(True)
         action.setEnabled(False)
         self.addAction(action)
+
+        action = QtGui.QAction('Open Spreadsheet...', self)
+        action.setIcon(ui.get_icon('btn_ledger'))
+        action.setShortcut('Ctrl+O')
+        action.setStatusTip('Open the spreadsheet in the browser')
+        action.triggered.connect(actions.open_spreadsheet)
+        self.addAction(action)
+        self.toolbar.addAction(action)
 
         action = QtGui.QAction('Fetch Remote Data', self)
         action.setIcon(ui.get_icon('btn_sync'))
@@ -301,6 +302,16 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setSeparator(True)
         action.setEnabled(False)
         self.addAction(action)
+        self.toolbar.addAction(action)
+
+        action = QtGui.QAction('Open Settings...', self)
+        action.setIcon(ui.get_icon('btn_settings'))
+        action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
+        action.setStatusTip('Open Settings')
+        action.triggered.connect(open_settings)
+        self.addAction(action)
+        self.toolbar.addAction(action)
+
 
         action = QtGui.QAction('Quit', self)
         action.setIcon(ui.get_icon('btn_quit', color=ui.Color.Red()))
@@ -308,6 +319,8 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setStatusTip('Quit the application')
         action.triggered.connect(QtWidgets.QApplication.instance().quit)
         self.addAction(action)
+
+        self.toolbar.addSeparator()
 
         self.toolbar.addWidget(self.status_indicator)
 
