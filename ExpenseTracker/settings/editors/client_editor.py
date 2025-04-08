@@ -96,7 +96,7 @@ class ImportSecretDialog(QtWidgets.QDialog):
         help_widget.document().setIndentWidth(ui.Size.Indicator(4.0))
 
         help_widget.setOpenExternalLinks(True)
-        with settings.paths.gcp_help_path.open('r') as f:
+        with settings.gcp_help_path.open('r') as f:
             help_widget.setMarkdown(f.read())
         splitter.addWidget(help_widget)
 

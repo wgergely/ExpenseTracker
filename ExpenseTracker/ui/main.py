@@ -276,7 +276,6 @@ class MainWindow(QtWidgets.QMainWindow):
         w.setStyleSheet('background: transparent;')
         self.toolbar.addWidget(w)
 
-
         action = QtGui.QAction(self)
         action.setSeparator(True)
         action.setEnabled(False)
@@ -311,7 +310,6 @@ class MainWindow(QtWidgets.QMainWindow):
         action.triggered.connect(open_settings)
         self.addAction(action)
         self.toolbar.addAction(action)
-
 
         action = QtGui.QAction('Quit', self)
         action.setIcon(ui.get_icon('btn_quit', color=ui.Color.Red()))

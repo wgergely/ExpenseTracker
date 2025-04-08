@@ -40,12 +40,12 @@ DATABASE_DATE_FORMAT = '%Y-%m-%d'
 
 def verify_db() -> None:
     """Checks whether the local cache database is present and valid."""
-    if not lib.settings.paths.db_path.exists():
+    if not lib.settings.db_path.exists():
         logging.error('No local cache DB path found.')
         raise RuntimeError('No local cache DB path found.')
 
     try:
-        with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
+        with sqlite3.connect(str(lib.settings.db_path)) as conn:
             if not table_exists(conn, TABLE_TRANSACTIONS):
                 logging.error('The "transactions" table is missing.')
                 raise RuntimeError('The "transactions" table is missing.')
@@ -67,11 +67,11 @@ def verify_db() -> None:
 
 def create_db() -> None:
     """Creates or replaces the local cache database."""
-    if lib.settings.paths.db_path.exists():
-        logging.info(f'{lib.settings.paths.db_path} already exists, removing it...')
-        lib.settings.paths.db_path.unlink()
+    if lib.settings.db_path.exists():
+        logging.info(f'{lib.settings.db_path} already exists, removing it...')
+        lib.settings.db_path.unlink()
 
-    with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
+    with sqlite3.connect(str(lib.settings.db_path)) as conn:
         conn.execute(f"""
             CREATE TABLE {TABLE_META}(
                 meta_id INTEGER PRIMARY KEY,
@@ -90,7 +90,7 @@ def create_db() -> None:
 
 def cache_remote_data(force: bool = False) -> None:
     """Fetches remote ledger data from Google Sheets and caches it locally."""
-    if not lib.settings.paths.db_path.exists():
+    if not lib.settings.db_path.exists():
         logging.info('No local DB found. A new one will be created.')
         create_db()
 
@@ -112,7 +112,7 @@ def cache_remote_data(force: bool = False) -> None:
         raise RuntimeError(f'Failed to validate remote data. Reason: {ex}') from ex
 
     try:
-        with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
+        with sqlite3.connect(str(lib.settings.db_path)) as conn:
             recreate_transactions_table(conn, data, header_data)
             insert_data(conn, data, header_data)
             update_meta_valid(conn)
@@ -146,7 +146,7 @@ def get_cached_data(force: bool = False) -> pd.DataFrame:
 
     conn = None
     try:
-        conn = sqlite3.connect(str(lib.settings.paths.db_path))
+        conn = sqlite3.connect(str(lib.settings.db_path))
         df = pd.read_sql_query('SELECT * FROM transactions', conn)
         logging.info(f'Loaded {len(df)} rows from the "transactions" table.')
         return df
@@ -165,12 +165,12 @@ def clear_local_cache() -> bool:
     Returns:
         True if the DB file was successfully removed, False otherwise.
     """
-    if not lib.settings.paths.db_path.exists():
+    if not lib.settings.db_path.exists():
         logging.info('No local DB file found to clear.')
         return True
 
     try:
-        with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
+        with sqlite3.connect(str(lib.settings.db_path)) as conn:
             pass
     except sqlite3.Error as ex:
         logging.error(f'Error closing the local DB connection: {ex}')
@@ -179,7 +179,7 @@ def clear_local_cache() -> bool:
     time.sleep(0.5)
 
     try:
-        lib.settings.paths.db_path.unlink()
+        lib.settings.db_path.unlink()
     except OSError as ex:
         logging.error(f'Error removing the local DB file: {ex}')
         return False
@@ -190,10 +190,10 @@ def clear_local_cache() -> bool:
 
 def invalidate_cache(reason: str) -> None:
     """Marks the cache as invalid."""
-    if not lib.settings.paths.db_path.exists():
+    if not lib.settings.db_path.exists():
         return
 
-    with sqlite3.connect(str(lib.settings.paths.db_path)) as conn:
+    with sqlite3.connect(str(lib.settings.db_path)) as conn:
         if table_exists(conn, TABLE_META):
             conn.execute(f"""
                 UPDATE {TABLE_META}

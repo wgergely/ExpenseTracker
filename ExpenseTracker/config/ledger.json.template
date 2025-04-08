@@ -28,14 +28,14 @@
     "account": "Account Name"
   },
   "metadata": {
-    "currency": "EUR",
-    "date_format": "DD/MM/YYYY",
+    "locale": "en_GB",
     "summary_mode": "total",
     "hide_empty_categories": true,
     "exclude_negative": false,
     "exclude_zero": false,
     "exclude_positive": true,
     "show_transactions_window": false,
+    "theme": "dark"
   },
   "categories": {
     "Cash": {

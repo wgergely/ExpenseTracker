@@ -48,17 +48,17 @@ def get_creds() -> Optional[google.oauth2.credentials.Credentials]:
     """Get OAuth credentials for Google API.
 
     """
-    if not lib.settings.paths.creds_path.exists():
-        logging.error(f'Client secret file not found at {lib.settings.paths.creds_path}.')
+    if not lib.settings.creds_path.exists():
+        logging.error(f'Client secret file not found at {lib.settings.creds_path}.')
         raise FileNotFoundError(
-            f'Client secret file not found at {lib.settings.paths.creds_path}.')
+            f'Client secret file not found at {lib.settings.creds_path}.')
 
     try:
         return google.oauth2.credentials.Credentials.from_authorized_user_file(
-            str(lib.settings.paths.creds_path)
+            str(lib.settings.creds_path)
         )
     except (ValueError, json.JSONDecodeError):
-        logging.critical(f'Failed to load credentials from {lib.settings.paths.creds_path}.')
+        logging.critical(f'Failed to load credentials from {lib.settings.creds_path}.')
         raise
 
 
@@ -66,11 +66,11 @@ def save_creds(creds: google.oauth2.credentials.Credentials) -> None:
     """Save the given credentials to the specified token path.
 
     """
-    with open(lib.settings.paths.creds_path, 'w', encoding='utf-8') as token_file:
+    with open(lib.settings.creds_path, 'w', encoding='utf-8') as token_file:
         data = creds.to_json()
         token_file.write(data)
 
-    logging.info(f'Credentials saved to {lib.settings.paths.creds_path}.')
+    logging.info(f'Credentials saved to {lib.settings.creds_path}.')
 
 
 class AuthFlowWorker(QtCore.QThread):
@@ -196,10 +196,10 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
 
     logging.info('Starting new OAuth flow...')
 
-    if not lib.settings.paths.client_secret_path.exists():
-        logging.error(f'Client secret file not found at {lib.settings.paths.client_secret_path}.')
+    if not lib.settings.client_secret_path.exists():
+        logging.error(f'Client secret file not found at {lib.settings.client_secret_path}.')
         raise FileNotFoundError(
-            f'Client secret file not found at {lib.settings.paths.client_secret_path}.')
+            f'Client secret file not found at {lib.settings.client_secret_path}.')
 
     # Get client config
     data = lib.settings.get_section('client_secret')
@@ -248,9 +248,9 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
 
 def unauthenticate() -> None:
     """Delete the cached credentials file."""
-    if not lib.settings.paths.creds_path.exists():
+    if not lib.settings.creds_path.exists():
         logging.warning('No cached credentials file found to delete.')
         return
 
-    lib.settings.paths.creds_path.unlink()
-    logging.info(f'Deleted credentials at {lib.settings.paths.creds_path}')
+    lib.settings.creds_path.unlink()
+    logging.info(f'Deleted credentials at {lib.settings.creds_path}')

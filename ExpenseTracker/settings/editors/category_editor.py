@@ -23,8 +23,8 @@ DEFAULT_ICON = 'Miscellaneous.png'
 @functools.lru_cache(maxsize=128)
 def get_all_icons():
     v = []
-    if lib.settings.paths.icon_dir.exists():
-        for p in sorted(lib.settings.paths.icon_dir.glob('*.png')):
+    if lib.settings.icon_dir.exists():
+        for p in sorted(lib.settings.icon_dir.glob('*.png')):
             v.append(p.name)
     return v
 
@@ -91,7 +91,7 @@ class IconPickerDialog(QtWidgets.QDialog):
         current_idx = None
         for i, icon_name in enumerate(get_all_icons()):
             item = QtGui.QStandardItem()
-            icon_path = lib.settings.paths.icon_dir / icon_name
+            icon_path = lib.settings.icon_dir / icon_name
             item.setIcon(QtGui.QIcon(str(icon_path)))
             item.setData(icon_name, QtCore.Qt.UserRole)
             model.appendRow(item)
@@ -405,7 +405,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRect(option.rect)
 
             painter.setOpacity(1.0)
-            icon = QtGui.QIcon(str(lib.settings.paths.icon_dir / icon_name))
+            icon = QtGui.QIcon(str(lib.settings.icon_dir / icon_name))
             icon.paint(painter, rect, QtCore.Qt.AlignCenter)
         elif col == COL_COLOR:
             rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
@@ -659,7 +659,7 @@ class CategoryEditor(QtWidgets.QWidget):
             if res != QtWidgets.QMessageBox.Yes:
                 return
 
-            if not lib.settings.paths.ledger_template.exists():
+            if not lib.settings.ledger_template.exists():
                 QtWidgets.QMessageBox.warning(
                     self,
                     'Error',

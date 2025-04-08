@@ -57,104 +57,6 @@ def is_valid_hex_color(value: str) -> bool:
     return bool(re.fullmatch(r'#[0-9A-Fa-f]{6}', value))
 
 
-class ConfigPaths:
-    """
-    Holds file/directory paths and ensures they exist.
-    """
-
-    def __init__(self) -> None:
-        self.template_dir: pathlib.Path = pathlib.Path(__file__).parent.parent / 'config'
-        self.icon_dir: pathlib.Path = self.template_dir / 'icons'
-        self.client_secret_template: pathlib.Path = self.template_dir / 'client_secret.json.template'
-        self.ledger_template: pathlib.Path = self.template_dir / 'ledger.json.template'
-        self.gcp_help_path: pathlib.Path = self.template_dir / 'gcp.md'
-
-        # Config directories
-        self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-        self.presets_dir: pathlib.Path = self.config_dir / 'presets'
-        self.auth_dir: pathlib.Path = self.config_dir / 'auth'
-        self.db_dir: pathlib.Path = self.config_dir / 'db'
-
-        # Config files
-        self.client_secret_path: pathlib.Path = self.config_dir / 'client_secret.json'
-        self.ledger_path: pathlib.Path = self.config_dir / 'ledger.json'
-        self.creds_path: pathlib.Path = self.auth_dir / 'creds.json'
-        self.db_path: pathlib.Path = self.db_dir / 'cache.db'
-        self.usersettings_path: pathlib.Path = self.config_dir / 'settings.ini'
-
-        self._verify_and_prepare()
-
-    def _verify_and_prepare(self) -> None:
-        logger.info(f'Verifying required directories and templates in {self.template_dir}')
-        if not self.template_dir.exists():
-            msg: str = f'Missing template directory: {self.template_dir}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-        if not self.icon_dir.exists():
-            msg = f'Missing icon directory: {self.icon_dir}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-        if not self.client_secret_template.exists():
-            msg = f'Missing client_secret template: {self.client_secret_template}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-        if not self.ledger_template.exists():
-            msg = f'Missing ledger template: {self.ledger_template}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-
-        # Create directories
-        if not self.config_dir.exists():
-            logger.info(f'Creating config directory: {self.config_dir}')
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-
-        if not self.auth_dir.exists():
-            logger.info(f'Creating auth directory: {self.auth_dir}')
-            self.auth_dir.mkdir(parents=True, exist_ok=True)
-
-        if not self.db_dir.exists():
-            logger.info(f'Creating db directory: {self.db_dir}')
-            self.db_dir.mkdir(parents=True, exist_ok=True)
-
-        if not self.presets_dir.exists():
-            logger.info(f'Creating presets directory: {self.presets_dir}')
-            self.presets_dir.mkdir(parents=True, exist_ok=True)
-
-        # Ensure valid configs exists even if we haven't yet set them up
-        if not self.client_secret_path.exists():
-            logger.info(f'Copying default client_secret from template to {self.client_secret_path}')
-            shutil.copy(self.client_secret_template, self.client_secret_path)
-        if not self.ledger_path.exists():
-            logger.info(f'Copying default ledger from template to {self.ledger_path}')
-            shutil.copy(self.ledger_template, self.ledger_path)
-
-        if not self.presets_dir.exists():
-            logger.info(f'Creating presets directory: {self.presets_dir}')
-            self.presets_dir.mkdir(parents=True, exist_ok=True)
-
-    def revert_ledger_to_template(self) -> None:
-        """
-        Restores ledger.json from the ledger template.
-        """
-        logger.info(f'Reverting ledger to template: {self.ledger_template}')
-        if not self.ledger_template.exists():
-            msg: str = f'Ledger template not found: {self.ledger_template}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-        shutil.copy(self.ledger_template, self.ledger_path)
-
-    def revert_client_secret_to_template(self) -> None:
-        """
-        Restores client_secret.json from the client_secret template.
-        """
-        logger.info(f'Reverting client_secret to template: {self.client_secret_template}')
-        if not self.client_secret_template.exists():
-            msg: str = f'Client_secret template not found: {self.client_secret_template}'
-            logger.error(msg)
-            raise FileNotFoundError(msg)
-        shutil.copy(self.client_secret_template, self.client_secret_path)
-
-
 EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions']
 TRANSACTION_DATA_COLUMNS: List[str] = ['date', 'amount', 'description', 'category', 'account']
 
@@ -164,14 +66,14 @@ DATA_MAPPING_SEPARATOR_CHARS: List[str] = ['|', '+']
 HEADER_TYPES: List[str] = ['string', 'int', 'float', 'date']
 
 METADATA_KEYS: List[str] = [
-    'currency',
-    'date_format',
+    'locale',
     'summary_mode',
     'hide_empty_categories',
     'exclude_negative',
     'exclude_zero',
     'exclude_positive',
     'show_transactions_window',
+    'theme'
 ]
 
 LEDGER_SCHEMA: Dict[str, Any] = {
@@ -194,14 +96,14 @@ LEDGER_SCHEMA: Dict[str, Any] = {
         'required': True,
         'required_keys': METADATA_KEYS,
         'item_schema': {
-            'currency': {'type': str, 'required': True},
-            'date_format': {'type': str, 'required': True},
+            'locale': {'type': str, 'required': True},
             'summary_mode': {'type': str, 'required': True},
             'hide_empty_categories': {'type': bool, 'required': True},
             'exclude_negative': {'type': bool, 'required': True},
             'exclude_zero': {'type': bool, 'required': True},
             'exclude_positive': {'type': bool, 'required': True},
             'show_transactions_window': {'type': bool, 'required': True},
+            'theme': {'type': str, 'required': True}
         }
     },
     'data_header_mapping': {
@@ -324,7 +226,157 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
                     raise ValueError(msg)
 
 
-class SettingsAPI:
+class ConfigPaths:
+
+    def __init__(self) -> None:
+        self.template_dir: pathlib.Path = pathlib.Path(__file__).parent.parent / 'config'
+        self.icon_dir: pathlib.Path = self.template_dir / 'icons'
+        self.client_secret_template: pathlib.Path = self.template_dir / 'client_secret.json.template'
+        self.ledger_template: pathlib.Path = self.template_dir / 'ledger.json.template'
+        self.gcp_help_path: pathlib.Path = self.template_dir / 'gcp.md'
+
+        # Config directories
+        self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
+        self.presets_dir: pathlib.Path = self.config_dir / 'presets'
+        self.auth_dir: pathlib.Path = self.config_dir / 'auth'
+        self.db_dir: pathlib.Path = self.config_dir / 'db'
+
+        # Config files
+        self.client_secret_path: pathlib.Path = self.config_dir / 'client_secret.json'
+        self.ledger_path: pathlib.Path = self.config_dir / 'ledger.json'
+        self.creds_path: pathlib.Path = self.auth_dir / 'creds.json'
+        self.db_path: pathlib.Path = self.db_dir / 'cache.db'
+        self.usersettings_path: pathlib.Path = self.config_dir / 'settings.ini'
+
+        self._verify_and_prepare()
+
+    def _verify_and_prepare(self) -> None:
+        logger.info(f'Verifying required directories and templates in {self.template_dir}')
+        if not self.template_dir.exists():
+            msg: str = f'Missing template directory: {self.template_dir}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        if not self.icon_dir.exists():
+            msg = f'Missing icon directory: {self.icon_dir}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        if not self.client_secret_template.exists():
+            msg = f'Missing client_secret template: {self.client_secret_template}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        if not self.ledger_template.exists():
+            msg = f'Missing ledger template: {self.ledger_template}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+
+        # Create directories
+        if not self.config_dir.exists():
+            logger.info(f'Creating config directory: {self.config_dir}')
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.auth_dir.exists():
+            logger.info(f'Creating auth directory: {self.auth_dir}')
+            self.auth_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.db_dir.exists():
+            logger.info(f'Creating db directory: {self.db_dir}')
+            self.db_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.presets_dir.exists():
+            logger.info(f'Creating presets directory: {self.presets_dir}')
+            self.presets_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure valid configs exists even if we haven't yet set them up
+        if not self.client_secret_path.exists():
+            logger.info(f'Copying default client_secret from template to {self.client_secret_path}')
+            shutil.copy(self.client_secret_template, self.client_secret_path)
+        if not self.ledger_path.exists():
+            logger.info(f'Copying default ledger from template to {self.ledger_path}')
+            shutil.copy(self.ledger_template, self.ledger_path)
+
+        if not self.presets_dir.exists():
+            logger.info(f'Creating presets directory: {self.presets_dir}')
+            self.presets_dir.mkdir(parents=True, exist_ok=True)
+
+    def revert_ledger_to_template(self) -> None:
+        """
+        Restores ledger.json from the ledger template.
+        """
+        logger.info(f'Reverting ledger to template: {self.ledger_template}')
+        if not self.ledger_template.exists():
+            msg: str = f'Ledger template not found: {self.ledger_template}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        shutil.copy(self.ledger_template, self.ledger_path)
+
+    def revert_client_secret_to_template(self) -> None:
+        """
+        Restores client_secret.json from the client_secret template.
+        """
+        logger.info(f'Reverting client_secret to template: {self.client_secret_template}')
+        if not self.client_secret_template.exists():
+            msg: str = f'Client_secret template not found: {self.client_secret_template}'
+            logger.error(msg)
+            raise FileNotFoundError(msg)
+        shutil.copy(self.client_secret_template, self.client_secret_path)
+
+
+class MetadataAPI:
+    """A dictionary like object for metadata getting and setting.
+
+    """
+
+    def __getitem__(self, key: str) -> Any:
+        if key not in METADATA_KEYS:
+            raise KeyError(f'Invalid metadata key: {key}, must be one of {METADATA_KEYS}')
+
+        if 'metadata' not in self.ledger_data:
+            raise RuntimeError('Malformed ledger data, missing "metadata" section.')
+
+        # Verify type
+        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
+        v = self.ledger_data['metadata'].get(key)
+
+        if _type and not isinstance(v, _type):
+            logging.error(f'Metadata key "{key}" is not of type {_type}, got {type(v)}.')
+            return None
+
+        return v
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key not in METADATA_KEYS:
+            raise KeyError(f'Invalid metadata key: {key}, must be one of {METADATA_KEYS}')
+
+        if 'metadata' not in self.ledger_data:
+            raise RuntimeError('Malformed ledger data, missing "metadata" section.')
+
+        # Verify type
+        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
+        if _type and not isinstance(value, _type):
+            logging.warning(f'Metadata key "{key}" is not of type {_type}, got {type(value)}.')
+
+            # Try to convert to the expected type
+            if _type == str:
+                value = str(value)
+            elif _type == int:
+                try:
+                    value = int(value)
+                except ValueError:
+                    logging.error(f'Cannot convert "{value}" to int.')
+                    raise
+            elif _type == float:
+                try:
+                    value = float(value)
+                except ValueError:
+                    logging.error(f'Cannot convert "{value}" to float.')
+                    raise
+            elif _type == bool:
+                value = bool(value)
+
+        self.ledger_data['metadata'][key] = value
+        self.save_section('metadata')
+
+class SettingsAPI(ConfigPaths, MetadataAPI):
     """
     Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
     Also supports presets for these files.
@@ -332,14 +384,14 @@ class SettingsAPI:
     required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
     def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
-        self.paths: ConfigPaths = ConfigPaths()
+        super().__init__()
 
-        self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.paths.ledger_path
+        self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.ledger_path
 
         self.client_secret_path: pathlib.Path = (
             pathlib.Path(client_secret_path)
             if client_secret_path
-            else self.paths.client_secret_path
+            else self.client_secret_path
         )
 
         self.ledger_data: Dict[str, Any] = {}
@@ -355,15 +407,15 @@ class SettingsAPI:
         self.init_data()
 
     def _init_watcher(self):
-        self._watcher.addPath(str(self.paths.config_dir))
-        self._watcher.addPath(str(self.paths.presets_dir))
-        self._watcher.addPath(str(self.paths.auth_dir))
-        self._watcher.addPath(str(self.paths.db_dir))
+        self._watcher.addPath(str(self.config_dir))
+        self._watcher.addPath(str(self.presets_dir))
+        self._watcher.addPath(str(self.auth_dir))
+        self._watcher.addPath(str(self.db_dir))
 
-        self._watcher.addPath(str(self.paths.client_secret_path))
-        self._watcher.addPath(str(self.paths.ledger_path))
-        self._watcher.addPath(str(self.paths.creds_path))
-        self._watcher.addPath(str(self.paths.db_path))
+        self._watcher.addPath(str(self.client_secret_path))
+        self._watcher.addPath(str(self.ledger_path))
+        self._watcher.addPath(str(self.creds_path))
+        self._watcher.addPath(str(self.db_path))
 
     def _connect_signals(self) -> None:
         self._watcher.directoryChanged.connect(signals.configFileChanged)
@@ -444,9 +496,6 @@ class SettingsAPI:
         """
         Returns data for a ledger section or 'client_secret'.
         """
-        if section_name == 'metadata':
-            raise RuntimeError('Metadata section is not directly accessible.')
-
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
         return self.ledger_data[section_name].copy()
@@ -456,9 +505,6 @@ class SettingsAPI:
 
         """
         from ..ui.actions import signals
-
-        if section_name == 'metadata':
-            raise RuntimeError('Metadata section is not directly accessible.')
 
         if section_name == 'client_secret':
             logger.info('Setting entire client_secret data.')
@@ -493,9 +539,6 @@ class SettingsAPI:
         """
         from ..ui.actions import signals
 
-        if section_name == 'metadata':
-            raise RuntimeError('Metadata section is not directly accessible.')
-
         if section_name == 'client_secret':
             logger.info('Reloading client_secret from disk.')
             self.client_secret_data = self._load_client_secret()
@@ -525,12 +568,9 @@ class SettingsAPI:
         """
         from ..ui.actions import signals
 
-        if section_name == 'metadata':
-            raise RuntimeError('Metadata section is not directly accessible.')
-
         if section_name == 'client_secret':
             logger.info('Reverting client_secret to template.')
-            self.paths.revert_client_secret_to_template()
+            self.revert_client_secret_to_template()
             self.client_secret_data = self._load_client_secret()
             return
 
@@ -540,7 +580,7 @@ class SettingsAPI:
             raise ValueError(msg)
 
         # Load template data
-        with self.paths.ledger_template.open('r', encoding='utf-8') as f:
+        with self.ledger_template.open('r', encoding='utf-8') as f:
             template_data: Dict[str, Any] = json.load(f)
 
         if section_name not in template_data:
@@ -558,8 +598,6 @@ class SettingsAPI:
         """
         Saves the given section to disk.
         """
-        if section_name == 'metadata':
-            raise RuntimeError('Metadata section is not directly accessible.')
 
         if section_name == 'client_secret':
             logger.info(f'Saving client_secret to "{self.client_secret_path}"')
@@ -626,7 +664,7 @@ class SettingsAPI:
         from ..auth import service
         from ..database import database
 
-        if not self.paths.client_secret_path.exists():
+        if not self.client_secret_path.exists():
             return Status.ClientSecretNotFound
 
         try:
@@ -670,7 +708,7 @@ class UserSettings(QtCore.QSettings):
         self.setPath(
             QtCore.QSettings.IniFormat,
             QtCore.QSettings.UserScope,
-            str(settings.paths.usersettings_path)
+            str(settings.usersettings_path)
         )
 
         self.setFallbacksEnabled(True)

@@ -1,0 +1,100 @@
+"""
+Module for formatting decimal and currency values using Babel.
+
+"""
+
+from babel import Locale, numbers
+from typing import List
+
+CURRENCY_MAP: dict[str, str] = {
+    'US': 'USD',
+    'GB': 'GBP',
+    'DE': 'EUR',
+    'FR': 'EUR',
+    'BE': 'EUR',
+    'IT': 'EUR',
+    'ES': 'EUR',
+    'JP': 'JPY',
+    'CA': 'CAD',
+    'AU': 'AUD',
+    'IN': 'INR',
+    'BR': 'BRL',
+    'RU': 'RUB',
+    'CN': 'CNY',
+    'KR': 'KRW',
+    'DK': 'DKK',
+    'SE': 'SEK',
+    'NO': 'NOK',
+    'FI': 'EUR',
+    'HU': 'HUF',
+    'MX': 'MXN',
+    'ID': 'IDR',
+    'SA': 'SAR',
+    'ZA': 'ZAR',
+    'TR': 'TRY',
+    'NL': 'EUR',
+}
+
+LOCALE_MAP: List[str] = [
+    "ar_SA", "da_DK", "de_DE", "en_AU", "en_CA", "en_GB", "en_IN", "en_US",
+    "en_ZA", "es_ES", "es_MX", "fi_FI", "fr_BE", "fr_FR", "hu_HU",
+    "id_ID", "it_IT", "ja_JP", "ko_KR", "nb_NO", "nl_NL", "pt_BR",
+    "ru_RU", "sv_SE", "tr_TR", "zh_CN",
+]
+
+def get_currency_from_locale(locale: str) -> str:
+    """
+    Retrieve the default currency code based on the locale's territory.
+
+    Args:
+        locale (str): Locale string, e.g. 'fr_FR'.
+
+    Returns:
+        str: Currency code such as 'EUR'. Defaults to 'EUR' if the territory is unknown.
+    """
+    parts = locale.split('_')
+    if len(parts) < 2:
+        return 'EUR'
+    country_code = parts[1]
+    return CURRENCY_MAP.get(country_code, 'EUR')
+
+def format_float(value: float, locale: str) -> str:
+    """
+    Format a float as a decimal string according to the locale conventions.
+
+    Args:
+        value (float): The numeric value to be formatted.
+        locale (str): Locale string, e.g. 'en_US'.
+
+    Returns:
+        str: The formatted decimal string.
+    """
+    try:
+        locale_obj = Locale.parse(locale)
+        formatted_value = numbers.format_decimal(value, locale=locale_obj)
+        return formatted_value
+    except Exception as e:
+        print(f'Error formatting value: {e}')
+        return str(value)
+
+def format_currency_value(value: float, locale: str) -> str:
+    """
+    Format a float as a currency string based on the locale's default currency.
+
+    The default currency is determined by the territory extracted from the locale.
+
+    Args:
+        value (float): The numeric value to be formatted.
+        locale (str): Locale string, e.g. 'fr_FR'.
+
+    Returns:
+        str: The formatted currency string.
+    """
+    try:
+        currency_code = get_currency_from_locale(locale)
+        locale_obj = Locale.parse(locale)
+        formatted_currency = numbers.format_currency(value, currency=currency_code, locale=locale_obj)
+        return formatted_currency
+    except Exception as e:
+        print(f'Error formatting currency: {e}')
+        return str(value)
