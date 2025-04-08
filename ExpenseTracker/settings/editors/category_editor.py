@@ -558,7 +558,9 @@ class CategoryEditor(QtWidgets.QWidget):
         self.layout().addWidget(self.toolbar, 1)
 
         # Table
-        self.view = QtWidgets.QTableView(self)
+        from .views import TableView
+        self.view = TableView(self)
+        # self.view = QtWidgets.QTableView(self)
         self.view.setItemDelegate(CategoryItemDelegate())
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 

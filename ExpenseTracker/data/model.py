@@ -42,18 +42,15 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     """
     columns = ['Category', 'Chart', 'Amount']
 
-    def __init__(self, year_month: str, span: int = 1, parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
-        self.year_month: str = year_month
-        self.span: int = span
+        self.year_month: str = '2023-01'
+        self.span: int = 1
 
         self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
 
         self.setObjectName('ExpenseModel')
-
-        self.init_data()
-
         self._connect_signals()
 
     def _connect_signals(self) -> None:
@@ -332,8 +329,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             return None
         row = index.row()
         col = index.column()
+
         if row < 0 or row >= self.rowCount():
             return None
+
         value = self.data_df.iloc[row, col]
 
         if role == QtCore.Qt.DisplayRole:
@@ -344,9 +343,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     return f'{value}'
             elif col == 1:
                 if isinstance(value, float):
-                    return f'€{abs(value):.2f}'
+                    return f'€{value:.2f}'
                 elif isinstance(value, int):
-                    return f'€{abs(value)}.00'
+                    return f'€{value}.00'
                 else:
                     return f'{value}'
             elif col == 2:

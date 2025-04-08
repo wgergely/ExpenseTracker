@@ -27,6 +27,12 @@
     "category": "Category",
     "account": "Account Name"
   },
+  "metadata": {
+    "locale": "en-GB",
+    "currency": "EUR",
+    "summary_mode": "total",
+    "show_all_categories": true,
+  },
   "categories": {
     "Cash": {
       "display_name": "Cash",

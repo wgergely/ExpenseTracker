@@ -430,8 +430,6 @@ def convert_value(header: str, value: Any, header_data: Dict[str, str]) -> Any:
 
     return None
 
-    return None
-
 
 def google_serial_date_to_iso(serial: float) -> str:
     """Converts a Google Sheets date serial to an ISO 'YYYY-MM-DD' string.

@@ -39,7 +39,7 @@ def verify_creds():
         logging.error(f'Error verifying credentials: {ex}')
         raise RuntimeError(f'Error verifying credentials: {ex}') from ex
 
-    if not creds or not creds.valid:
+    if not creds:
         logging.error('Credentials are invalid or expired.')
         raise RuntimeError('Credentials are invalid or expired.')
 
@@ -180,7 +180,7 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
             logging.info('Cached credentials have mismatched scopes. Re-authentication required.')
             creds = None
 
-    if creds and creds.valid:
+    if creds:
         logging.info('Cached credentials are valid.')
         return creds
 
@@ -193,7 +193,6 @@ def authenticate(force: bool = False) -> google.oauth2.credentials.Credentials:
             return creds
         except google.auth.exceptions.RefreshError as ex:
             logging.warning(f'Refresh failed: {ex}')
-            creds = None
 
     logging.info('Starting new OAuth flow...')
 

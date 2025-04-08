@@ -148,8 +148,8 @@ class SettingsWidget(QtWidgets.QDialog):
 
         self.header_editor = header_editor.HeaderEditor(self)
         self._add_section(
-            'Spreadsheet Header',
-            'The columns of the remote spreadsheet.',
+            'Source Columns',
+            'Define the columns of the source spreadsheet.',
             parent,
             self.header_editor
         )
@@ -157,7 +157,7 @@ class SettingsWidget(QtWidgets.QDialog):
         self.data_mapping_editor = data_mapping_editor.DataMappingEditor(self)
         self._add_section(
             'Column Roles',
-            'Set the remote spreadsheet columns roles.',
+            'Define which source column should be used for which role.',
             parent,
             self.data_mapping_editor
         )

@@ -1,18 +1,21 @@
 from PySide6 import QtCore, QtWidgets, QtGui
+
 from .model import ExpenseModel, RateRole, TransactionsModel
-from .model import ExpenseSortFilterProxyModel, TransactionsSortFilterProxyModel
+from .model import TransactionsSortFilterProxyModel
 from ..ui import ui
 from ..ui.actions import signals
 
-class TransactionsDialog(QtWidgets.QDockWidget):
+
+class TransactionsWidget(QtWidgets.QDockWidget):
     """
-    TransactionsDialog is a custom dockable widget for displaying transaction data.
+    TransactionsWidget is a custom dockable widget for displaying transaction data.
 
     It initializes the view and sets up the layout for displaying transactions.
     """
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__('Transactions', parent=parent)
-        self.setObjectName('ExpenseTrackerTransactionsDialog')
+        self.setObjectName('ExpenseTrackerTransactionsWidget')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
             QtWidgets.QDockWidget.DockWidgetFloatable
@@ -55,10 +58,12 @@ class TransactionsDialog(QtWidgets.QDockWidget):
             ui.Size.DefaultHeight(1.0)
         )
 
+
 class GraphDelegate(QtWidgets.QStyledItemDelegate):
     """A custom delegate to draw a simple bar chart for the chart column.
 
     """
+
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
         super().paint(painter, option, index)
@@ -93,13 +98,15 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
         o = ui.Size.Separator(5.0) if (hover or selected) else ui.Size.Separator(3.0)
         painter.drawRoundedRect(rect, o, o)
 
+
 class ExpenseView(QtWidgets.QTableView):
     """
     ExpenseView is a custom QTableView for displaying monthly expense data.
 
-    Double-clicking or pressing Enter on a row opens a dockable TransactionsDialog on the right.
+    Double-clicking or pressing Enter on a row opens a dockable TransactionsWidget on the right.
     Tab and Shift+Tab navigate between rows (unless at the beginning or end of the list).
     """
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.horizontalHeader().hide()
@@ -161,7 +168,7 @@ class ExpenseView(QtWidgets.QTableView):
     def activate_action(self, index: QtCore.QModelIndex) -> None:
         """
         Slot called on double-clicking or pressing Enter on a row.
-        Opens a dockable TransactionsDialog on the right side.
+        Opens a dockable TransactionsWidget on the right side.
         """
         if not index.isValid():
             return
@@ -171,7 +178,7 @@ class ExpenseView(QtWidgets.QTableView):
             return
 
         if not hasattr(main, 'transactions_view') or main.transactions_view is None:
-            main.transactions_view = TransactionsDialog(parent=main)
+            main.transactions_view = TransactionsWidget(parent=main)
             main.addDockWidget(QtCore.Qt.RightDockWidgetArea, main.transactions_view)
         elif main.transactions_view.isVisible():
             main.transactions_view.raise_()
@@ -200,22 +207,26 @@ class ExpenseView(QtWidgets.QTableView):
                     return
         super().keyPressEvent(event)
 
+
 class TransactionsView(QtWidgets.QTableView):
     """
     TransactionsView is a custom QTableView for displaying transaction data.
 
     It configures selection, sizing, and header behavior for an optimal display of the transactions table.
     """
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent=parent)
+
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
-        self.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         self.setShowGrid(True)
         self.setAlternatingRowColors(False)
-        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.MinimumExpanding)
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.MinimumExpanding
+        )
 
     def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(
@@ -223,21 +234,25 @@ class TransactionsView(QtWidgets.QTableView):
             ui.Size.DefaultHeight(1.0)
         )
 
-    def _init_header(self) -> None:
+    def setModel(self, model: QtCore.QAbstractItemModel) -> None:
+        """Sets the model for the view and initializes the header."""
+        super().setModel(model)
+
         header = self.horizontalHeader()
+        header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
+
         header.setSortIndicatorShown(True)
         header.setSortIndicator(0, QtCore.Qt.AscendingOrder)
         header.setSectionsClickable(True)
         header.setSectionsMovable(False)
+
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.8))
         header.setHidden(True)
-
-    def setModel(self, model: QtCore.QAbstractItemModel) -> None:
-        """Sets the model for the view and initializes the header."""
-        super().setModel(model)
-        self._init_header()

@@ -15,9 +15,11 @@ Classes:
 from datetime import datetime
 
 from PySide6 import QtCore, QtWidgets
+from dateutil.relativedelta import relativedelta
 
 from . import ui
 from .actions import signals
+from ..settings import lib
 
 
 class YearMonthPopup(QtWidgets.QFrame):
@@ -211,6 +213,9 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         self._init_min_max_dates()
         self._connect_signals()
 
+        QtCore.QTimer.singleShot(150, self.load_saved_state)
+
+
     def _connect_signals(self):
         self.start_selector.yearMonthChanged.connect(self._start_changed)
         self.end_selector.yearMonthChanged.connect(self._end_changed)
@@ -246,6 +251,28 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         # End selector's limits: minimum follows start; maximum is global.
         self.end_selector.min_date = self.start_selector.get_value()
         self.end_selector.max_date = global_max_date
+
+    def load_saved_state(self):
+        """
+        Load saved state for the date range.
+
+        Temporarily blocks signals to avoid undesired overrides during initialization.
+        """
+        now = datetime.now()
+        default_start_date = f'{now.year}-{now.month:02d}'
+        start_date = lib.state.value('data_range/start_date') or default_start_date
+        span = lib.state.value('data_range/span') or 1
+
+        start_datetime = datetime.strptime(start_date, "%Y-%m")
+        end_datetime = start_datetime + relativedelta(months=span - 1)
+        end_date = end_datetime.strftime("%Y-%m")
+
+        self.end_selector.blockSignals(True)
+        self.start_selector.set_value(start_date)
+        self.end_selector.set_value(end_date)
+        self.end_selector.blockSignals(False)
+
+        signals.dataRangeChanged.emit(start_date, span)
 
     def _date_str_to_int(self, date_str):
         return int(date_str[:4]) * 12 + int(date_str[5:7])

@@ -23,8 +23,11 @@ operations and errors. Supports creating, removing, listing, and loading
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+organization_name = 'ExpenseTracker'
+app_name = 'ExpenseTracker'
 
-class Status(enum.Enum):
+
+class Status(enum.StrEnum):
     UnknownStatus = enum.auto()
     ClientSecretNotFound = enum.auto()
     ClientSecretInvalid = enum.auto()
@@ -34,6 +37,18 @@ class Status(enum.Enum):
     ServiceUnavailable = enum.auto()
     CacheInvalid = enum.auto()
     StatusOkay = enum.auto()
+
+
+status_user_strings = {
+    Status.ClientSecretNotFound: 'Google authentication information has not been set up. Please check the settings.',
+    Status.ClientSecretInvalid: 'Google Client Secret was not found or is invalid. Please check the settings.',
+    Status.SpreadsheetIdNotConfigured: 'Spreadsheet ID is has not yet been set. Make sure you set a valid spreadsheet ID in the settings.',
+    Status.SpreadsheetWorksheetNotConfigured: 'Spreadsheet worksheet name is has not yet been set. Make sure you set a valid worksheet name in the settings.',
+    Status.NotAuthenticated: 'Not authenticated with Google. Please authenticate.',
+    Status.ServiceUnavailable: 'Google Sheets service is unavailable. Please check your connection.',
+    Status.CacheInvalid: 'The remote data has not yet been fetched, or is out of date. Please fetch the data again.',
+    Status.StatusOkay: 'All settings are valid and the application is ready to use.'
+}
 
 
 def is_valid_hex_color(value):
@@ -66,6 +81,7 @@ class ConfigPaths:
         self.ledger_path = self.config_dir / 'ledger.json'
         self.creds_path = self.auth_dir / 'creds.json'
         self.db_path = self.db_dir / 'cache.db'
+        self.usersettings_path = self.config_dir / 'settings.ini'
 
         self._verify_and_prepare()
 
@@ -139,6 +155,8 @@ class ConfigPaths:
             raise FileNotFoundError(msg)
         shutil.copy(self.client_secret_template, self.client_secret_path)
 
+
+EXPENSE_DATA_COLUMNS = ['category', 'total', 'transactions']
 
 DATA_MAPPING_KEYS = ['date', 'amount', 'description', 'category', 'account']
 DATA_MAPPING_SEPARATOR_CHARS = ['|', '+']
@@ -659,3 +677,32 @@ class SettingsAPI:
 
 
 settings = SettingsAPI()
+
+
+class UserSettings(QtCore.QSettings):
+
+    def __init__(self):
+        super().__init__(organization_name, app_name)
+
+        self.setPath(
+            QtCore.QSettings.IniFormat,
+            QtCore.QSettings.UserScope,
+            str(settings.paths.usersettings_path)
+        )
+
+        self.setFallbacksEnabled(True)
+        self._connect_signals()
+
+    def _connect_signals(self):
+        signals.dataRangeChanged.connect(self.save_data_range)
+
+    @QtCore.Slot(str, int)
+    def save_data_range(self, start_date, span):
+        """Saves the data range to settings.
+
+        """
+        self.setValue('data_range/start_date', start_date)
+        self.setValue('data_range/span', span)
+
+
+state = UserSettings()

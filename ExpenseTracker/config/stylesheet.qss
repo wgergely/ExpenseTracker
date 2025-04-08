@@ -362,7 +362,6 @@ QTableView::item:hover {
 }
 
 
-
 QHeaderView {
     font-size: <SmallText@1.0>px;
     border: none;
@@ -373,6 +372,9 @@ QHeaderView {
 QHeaderView::section {
     font-size: <SmallText@1.0>px;
     padding-left: <Margin@0.5>px;
+    padding-right: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
     height: <RowHeight@1.0>px;
     background-color: <Transparent>;
     color: <DisabledText>;
@@ -542,6 +544,17 @@ QSplitter::handle:horizontal {
 QSplitter::handle:vertical {
     height: <Separator@1.0>px;
 }
+
+QMainWindow::separator {
+    background: <Opaque>;
+    width: <Indicator@1.0>px;
+    height: <Indicator@1.0>px;
+}
+
+QMainWindow::separator:hover {
+    background: <DarkBackground>;
+}
+
 
 RangeSelectorBar {
     padding: <Indicator@2.0>px <Indicator@0.5>px;

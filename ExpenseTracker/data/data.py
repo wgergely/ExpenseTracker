@@ -5,7 +5,7 @@ This module provides a high-level interface for loading transaction data from th
 cache database, filtering and preparing it for analysis, and retrieving expenditure summaries.
 
 Examples:
-    >>> df = get_monthly_expenses("2023-06")
+    >>> df = get_monthly_expenses('2023-06')
 """
 import logging
 import re
@@ -16,8 +16,6 @@ from ..database.database import get_cached_data, DATABASE_DATE_FORMAT
 from ..settings import lib
 
 logging.basicConfig(level=logging.INFO)
-
-EXPENSES_COLUMNS =['category', 'total', 'transactions']
 
 
 def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
@@ -31,7 +29,8 @@ def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
         logging.error(f'Header mapping is missing keys: {difference}')
         return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
 
-    # Create a `target = [sources]` mapping for mapping merge requests
+    # Implement the merge syntax parsing here for column mapping definitions, like
+    # description=Description+Notes+Account
     merge_mapping = {}
     for k, v in config.items():
         j = '\\'.join(lib.DATA_MAPPING_SEPARATOR_CHARS)
@@ -46,7 +45,7 @@ def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
     for k, v in merge_mapping.items():
         new_df[k] = pd.Series(dtype='object')
 
-        logging.info(f'Merging columns {v} into {k}')
+        logging.debug(f'Merging columns {v} into {k}')
 
         if len(v) == 1:
             new_df[k] = df[v[0]].copy()
@@ -92,6 +91,7 @@ def _conform_amount_column(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def _conform_string_columns(df: pd.DataFrame) -> pd.DataFrame:
     for col in 'description', 'category', 'account':
         df[col] = df[col].fillna('').astype(str)
@@ -122,81 +122,37 @@ def conform_cached_data(
 
     return df
 
-    # try:
-    #     # Parse dates as UTC-aware then remove timezone to yield naive datetimes
-    #     df['date'] = pd.to_datetime(df['date'], errors='coerce', utc=True).dt.tz_localize(None)
-    # except Exception as ex:
-    #     logging.error(f'Error parsing dates: {ex}')
-    #     return pd.DataFrame()
-    # df = df.dropna(subset=['date'])
-    #
-    # # Use a naive datetime for cutoff_date by removing timezone info
-    # today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    # try:
-    #     cutoff_date = today.replace(year=today.year - years_back)
-    # except ValueError:
-    #     cutoff_date = today - datetime.timedelta(days=years_back * 365)
-    # df = df[df['date'] >= cutoff_date]
-    #
-    # categories_config = lib.settings.get_section('categories')
-    # if not categories_config:
-    #     logging.error('No categories found in config')
-    #     return pd.DataFrame()
-    # excluded_categories = {cat for cat, info in categories_config.items() if info.get('excluded', False)}
-    # df['category'] = df['category'].fillna('Miscellaneous')
-    # df = df[~df['category'].isin(excluded_categories)]
-    #
-    # try:
-    #     df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-    # except Exception as ex:
-    #     logging.error(f'Error converting amounts to numeric: {ex}')
-    #     return pd.DataFrame()
-    # df = df.dropna(subset=['amount'])
-    #
-    # logging.info(
-    #     f'Prepared a DataFrame of {len(df)} expense rows from the last {years_back} years, '
-    #     f'excluding categories: {sorted(excluded_categories)}.'
-    # )
-    # return df
 
-
-def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: int = 1) -> pd.DataFrame:
+def get_monthly_expenses(
+        year_month: str,
+        exclude_positive: bool = True,
+        sort_column: str = 'category',
+        span: int = 1
+) -> pd.DataFrame:
     """
-    Returns a detailed breakdown by category for the specified period starting at year_month
-    (format: 'YYYY-MM') and spanning a given number of months using exclusively pandas operations.
-    For each category, the resulting DataFrame contains:
-      - "category": the category name,
-      - "total": the sum of all expenses in that category,
-      - "transactions": a list of transaction objects for that category. Each transaction object
-        includes only the keys defined in the ledger.json "data_header_mapping".
-
-    Args:
-        year_month: A string representing the starting target month in 'YYYY-MM' format.
-        sort_column: The column to sort the resulting DataFrame by. Default is 'category'.
-        span: Number of months to include starting from the given year_month. Defaults to 1.
-
-    Returns:
-        A pandas DataFrame with columns ['category', 'total', 'transactions']. If no data exists
-        for the specified period, an empty DataFrame is returned.
     """
-    df = get_cached_data()
-    df = conform_cached_data(df)
-    if df.empty:
-        logging.warning('No cached data available. Returning empty DataFrame.')
-        return pd.DataFrame(columns=['category', 'total', 'transactions'])
-
+    # Span must be a minimum of 1 month
     span = int(span) if span else 1
     if span < 1:
         span = 1
 
+    df = get_cached_data()
+    df = conform_cached_data(df)
+
+    if df.empty:
+        logging.warning('No cached data available. Returning empty DataFrame.')
+        return pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
+
     start_period = pd.Period(year_month)
 
     target_periods = [start_period + i for i in range(span)]
-    df_month = df_prepared[df_prepared['date'].dt.to_period('M').isin(target_periods)]
+    df_month = df[df['date'].dt.to_period('M').isin(target_periods)]
     if df_month.empty:
-        return pd.DataFrame(columns=['category', 'total', 'transactions'])
+        logging.warning(f'No data found for the specified period: {year_month}')
+        return pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
 
-    df_month = df_month[df_month['amount'] < 0]
+    if exclude_positive:
+        df_month = df_month[df_month['amount'] <= 0]
 
     mapping = lib.settings.get_section('data_header_mapping')
     desired_keys = list(mapping.keys())
@@ -209,6 +165,7 @@ def get_monthly_expenses(year_month: str, sort_column: str = 'category', span: i
         }))
         .reset_index()
     )
+
     breakdown = breakdown[breakdown['category'].notna() & (breakdown['category'] != '')]
     breakdown = breakdown.sort_values(sort_column, ascending=True).reset_index(drop=True)
     return breakdown

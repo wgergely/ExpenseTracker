@@ -345,10 +345,7 @@ class HeaderEditor(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Minimum,
             QtWidgets.QSizePolicy.MinimumExpanding
         )
-        self.setMinimumSize(
-            ui.Size.Margin(1.0),
-            ui.Size.RowHeight(7.5)
-        )
+        self.setMinimumHeight(ui.Size.RowHeight(10))
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         ui.set_stylesheet(self)
@@ -368,7 +365,8 @@ class HeaderEditor(QtWidgets.QWidget):
 
         self.layout().addWidget(self.toolbar, 1)
 
-        self.view = QtWidgets.QTableView(parent=self)
+        from .views import TableView
+        self.view = TableView(parent=self)
 
         delegate = HeaderItemDelegate(self.view)
         self.view.setItemDelegate(delegate)

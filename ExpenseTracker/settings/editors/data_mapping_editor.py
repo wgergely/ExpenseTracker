@@ -240,7 +240,8 @@ class DataMappingEditor(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
 
-        self.view = QtWidgets.QTableView(self)
+        from .views import TableView
+        self.view = TableView(parent=self)
         self.view.setItemDelegate(self.delegate)
 
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
