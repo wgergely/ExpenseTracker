@@ -236,8 +236,8 @@ class ConfigPaths:
         self.gcp_help_path: pathlib.Path = self.template_dir / 'gcp.md'
 
         # Config directories
+        self.presets_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
         self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
-        self.presets_dir: pathlib.Path = self.config_dir / 'presets'
         self.auth_dir: pathlib.Path = self.config_dir / 'auth'
         self.db_dir: pathlib.Path = self.config_dir / 'db'
 
@@ -246,7 +246,9 @@ class ConfigPaths:
         self.ledger_path: pathlib.Path = self.config_dir / 'ledger.json'
         self.creds_path: pathlib.Path = self.auth_dir / 'creds.json'
         self.db_path: pathlib.Path = self.db_dir / 'cache.db'
-        self.usersettings_path: pathlib.Path = self.config_dir / 'settings.ini'
+
+        # Usersettings
+        self.usersettings_path: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'usersettings.ini'
 
         self._verify_and_prepare()
 
@@ -375,6 +377,7 @@ class MetadataAPI:
 
         self.ledger_data['metadata'][key] = value
         self.save_section('metadata')
+
 
 class SettingsAPI(ConfigPaths, MetadataAPI):
     """

@@ -13,7 +13,7 @@ import math
 from typing import Any
 
 import pandas as pd
-from PySide6 import QtCore
+from PySide6 import QtCore, QtGui
 
 from .data import get_monthly_expenses
 from ..settings import lib
@@ -342,10 +342,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 1:
-                if isinstance(value, float):
-                    return f'€{value:.2f}'
-                elif isinstance(value, int):
-                    return f'€{value}.00'
+                from ..settings import locale
+
+                if isinstance(value, (int, float)):
+                    return locale.format_currency_value(value, lib.settings['locale'])
                 else:
                     return f'{value}'
             elif col == 2:
@@ -381,7 +381,11 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         elif role == QtCore.Qt.FontRole:
             if index.column() == 0:
                 font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
-                font.setBold(False)
+                font.setWeight(QtGui.QFont.Normal)
+                return font
+            if index.column() == 1:
+                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
+                font.setWeight(QtGui.QFont.Black)
                 return font
             if index.column() == 2:
                 font, _ = ui.Font.MediumFont(ui.Size.SmallText(1.0))

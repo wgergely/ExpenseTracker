@@ -9,6 +9,7 @@ from .editors import client_editor
 from .editors import data_mapping_editor
 from .editors import header_editor
 from .editors import spreadsheet_editor
+from .editors import metadata_editor
 from ..ui import ui
 
 settings_widget = None
@@ -73,6 +74,7 @@ class SettingsWidget(QtWidgets.QDialog):
         self.header_editor = None
         self.data_mapping_editor = None
         self.category_editor = None
+        self.metadata_editor = None
 
         ui.set_stylesheet(self)
 
@@ -129,6 +131,14 @@ class SettingsWidget(QtWidgets.QDialog):
         o = ui.Size.Margin(1.0)
         parent.layout().setContentsMargins(o, o, o, o)
         parent.layout().setSpacing(o)
+
+        self.metadata_editor = metadata_editor.MetadataWidget(self)
+        self._add_section(
+            'General Settings',
+            'Settings for locale, theme, and summary mode.',
+            parent,
+            self.metadata_editor
+        )
 
         self.client_editor = client_editor.ClientEditor(self)
         self._add_section(

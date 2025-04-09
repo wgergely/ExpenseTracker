@@ -74,7 +74,6 @@ def format_float(value: float, locale: str) -> str:
         formatted_value = numbers.format_decimal(value, locale=locale_obj)
         return formatted_value
     except Exception as e:
-        print(f'Error formatting value: {e}')
         return str(value)
 
 def format_currency_value(value: float, locale: str) -> str:
