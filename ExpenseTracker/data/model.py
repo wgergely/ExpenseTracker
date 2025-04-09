@@ -5,7 +5,7 @@ This module provides the ExpenseModel, a QAbstractTableModel for displaying
 expense data per category over a specified period with a summary row.
 The model works with the new data structure from the data module, which returns a
 pandas DataFrame with columns 'category', 'total', and 'transactions'. Display labels
-for "category" and "amount" are derived from the ledger.json "data_header_mapping" configuration.
+for "category" and "amount" are derived from the ledger.json "mapping" configuration.
 """
 
 import logging
@@ -196,7 +196,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
-            mapping = lib.settings.get_section('data_header_mapping')
+            mapping = lib.settings.get_section('mapping')
             if not mapping:
                 return None
 
@@ -254,7 +254,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     """
     TransactionsModel displays transaction data as table rows and columns.
     The header names are derived from the transaction DataFrame columns, which are
-    renamed based on the ledger.json "data_header_mapping" configuration.
+    renamed based on the ledger.json "mapping" configuration.
     """
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:

@@ -1,5 +1,5 @@
 """
-Data Mapping Editor for the 'data_header_mapping' portion of ledger.json.
+Data Mapping Editor for the 'mapping' portion of ledger.json.
 
 """
 
@@ -27,23 +27,23 @@ class DataMappingModel(QtCore.QAbstractTableModel):
 
         @QtCore.Slot(str)
         def on_config_changed(section_name):
-            if section_name != 'data_header_mapping':
+            if section_name != 'mapping':
                 return
             self.init_data()
 
         signals.configSectionChanged.connect(on_config_changed)
 
         self.dataChanged.connect(
-            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+            lambda: lib.settings.set_section('mapping', self.get_current_section_data())
         )
         self.rowsRemoved.connect(
-            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+            lambda: lib.settings.set_section('mapping', self.get_current_section_data())
         )
         self.rowsInserted.connect(
-            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+            lambda: lib.settings.set_section('mapping', self.get_current_section_data())
         )
         self.rowsMoved.connect(
-            lambda: lib.settings.set_section('data_header_mapping', self.get_current_section_data())
+            lambda: lib.settings.set_section('mapping', self.get_current_section_data())
         )
 
     @QtCore.Slot()
@@ -51,7 +51,7 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         self.beginResetModel()
         self._mapping = {k: '' for k in lib.DATA_MAPPING_KEYS}
         try:
-            v = lib.settings.get_section('data_header_mapping').copy()
+            v = lib.settings.get_section('mapping').copy()
             self._mapping = {k: v.get(k, '') for k in lib.DATA_MAPPING_KEYS}
         finally:
             self.endResetModel()
@@ -262,7 +262,7 @@ class DataMappingEditor(QtWidgets.QWidget):
         QtCore.Slot()
 
         def save_to_disk():
-            lib.settings.set_section('data_header_mapping', self.view.modelw().get_current_section_data())
+            lib.settings.set_section('mapping', self.view.modelw().get_current_section_data())
 
         action = QtGui.QAction('Save to Disk', self.view)
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -272,7 +272,7 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         @QtCore.Slot()
         def revert_to_defaults():
-            lib.settings.revert_section('data_header_mapping')
+            lib.settings.revert_section('mapping')
 
         action = QtGui.QAction('Revert', self.view)
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -282,7 +282,7 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         @QtCore.Slot()
         def reload_from_disk():
-            lib.settings.reload_section('data_header_mapping')
+            lib.settings.reload_section('mapping')
 
         action = QtGui.QAction('Refresh', self.view)
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)

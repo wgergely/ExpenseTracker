@@ -10,86 +10,160 @@ The primary functions are:
 """
 
 import datetime
+import enum
 import logging
 import sqlite3
 import time
-from typing import Optional, Dict, Any
 
 import pandas as pd
 from googleapiclient.errors import HttpError
 
 from ..auth import service
 from ..settings import lib
-
-logging.basicConfig(level=logging.INFO)
+from ..status import status
 
 TABLE_TRANSACTIONS = 'transactions'
 TABLE_META = 'cache_meta'
 CACHE_MAX_AGE_DAYS = 7
 
-DATE_LOCALES = {
-    'en_GB': '%d/%m/%Y',
-    'de_DE': '%d.%m.%Y',
-    'en_US': '%m/%d/%Y',
-    'hu_HU': '%Y.%m.%d',
-    'jp_JP': '%Y/%m/%d',
-}
-
 DATABASE_DATE_FORMAT = '%Y-%m-%d'
 
 
-def verify_db() -> None:
-    """Checks whether the local cache database is present and valid."""
+class CacheState(enum.StrEnum):
+    """Enum for cache invalidation reasons.
+
+    """
+    Uninitialized = 'cache is uninitialized'
+    Empty = 'cache is empty'
+    Stale = 'cache is stale'
+    Error = 'cache has error'
+    Valid = 'cache is valid'
+
+
+def set_state(state: CacheState) -> None:
+    """Marks the cache as invalid.
+
+    """
+    if state not in CacheState:
+        raise ValueError(f'Invalidation reason must be one of {list(CacheState)}')
+
     if not lib.settings.db_path.exists():
-        logging.error('No local cache DB path found.')
-        raise RuntimeError('No local cache DB path found.')
+        create_db()
 
-    try:
-        with sqlite3.connect(str(lib.settings.db_path)) as conn:
-            if not table_exists(conn, TABLE_TRANSACTIONS):
-                logging.error('The "transactions" table is missing.')
-                raise RuntimeError('The "transactions" table is missing.')
+    with sqlite3.connect(str(lib.settings.db_path)) as conn:
+        if table_exists(conn, TABLE_META):
+            conn.execute(f"""
+                UPDATE {TABLE_META}
+                SET is_valid=0,
+                    error_message=?
+                WHERE meta_id=1
+            """, (state.name,))
 
-            state = get_cache_state(conn)
-            if not state['is_valid']:
-                logging.warning('Cache is marked invalid.')
+    logging.warning(f'State updated: {state.value}.')
 
-            if is_stale(state['last_sync']):
-                logging.warning('Cache is older than the allowed threshold and will be invalidated.')
-                invalidate_cache(reason='Cache is older than 7 days')
 
-        logging.info('The cache is valid.')
+def verify_db() -> None:
+    """Checks whether the local cache database is present and valid.
 
-    except sqlite3.Error as ex:
-        logging.error(f'Error while verifying the local DB: {ex}')
-        raise RuntimeError(f'Error while verifying the local DB: {ex}') from ex
+    """
+    if not lib.settings.db_path.exists():
+        create_db()
+        if not lib.settings.db_path.is_file():
+            raise status.CacheInvalidException(f'Could not create the local cache database at {lib.settings.db_path}')
+
+    with sqlite3.connect(str(lib.settings.db_path)) as conn:
+        if not table_exists(conn, TABLE_META):
+            conn.close()
+            create_db()
+            return
+
+        if not table_exists(conn, TABLE_TRANSACTIONS):
+            set_state(CacheState.Uninitialized)
+            raise status.CacheInvalidException(f'The database is uninitialized. No transactions table found.')
+
+        # Compare cache headers with the config headers
+
+        cursor = conn.execute(f'SELECT * FROM {TABLE_TRANSACTIONS} LIMIT 1')
+        columns = [col[0] for col in cursor.description]
+        if 'local_id' in columns:
+            columns.remove('local_id')
+
+        # Remove the id columns from the list
+        logging.info(f'Found previously cached transactions with {len(columns)} columns: {columns}')
+
+        config = lib.settings.get_section('header')
+        if not config:
+            raise status.HeadersInvalidException
+
+        # Check if the columns in the cache match the header config
+        difference = set(columns).symmetric_difference(set(config.keys()))
+        if difference:
+            logging.info(f'Found {len(difference)} columns that differ between the config and the cache: {difference}')
+            set_state(CacheState.Stale)
+            raise status.CacheInvalidException(f'Column mismatch between config and cache: {difference}')
+
+        # Count the number of rows
+        cursor = conn.execute(f'SELECT COUNT(*) FROM {TABLE_TRANSACTIONS}')
+        row = cursor.fetchone()
+        if row and row[0] == 0:
+            set_state(CacheState.Empty)
+            return
+
+        row_count = row[0]
+
+        # Check the last sync date and mark cache stalte if older than CACHE_MAX_AGE_DAYS
+        cursor = conn.execute(f'SELECT last_sync FROM {TABLE_META} WHERE meta_id=1')
+        row = cursor.fetchone()
+        if row and not row[0]:
+            set_state(CacheState.Uninitialized)
+            raise status.CacheInvalidException('Cache is stale. Last sync date not found.')
+
+        if row and row[0]:
+            last_sync = datetime.datetime.fromisoformat(row[0])
+
+            age = datetime.datetime.now(datetime.timezone.utc) - last_sync
+            if age.days >= CACHE_MAX_AGE_DAYS:
+                set_state(CacheState.Stale)
+                raise status.CacheInvalidException(f'Cache is stale. Last sync: {last_sync}')
+
+        logging.info(
+            f'Cache is valid.\n'
+            f'Last sync={last_sync}\n'
+            f'Rows={row_count}\n'
+            f'Columns={len(columns)}'
+        )
 
 
 def create_db() -> None:
     """Creates or replaces the local cache database."""
     if lib.settings.db_path.exists():
-        logging.info(f'{lib.settings.db_path} already exists, removing it...')
-        lib.settings.db_path.unlink()
+        try:
+            logging.info(f'{lib.settings.db_path} already exists, removing it...')
+            lib.settings.db_path.unlink()
+        except OSError as ex:
+            logging.error(f'Error removing the local DB file: {ex}')
 
     with sqlite3.connect(str(lib.settings.db_path)) as conn:
         conn.execute(f"""
             CREATE TABLE {TABLE_META}(
                 meta_id INTEGER PRIMARY KEY,
                 last_sync TEXT,
-                is_valid INTEGER,
-                error_message TEXT
+                state TEXT,
             )
         """)
         conn.execute(f"""
-            INSERT INTO {TABLE_META}(meta_id, last_sync, is_valid, error_message)
-            VALUES(1, NULL, 0, 'Initialized with no data yet.')
+            INSERT INTO {TABLE_META} (meta_id, last_sync, state)
+            VALUES(1, NULL, {CacheState.Empty.name})
         """)
 
-    logging.info('A new local cache DB was created with an empty meta table.')
+    set_state(CacheState.Uninitialized)
 
 
-def cache_remote_data(force: bool = False) -> None:
-    """Fetches remote ledger data from Google Sheets and caches it locally."""
+def cache_remote_data() -> None:
+    """Fetches remote ledger data from Google Sheets and caches it locally.
+
+    """
+
     if not lib.settings.db_path.exists():
         logging.info('No local DB found. A new one will be created.')
         create_db()
@@ -102,61 +176,54 @@ def cache_remote_data(force: bool = False) -> None:
     try:
         data = service.fetch_data()
     except (RuntimeError, HttpError) as ex:
-        invalidate_cache(reason=f'Remote data pull failed: {ex}')
+        set_state(reason=f'Remote data pull failed: {ex}')
         raise RuntimeError(f'Failed to fetch remote data. Reason: {ex}') from ex
 
     try:
         validate_dataframe(data, header_data=header_data)
     except RuntimeError as ex:
-        invalidate_cache(reason=f'Validation failed: {ex}')
+        set_state(reason=f'Validation failed: {ex}')
         raise RuntimeError(f'Failed to validate remote data. Reason: {ex}') from ex
 
     try:
         with sqlite3.connect(str(lib.settings.db_path)) as conn:
-            recreate_transactions_table(conn, data, header_data)
+            create_transactions_table(conn, data, header_data)
             insert_data(conn, data, header_data)
             update_meta_valid(conn)
         logging.info('Remote data was fetched and cached successfully.')
     except (RuntimeError, HttpError) as ex:
-        invalidate_cache(reason=f'Remote data pull failed: {ex}')
+        set_state(reason=f'Remote data pull failed: {ex}')
         raise RuntimeError(f'Failed to fetch or store remote data. Reason: {ex}') from ex
 
 
-def get_cached_data(force: bool = False) -> pd.DataFrame:
+def get_cached_data() -> pd.DataFrame:
     """
-    Loads all rows from the 'transactions' table in the local cache database into a pandas DataFrame.
-
-    Args:
-        force: If True, forces a reload of the data from the remote source.
-               If False, checks if the local cache is valid before loading.
+    Loads the cached data from disk as a DataFrame.
 
     Returns:
         A DataFrame with all columns from the transaction table, or an empty DataFrame if the
         database is invalid or an error occurs during loading.
+
     """
-    try:
-        verify_db()
-    except RuntimeError as ex:
-        logging.error(f'Local cache DB is invalid: {ex}')
-        return pd.DataFrame()
+    verify_db()
 
-    if force:
-        logging.info('Forcing a reload of the remote data.')
-        cache_remote_data(force=force)
+    logging.info('Forcing a reload of the remote data.')
+    cache_remote_data(force=force)
 
-    conn = None
-    try:
-        conn = sqlite3.connect(str(lib.settings.db_path))
-        df = pd.read_sql_query('SELECT * FROM transactions', conn)
-        logging.info(f'Loaded {len(df)} rows from the "transactions" table.')
-        return df
-    except sqlite3.Error as ex:
-        logging.error(f'Error reading from local DB: {ex}')
-    finally:
-        if conn is not None:
-            conn.close()
 
-    return pd.DataFrame()
+conn = None
+try:
+    conn = sqlite3.connect(str(lib.settings.db_path))
+    df = pd.read_sql_query('SELECT * FROM transactions', conn)
+    logging.info(f'Loaded {len(df)} rows from the "transactions" table.')
+    return df
+except sqlite3.Error as ex:
+    logging.error(f'Error reading from local DB: {ex}')
+finally:
+    if conn is not None:
+        conn.close()
+
+return pd.DataFrame()
 
 
 def clear_local_cache() -> bool:
@@ -188,22 +255,6 @@ def clear_local_cache() -> bool:
     return True
 
 
-def invalidate_cache(reason: str) -> None:
-    """Marks the cache as invalid."""
-    if not lib.settings.db_path.exists():
-        return
-
-    with sqlite3.connect(str(lib.settings.db_path)) as conn:
-        if table_exists(conn, TABLE_META):
-            conn.execute(f"""
-                UPDATE {TABLE_META}
-                SET is_valid=0,
-                    error_message=?
-                WHERE meta_id=1
-            """, (reason,))
-    logging.warning(f'The cache was marked invalid. Reason: {reason}')
-
-
 def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     """Determines if table_name exists in the connected SQLite database."""
     cursor = conn.execute(
@@ -213,14 +264,7 @@ def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return cursor.fetchone() is not None
 
 
-def get_cache_state(conn: sqlite3.Connection) -> Dict[str, Any]:
-    """Reads the meta table to determine if the cache is valid, when it was last synced,
-    and any stored error messages.
-    """
-    state = {'last_sync': None, 'is_valid': False, 'error_message': None}
-    if not table_exists(conn, TABLE_META):
-        return state
-
+def _get_cache_state(conn: sqlite3.Connection) -> CacheState:
     row = conn.execute(f"""
         SELECT last_sync, is_valid, error_message
         FROM {TABLE_META}
@@ -228,9 +272,9 @@ def get_cache_state(conn: sqlite3.Connection) -> Dict[str, Any]:
     """).fetchone()
 
     if not row:
-        return state
+        return CacheState.Empty
 
-    last_sync_str, valid_flag, err_msg = row
+    last_sync_str, state = row
     if last_sync_str:
         state['last_sync'] = datetime.datetime.fromisoformat(last_sync_str)
     state['is_valid'] = bool(valid_flag)
@@ -250,16 +294,6 @@ def update_meta_valid(conn: sqlite3.Connection) -> None:
             last_sync=?
         WHERE meta_id=1
     """, (now_str,))
-
-
-def is_stale(last_sync: Optional[datetime.datetime]) -> bool:
-    """
-    Returns True if last_sync is missing or older than CACHE_MAX_AGE_DAYS.
-    """
-    if not last_sync:
-        return True
-    age = datetime.datetime.now(datetime.timezone.utc) - last_sync
-    return age.days >= CACHE_MAX_AGE_DAYS
 
 
 def validate_dataframe(data: pd.DataFrame, header_data: Dict[str, str]) -> None:
@@ -284,7 +318,7 @@ def validate_dataframe(data: pd.DataFrame, header_data: Dict[str, str]) -> None:
         raise RuntimeError(error_msg)
 
 
-def recreate_transactions_table(
+def create_transactions_table(
         conn: sqlite3.Connection,
         data: pd.DataFrame,
         header_data: Dict[str, str]
@@ -295,9 +329,8 @@ def recreate_transactions_table(
     defs_list = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT']
 
     for header in headers:
-        col_name_raw = _sanitize_column_name(header)
         col_type = get_sqlite_type(header, header_data)
-        col_name_escaped = col_name_raw.replace('"', '""')
+        col_name_escaped = header.replace('"', '""')
         defs_list.append(f'"{col_name_escaped}" {col_type}')
     create_sql = f'CREATE TABLE "{TABLE_TRANSACTIONS}" (\n  {",".join(defs_list)}\n)'
     conn.execute(create_sql)
@@ -329,15 +362,6 @@ def insert_data(
     for row in rows:
         converted = [convert_value(h, val, header_data) for h, val in zip(headers, row)]
         conn.execute(insert_stmt, converted)
-
-
-def _sanitize_column_name(header: str) -> str:
-    """
-    Returns a sanitized column name, converting 'id' to 'remote_id'.
-    """
-    if header.lower() == 'id':
-        return 'remote_id'
-    return header
 
 
 def get_sqlite_type(header: str, header_data: Dict[str, str]) -> str:
@@ -405,13 +429,29 @@ def convert_value(header: str, value: Any, header_data: Dict[str, str]) -> Any:
                 logging.warning(f'Failed to parse "{value}" as date for column "{header}". Storing None.')
                 return None
         elif isinstance(value, str):
+            # Let's assume a '1234' like string (unlikely, but we'll check) is a date serial
             try:
                 return google_serial_date_to_iso(float(text_val))
             except:
+                # Carry on to the guesswork...
                 pass
 
             # Try to parse the date string by guessing the locale of the date format
-            for locale, fmt in DATE_LOCALES.items():
+            from ..settings import locale
+            from ..settings import lib
+
+            # Start with the current locale
+            current_loc = lib.settings['locale']
+            try:
+                fmt = locale.get_strptime_fmt(current_loc)
+                dt = datetime.datetime.strptime(text_val, fmt)
+                return dt.strftime('%Y-%m-%d')
+            except ValueError:
+                logging.debug(f'Failed to parse "{text_val}" as date using {current_loc}')
+
+            # other format candidates
+            for loc in locale.LOCALE_MAP:
+                fmt = locale.get_strptime_fmt(loc)
                 try:
                     dt = datetime.datetime.strptime(text_val, fmt)
                     return dt.strftime('%Y-%m-%d')
@@ -419,6 +459,7 @@ def convert_value(header: str, value: Any, header_data: Dict[str, str]) -> Any:
                     continue
 
             logging.warning(f'Unable to parse "{text_val}" as a date for column "{header}". Storing None')
+
     elif declared_type == 'string':
         if isinstance(value, str):
             return value

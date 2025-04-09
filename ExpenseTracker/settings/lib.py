@@ -19,7 +19,7 @@ operations and errors. Supports creating, removing, listing, and loading
 
 """
 
-logging.basicConfig(level=logging.INFO)
+
 
 organization_name: str = 'ExpenseTracker'
 app_name: str = 'ExpenseTracker'
@@ -81,7 +81,7 @@ LEDGER_SCHEMA: Dict[str, Any] = {
             'theme': {'type': str, 'required': True}
         }
     },
-    'data_header_mapping': {
+    'mapping': {
         'type': dict,
         'required': True,
         'required_keys': DATA_MAPPING_KEYS,
@@ -100,32 +100,6 @@ LEDGER_SCHEMA: Dict[str, Any] = {
     }
 }
 
-
-def validate_ledger_data(ledger_data: Dict[str, Any]) -> None:
-    """
-    Validates that ledger_data conforms to LEDGER_SCHEMA. Raises if invalid.
-    """
-    logging.debug('Validating ledger data against schema.')
-    for field, specs in LEDGER_SCHEMA.items():
-        if specs.get('required') and field not in ledger_data:
-            msg: str = f'Missing required field: {field}'
-            logging.error(msg)
-            raise ValueError(msg)
-
-        if field not in ledger_data:
-            continue
-
-        if not isinstance(ledger_data[field], specs['type']):
-            msg = f'Field "{field}" must be {specs["type"]}, got {type(ledger_data[field])}.'
-            logging.error(msg)
-            raise TypeError(msg)
-
-        if field == 'header':
-            _validate_header(ledger_data[field], specs['allowed_values'])
-        elif field == 'data_header_mapping':
-            _validate_data_header_mapping(ledger_data[field], specs)
-        elif field == 'categories':
-            _validate_categories(ledger_data[field], specs['item_schema'])
 
 
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
@@ -149,19 +123,19 @@ def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> 
             raise ValueError(msg)
 
 
-def _validate_data_header_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
-    logging.debug('Validating "data_header_mapping" section.')
+def _validate_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
+    logging.debug('Validating "mapping" section.')
     required_keys = set(specs['required_keys'])
     if set(mapping_dict.keys()) != required_keys:
         msg: str = (
-            f'data_header_mapping must have keys {required_keys}, '
+            f'mapping must have keys {required_keys}, '
             f'got {set(mapping_dict.keys())}.'
         )
         logging.error(msg)
         raise ValueError(msg)
     for val in mapping_dict.values():
         if not isinstance(val, specs['value_type']):
-            msg: str = 'All data_header_mapping values must be strings.'
+            msg: str = 'All mapping values must be strings.'
             logging.error(msg)
             raise TypeError(msg)
 
@@ -401,25 +375,23 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         self._watcher.fileChanged.connect(signals.configFileChanged)
 
     def init_data(self) -> None:
-        logging.info('Initializing SettingsAPI.')
-
         self.load_ledger()
         self.load_client_secret()
 
     def load_ledger(self) -> Dict[str, Any]:
         logging.info(f'Loading ledger from "{self.ledger_path}"')
         if not self.ledger_path.exists():
-            msg: str = f'Ledger file not found: {self.ledger_path}'
-            logging.error(msg)
-            raise FileNotFoundError(msg)
+            raise status.LedgerConfigNotFoundException
+
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
-            validate_ledger_data(data)
-            return data
-        except (ValueError, TypeError, json.JSONDecodeError) as e:
-            logging.error(f'Failed to load ledger: {e}')
-            raise
+            self.ledger_data = data
+            self.validate_ledger_data()
+            return self.ledger_data
+
+        except Exception as ex:
+            raise status.LedgerConfigInvalidException from ex
 
     def load_client_secret(self) -> Dict[str, Any]:
         logging.info(f'Loading client_secret from "{self.client_secret_path}"')
@@ -469,12 +441,44 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             )
         return key
 
+    def validate_ledger_data(self, data: Dict[str, Any] = None) -> None:
+        """
+        Validates that data integrity.
+
+        """
+        data = data or self.ledger_data
+        if not data:
+            raise RuntimeError('Ledger data is empty.')
+
+        logging.debug('Validating ledger data against schema.')
+        for field, specs in LEDGER_SCHEMA.items():
+            if specs.get('required') and field not in data:
+                msg: str = f'Missing required field: {field}'
+                raise status.LedgerConfigInvalidException(msg)
+
+            if field not in data:
+                continue
+
+            if not isinstance(data[field], specs['type']):
+                msg = f'Field "{field}" must be {specs["type"]}, got {type(data[field])}.'
+                raise status.LedgerConfigInvalidException(msg)
+
+            if field == 'header':
+                _validate_header(data[field], specs['allowed_values'])
+            elif field == 'mapping':
+                _validate_mapping(data[field], specs)
+            elif field == 'categories':
+                _validate_categories(data[field], specs['item_schema'])
+
+        logging.debug('Ledger data is valid.')
+
     def get_section(self, section_name: str) -> Dict[str, Any]:
         """
         Returns data for a ledger section or 'client_secret'.
         """
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
+
         return self.ledger_data[section_name].copy()
 
     def set_section(self, section_name: str, new_data: Dict[str, Any]) -> None:
@@ -501,7 +505,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
         self.ledger_data[section_name] = new_data
         try:
-            validate_ledger_data(self.ledger_data)
+            self.validate_ledger_data()
             self.save_section(section_name)
             signals.configSectionChanged.emit(section_name)
 
@@ -530,7 +534,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
-            validate_ledger_data(data)
+            self.validate_ledger_data(data=data)
             self.ledger_data[section_name] = data[section_name]
 
             signals.configSectionChanged.emit(section_name)
@@ -614,7 +618,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         logging.info('Saving all settings.')
         original_ledger_data: Dict[str, Any] = dict(self.ledger_data)
         try:
-            validate_ledger_data(self.ledger_data)
+            self.validate_ledger_data()
             with self.ledger_path.open('w', encoding='utf-8') as f:
                 json.dump(self.ledger_data, f, indent=4, ensure_ascii=False)
         except (ValueError, TypeError) as e:
@@ -630,7 +634,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             logging.error(f'Error saving client_secret: {e}')
             raise
 
-    def get_status(self) -> Status:
+    def get_status(self) -> status.Status:
         """
         Get the configuration state of the application.
 
@@ -642,36 +646,36 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         from ..database import database
 
         if not self.client_secret_path.exists():
-            return Status.ClientSecretNotFound
+            return status.Status.ClientSecretNotFound
 
         try:
             client_secret: Dict[str, Any] = self.get_section('client_secret')
             self.validate_client_secret(client_secret)
         except:
-            return Status.ClientSecretInvalid
+            return status.Status.ClientSecretInvalid
 
         try:
             auth.verify_creds()
         except RuntimeError:
-            return Status.NotAuthenticated
+            return status.Status.NotAuthenticated
 
         config: Dict[str, Any] = self.get_section('spreadsheet')
         if not config.get('id'):
-            return Status.SpreadsheetIdNotConfigured
+            return status.Status.SpreadsheetIdNotConfigured
         if not config.get('worksheet'):
-            return Status.SpreadsheetWorksheetNotConfigured
+            return status.Status.SpreadsheetWorksheetNotConfigured
 
         try:
             service.get_service()
         except:
-            return Status.ServiceUnavailable
+            return status.Status.ServiceUnavailable
 
         try:
             database.verify_db()
         except RuntimeError:
-            return Status.CacheInvalid
+            return status.Status.CacheInvalid
 
-        return Status.StatusOkay
+        return status.Status.Okay
 
 
 settings: SettingsAPI = SettingsAPI()

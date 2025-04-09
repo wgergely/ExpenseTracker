@@ -7,7 +7,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from ..status import status
 
-logging.basicConfig(level=logging.INFO)
+
 
 
 class Signals(QtCore.QObject):

@@ -15,11 +15,11 @@ import pandas as pd
 from ..database.database import get_cached_data, DATABASE_DATE_FORMAT
 from ..settings import lib
 
-logging.basicConfig(level=logging.INFO)
+
 
 
 def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
-    config = lib.settings.get_section('data_header_mapping')
+    config = lib.settings.get_section('mapping')
     if not config or not all(isinstance(v, str) for v in config.values()):
         logging.error('Invalid header mapping configuration found in config')
         return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
@@ -154,7 +154,7 @@ def get_monthly_expenses(
     if exclude_positive:
         df_month = df_month[df_month['amount'] <= 0]
 
-    mapping = lib.settings.get_section('data_header_mapping')
+    mapping = lib.settings.get_section('mapping')
     desired_keys = list(mapping.keys())
 
     breakdown = (

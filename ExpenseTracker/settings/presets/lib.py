@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .. import lib
 
-logging.basicConfig(level=logging.INFO)
+
 
 PRESET_FORMAT = 'zip'
 

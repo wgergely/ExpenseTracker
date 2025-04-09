@@ -2,7 +2,7 @@ import enum
 import logging
 from typing import Dict
 
-logging.basicConfig(level=logging.INFO)
+
 
 
 class Status(enum.StrEnum):
@@ -49,7 +49,7 @@ STATUS_MESSAGE: Dict[Status, str] = {
     Status.ClientSecretInvalid: 'Could not verify the client secret. Have you set up a valid Google client secret?',
     Status.CredsNotFound: 'Could not find the credentials. Please sign in to your Google account.',
     Status.CredsInvalid: 'Could not verify the credentials. Please sign in again to your Google account.',
-    Status.NotAuthenticated: 'Could not find the authentication token. Please sign in to your Google account.',
+    Status.NotAuthenticated: 'Authentication error. Try signing in again to your Google account.',
 
     Status.SpreadsheetIdNotConfigured: 'Could not find a valid spreadsheet id. Have you set up a valid spreadsheet id in the settings?',
     Status.SpreadsheetWorksheetNotConfigured: 'Worksheet name could not be found. Have you set  name in the settings?',
@@ -62,7 +62,7 @@ STATUS_MESSAGE: Dict[Status, str] = {
     Status.CategoriesInvalid: 'The categories seem to be incomplete, or contain invalid values. Please check the settings!',
 
     Status.ServiceUnavailable: 'Google Sheets service is unavailable. Please check your connection.',
-    Status.CacheInvalid: 'The remote data has not yet been fetched, or is out of date. Please fetch the data again.',
+    Status.CacheInvalid: 'The cache is invalid. Try fetching the data from the source again.',
 
 }
 

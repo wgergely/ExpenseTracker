@@ -2,9 +2,13 @@
 Module for formatting decimal and currency values using Babel.
 
 """
+import logging
+from typing import List
 
 from babel import Locale, numbers
-from typing import List
+from babel.dates import get_date_format
+
+
 
 CURRENCY_MAP: dict[str, str] = {
     'US': 'USD',
@@ -36,11 +40,34 @@ CURRENCY_MAP: dict[str, str] = {
 }
 
 LOCALE_MAP: List[str] = [
-    "ar_SA", "da_DK", "de_DE", "en_AU", "en_CA", "en_GB", "en_IN", "en_US",
-    "en_ZA", "es_ES", "es_MX", "fi_FI", "fr_BE", "fr_FR", "hu_HU",
-    "id_ID", "it_IT", "ja_JP", "ko_KR", "nb_NO", "nl_NL", "pt_BR",
-    "ru_RU", "sv_SE", "tr_TR", "zh_CN",
+    "en_GB",
+    "de_DE",
+    "es_ES",
+    "hu_HU",
+    "ar_SA",
+    "da_DK",
+    "en_AU",
+    "en_CA",
+    "en_IN",
+    "en_US",
+    "en_ZA",
+    "es_MX",
+    "fi_FI",
+    "fr_BE",
+    "fr_FR",
+    "id_ID",
+    "it_IT",
+    "ja_JP",
+    "ko_KR",
+    "nb_NO",
+    "nl_NL",
+    "pt_BR",
+    "ru_RU",
+    "sv_SE",
+    "tr_TR",
+    "zh_CN",
 ]
+
 
 def get_currency_from_locale(locale: str) -> str:
     """
@@ -57,6 +84,7 @@ def get_currency_from_locale(locale: str) -> str:
         return 'EUR'
     country_code = parts[1]
     return CURRENCY_MAP.get(country_code, 'EUR')
+
 
 def format_float(value: float, locale: str) -> str:
     """
@@ -75,6 +103,7 @@ def format_float(value: float, locale: str) -> str:
         return formatted_value
     except Exception as e:
         return str(value)
+
 
 def format_currency_value(value: float, locale: str) -> str:
     """
@@ -97,3 +126,27 @@ def format_currency_value(value: float, locale: str) -> str:
     except Exception as e:
         print(f'Error formatting currency: {e}')
         return str(value)
+
+
+def get_strptime_fmt(locale: str) -> str:
+    """
+    Get the date format string for a given locale.
+
+    Args:
+        locale (str): Locale string, for example 'en_US'.
+
+    Returns:
+        str: The date format string.
+    """
+    if locale not in LOCALE_MAP:
+        return '%d/%m/%Y'  # Default format
+
+    pattern = get_date_format('short', Locale.parse(locale)).pattern
+    return (
+        pattern
+        .replace('yyyy', '%Y')
+        .replace('yy', '%y')
+        .replace('MM', '%m')
+        .replace('dd', '%d')
+        .replace('d', '%-d')
+    )

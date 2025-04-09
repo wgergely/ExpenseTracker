@@ -20,7 +20,7 @@
     "Tax Year": "string",
     "Account Name": "string"
   },
-  "data_header_mapping": {
+  "mapping": {
     "date": "Date",
     "amount": "€€€",
     "description": "Original Description",
