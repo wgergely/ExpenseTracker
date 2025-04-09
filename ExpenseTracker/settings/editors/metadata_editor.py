@@ -88,7 +88,7 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
             value_to_save = option.name
         else:
             value_to_save = option
-        logger.info(f"Setting {self.property_name} to {value_to_save}")
+        logging.info(f"Setting {self.property_name} to {value_to_save}")
         lib.settings[self.property_name] = value_to_save
 
 

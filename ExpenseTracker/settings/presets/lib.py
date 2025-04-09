@@ -6,7 +6,8 @@ from pathlib import Path
 
 from .. import lib
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 PRESET_FORMAT = 'zip'
 
 
@@ -63,13 +64,13 @@ class PresetItem:
                     data = json.loads(zipf.read(lib.settings.ledger_path.name))
                     self._description = data.get('description', '')
                 except json.JSONDecodeError:
-                    logger.error(f'Failed to decode JSON from {self._path}')
+                    logging.error(f'Failed to decode JSON from {self._path}')
                     self._description = ''
                 except KeyError:
-                    logger.error(f'Key not found in JSON from {self._path}')
+                    logging.error(f'Key not found in JSON from {self._path}')
                     self._description = ''
                 except Exception as e:
-                    logger.error(f'Error reading preset description: {e}')
+                    logging.error(f'Error reading preset description: {e}')
                     self._description = ''
         return self._description
 
@@ -86,7 +87,7 @@ class PresetsAPI(lib.ConfigPaths):
     def load_presets(self):
         """Load all presets from the presets directory."""
         if not self.presets_dir.exists():
-            logger.error(f'Presets directory does not exist: {self.presets_dir}')
+            logging.error(f'Presets directory does not exist: {self.presets_dir}')
             return
 
         for file in self.presets_dir.glob(f'*.{PRESET_FORMAT}'):
@@ -118,15 +119,15 @@ class PresetsAPI(lib.ConfigPaths):
         """
         preset = self.get_preset(name)
         if not preset:
-            logger.error(f'Preset not found: {name}')
+            logging.error(f'Preset not found: {name}')
             return
 
         try:
             preset.path.unlink()
             self.presets.remove(preset)
-            logger.info(f'Removed preset: {name}')
+            logging.info(f'Removed preset: {name}')
         except Exception as e:
-            logger.error(f'Failed to remove preset {name}: {e}')
+            logging.error(f'Failed to remove preset {name}: {e}')
 
     def rename_preset(self, old_name: str, new_name: str):
         """Rename an existing preset.
@@ -137,7 +138,7 @@ class PresetsAPI(lib.ConfigPaths):
         """
         preset = self.get_preset(old_name)
         if not preset:
-            logger.error(f'Preset not found: {old_name}')
+            logging.error(f'Preset not found: {old_name}')
             return
 
         try:
@@ -145,9 +146,9 @@ class PresetsAPI(lib.ConfigPaths):
             preset.path.rename(new_path)
             preset.name = new_name
             preset.path = new_path
-            logger.info(f'Renamed preset from {old_name} to {new_name}')
+            logging.info(f'Renamed preset from {old_name} to {new_name}')
         except Exception as e:
-            logger.error(f'Failed to rename preset {old_name} to {new_name}: {e}')
+            logging.error(f'Failed to rename preset {old_name} to {new_name}: {e}')
 
     def add_preset(self, name: str):
         """Add a new preset by archiving the current configuration.
@@ -209,12 +210,12 @@ class PresetsAPI(lib.ConfigPaths):
             bool: True if activation succeeded, False otherwise.
         """
         if not self.presets_dir.exists():
-            logger.error(f'Presets directory does not exist: {self.presets_dir}')
+            logging.error(f'Presets directory does not exist: {self.presets_dir}')
             return False
 
         preset = self.get_preset(name)
         if not preset:
-            logger.error(f'Preset not found: {name}')
+            logging.error(f'Preset not found: {name}')
             return False
 
         self.backup_config()

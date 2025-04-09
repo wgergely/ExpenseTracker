@@ -1,4 +1,3 @@
-import enum
 import json
 import logging
 import pathlib
@@ -10,6 +9,7 @@ from typing import Dict, Any, Optional, List
 from PySide6 import QtCore
 
 from ..ui.actions import signals
+from ..status import status
 
 """
 Manages settings for ledger.json and client_secret.json files. Provides
@@ -19,35 +19,10 @@ operations and errors. Supports creating, removing, listing, and loading
 
 """
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 organization_name: str = 'ExpenseTracker'
 app_name: str = 'ExpenseTracker'
-
-
-class Status(enum.StrEnum):
-    UnknownStatus = enum.auto()
-    ClientSecretNotFound = enum.auto()
-    ClientSecretInvalid = enum.auto()
-    SpreadsheetIdNotConfigured = enum.auto()
-    SpreadsheetWorksheetNotConfigured = enum.auto()
-    NotAuthenticated = enum.auto()
-    ServiceUnavailable = enum.auto()
-    CacheInvalid = enum.auto()
-    StatusOkay = enum.auto()
-
-
-status_user_strings: Dict[Status, str] = {
-    Status.ClientSecretNotFound: 'Google authentication information has not been set up. Please check the settings.',
-    Status.ClientSecretInvalid: 'Google Client Secret was not found or is invalid. Please check the settings.',
-    Status.SpreadsheetIdNotConfigured: 'Spreadsheet ID is has not yet been set. Make sure you set a valid spreadsheet ID in the settings.',
-    Status.SpreadsheetWorksheetNotConfigured: 'Spreadsheet worksheet name is has not yet been set. Make sure you set a valid worksheet name in the settings.',
-    Status.NotAuthenticated: 'Not authenticated with Google. Please authenticate.',
-    Status.ServiceUnavailable: 'Google Sheets service is unavailable. Please check your connection.',
-    Status.CacheInvalid: 'The remote data has not yet been fetched, or is out of date. Please fetch the data again.',
-    Status.StatusOkay: 'All settings are valid and the application is ready to use.'
-}
 
 
 def is_valid_hex_color(value: str) -> bool:
@@ -130,11 +105,11 @@ def validate_ledger_data(ledger_data: Dict[str, Any]) -> None:
     """
     Validates that ledger_data conforms to LEDGER_SCHEMA. Raises if invalid.
     """
-    logger.debug('Validating ledger data against schema.')
+    logging.debug('Validating ledger data against schema.')
     for field, specs in LEDGER_SCHEMA.items():
         if specs.get('required') and field not in ledger_data:
             msg: str = f'Missing required field: {field}'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         if field not in ledger_data:
@@ -142,7 +117,7 @@ def validate_ledger_data(ledger_data: Dict[str, Any]) -> None:
 
         if not isinstance(ledger_data[field], specs['type']):
             msg = f'Field "{field}" must be {specs["type"]}, got {type(ledger_data[field])}.'
-            logger.error(msg)
+            logging.error(msg)
             raise TypeError(msg)
 
         if field == 'header':
@@ -154,58 +129,58 @@ def validate_ledger_data(ledger_data: Dict[str, Any]) -> None:
 
 
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
-    logger.debug('Validating "header" section.')
+    logging.debug('Validating "header" section.')
     if not isinstance(header_dict, dict):
         msg: str = 'header must be a dict.'
-        logger.error(msg)
+        logging.error(msg)
         raise TypeError(msg)
     for k, v in header_dict.items():
         if not isinstance(k, str):
             msg = f'Header key "{k}" is not a string.'
-            logger.error(msg)
+            logging.error(msg)
             raise TypeError(msg)
         if not isinstance(v, str):
             msg = f'Header value "{v}" must be a string.'
-            logger.error(msg)
+            logging.error(msg)
             raise TypeError(msg)
         if v not in allowed_values:
             msg = f'Header value "{v}" must be one of {allowed_values}.'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
 
 def _validate_data_header_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
-    logger.debug('Validating "data_header_mapping" section.')
+    logging.debug('Validating "data_header_mapping" section.')
     required_keys = set(specs['required_keys'])
     if set(mapping_dict.keys()) != required_keys:
         msg: str = (
             f'data_header_mapping must have keys {required_keys}, '
             f'got {set(mapping_dict.keys())}.'
         )
-        logger.error(msg)
+        logging.error(msg)
         raise ValueError(msg)
     for val in mapping_dict.values():
         if not isinstance(val, specs['value_type']):
             msg: str = 'All data_header_mapping values must be strings.'
-            logger.error(msg)
+            logging.error(msg)
             raise TypeError(msg)
 
 
 def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
-    logger.debug('Validating "categories" section.')
+    logging.debug('Validating "categories" section.')
     if not isinstance(categories_dict, dict):
         msg: str = '"categories" must be a dict.'
-        logger.error(msg)
+        logging.error(msg)
         raise TypeError(msg)
     for cat_name, cat_info in categories_dict.items():
         if not isinstance(cat_info, dict):
             msg = f'Category "{cat_name}" must be a dict.'
-            logger.error(msg)
+            logging.error(msg)
             raise TypeError(msg)
         for field, field_specs in item_schema.items():
             if field_specs['required'] and field not in cat_info:
                 msg = f'Category "{cat_name}" missing "{field}".'
-                logger.error(msg)
+                logging.error(msg)
                 raise ValueError(msg)
             if field not in cat_info:
                 continue
@@ -214,7 +189,7 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
                     f'Category "{cat_name}" field "{field}" must be {field_specs["type"]}, '
                     f'got {type(cat_info[field])}.'
                 )
-                logger.error(msg)
+                logging.error(msg)
                 raise TypeError(msg)
             if field_specs.get('format') == 'hexcolor':
                 if not is_valid_hex_color(cat_info[field]):
@@ -222,7 +197,7 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
                         f'Category "{cat_name}" field "{field}" must be a valid '
                         f'hex color (#RRGGBB), got "{cat_info[field]}".'
                     )
-                    logger.error(msg)
+                    logging.error(msg)
                     raise ValueError(msg)
 
 
@@ -248,66 +223,67 @@ class ConfigPaths:
         self.db_path: pathlib.Path = self.db_dir / 'cache.db'
 
         # Usersettings
-        self.usersettings_path: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'usersettings.ini'
+        self.usersettings_path: pathlib.Path = pathlib.Path(
+            tempfile.gettempdir()) / 'ExpenseTracker' / 'usersettings.ini'
 
         self._verify_and_prepare()
 
     def _verify_and_prepare(self) -> None:
-        logger.info(f'Verifying required directories and templates in {self.template_dir}')
+        logging.info(f'Verifying required directories and templates in {self.template_dir}')
         if not self.template_dir.exists():
             msg: str = f'Missing template directory: {self.template_dir}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         if not self.icon_dir.exists():
             msg = f'Missing icon directory: {self.icon_dir}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         if not self.client_secret_template.exists():
             msg = f'Missing client_secret template: {self.client_secret_template}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         if not self.ledger_template.exists():
             msg = f'Missing ledger template: {self.ledger_template}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
 
         # Create directories
         if not self.config_dir.exists():
-            logger.info(f'Creating config directory: {self.config_dir}')
+            logging.info(f'Creating config directory: {self.config_dir}')
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.auth_dir.exists():
-            logger.info(f'Creating auth directory: {self.auth_dir}')
+            logging.info(f'Creating auth directory: {self.auth_dir}')
             self.auth_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.db_dir.exists():
-            logger.info(f'Creating db directory: {self.db_dir}')
+            logging.info(f'Creating db directory: {self.db_dir}')
             self.db_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.presets_dir.exists():
-            logger.info(f'Creating presets directory: {self.presets_dir}')
+            logging.info(f'Creating presets directory: {self.presets_dir}')
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
         # Ensure valid configs exists even if we haven't yet set them up
         if not self.client_secret_path.exists():
-            logger.info(f'Copying default client_secret from template to {self.client_secret_path}')
+            logging.info(f'Copying default client_secret from template to {self.client_secret_path}')
             shutil.copy(self.client_secret_template, self.client_secret_path)
         if not self.ledger_path.exists():
-            logger.info(f'Copying default ledger from template to {self.ledger_path}')
+            logging.info(f'Copying default ledger from template to {self.ledger_path}')
             shutil.copy(self.ledger_template, self.ledger_path)
 
         if not self.presets_dir.exists():
-            logger.info(f'Creating presets directory: {self.presets_dir}')
+            logging.info(f'Creating presets directory: {self.presets_dir}')
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
     def revert_ledger_to_template(self) -> None:
         """
         Restores ledger.json from the ledger template.
         """
-        logger.info(f'Reverting ledger to template: {self.ledger_template}')
+        logging.info(f'Reverting ledger to template: {self.ledger_template}')
         if not self.ledger_template.exists():
             msg: str = f'Ledger template not found: {self.ledger_template}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         shutil.copy(self.ledger_template, self.ledger_path)
 
@@ -315,10 +291,10 @@ class ConfigPaths:
         """
         Restores client_secret.json from the client_secret template.
         """
-        logger.info(f'Reverting client_secret to template: {self.client_secret_template}')
+        logging.info(f'Reverting client_secret to template: {self.client_secret_template}')
         if not self.client_secret_template.exists():
             msg: str = f'Client_secret template not found: {self.client_secret_template}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         shutil.copy(self.client_secret_template, self.client_secret_path)
 
@@ -425,25 +401,16 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         self._watcher.fileChanged.connect(signals.configFileChanged)
 
     def init_data(self) -> None:
-        logger.info('Initializing SettingsAPI.')
+        logging.info('Initializing SettingsAPI.')
 
-        try:
-            self.ledger_data = self._load_ledger()
-        except Exception as e:
-            logger.error(f'Failed to load ledger data: {e}')
-            raise
+        self.load_ledger()
+        self.load_client_secret()
 
-        try:
-            self.client_secret_data = self._load_client_secret()
-        except Exception as e:
-            logger.error(f'Failed to load client_secret data: {e}')
-            raise
-
-    def _load_ledger(self) -> Dict[str, Any]:
-        logger.info(f'Loading ledger from "{self.ledger_path}"')
+    def load_ledger(self) -> Dict[str, Any]:
+        logging.info(f'Loading ledger from "{self.ledger_path}"')
         if not self.ledger_path.exists():
             msg: str = f'Ledger file not found: {self.ledger_path}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
@@ -451,29 +418,30 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             validate_ledger_data(data)
             return data
         except (ValueError, TypeError, json.JSONDecodeError) as e:
-            logger.error(f'Failed to load ledger: {e}')
+            logging.error(f'Failed to load ledger: {e}')
             raise
 
-    def _load_client_secret(self) -> Dict[str, Any]:
-        logger.info(f'Loading client_secret from "{self.client_secret_path}"')
+    def load_client_secret(self) -> Dict[str, Any]:
+        logging.info(f'Loading client_secret from "{self.client_secret_path}"')
         if not self.client_secret_path.exists():
             msg: str = f'Client secret file not found: {self.client_secret_path}'
-            logger.error(msg)
+            logging.error(msg)
             raise FileNotFoundError(msg)
         try:
             with self.client_secret_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
-            self.validate_client_secret(data)
-            return data
-        except (ValueError, json.JSONDecodeError) as e:
-            logger.error(f'Failed to load client_secret: {e}')
-            raise
+            self.client_secret_data = data
+            self.validate_client_secret()
+            return self.client_secret_data
+        except (ValueError, json.JSONDecodeError) as ex:
+            raise status.ClientSecretInvalidException from ex
 
-    @classmethod
-    def validate_client_secret(cls, client_config: Dict[str, Any]) -> str:
+    def validate_client_secret(self, data=None) -> str:
         """
         Validate that the client configuration is for an OAuth client.
-        Accept either an "installed" or "web" configuration.
+
+        Args:
+            data: Optional; if provided, this data will be validated instead of the loaded client_secret.
 
         Returns:
             The key used ("installed" or "web").
@@ -482,17 +450,23 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             RuntimeError: If neither configuration is present or required fields are missing.
 
         """
-        if 'installed' in client_config:
-            key: str = 'installed'
-        elif 'web' in client_config:
-            key = 'web'
-        else:
-            raise RuntimeError('Client configuration does not contain an \'installed\' or \'web\' section.')
+        data = data or self.client_secret_data
 
-        config_section: Dict[str, Any] = client_config[key]
-        missing: List[str] = [k for k in cls.required_client_secret_keys if k not in config_section]
+        if 'installed' not in data:
+            raise status.ClientSecretInvalidException(f'Missing "installed" section in client_secret.')
+
+        key = next((k for k in ('installed', 'web') if k in data), None)
+        if not key:
+            raise status.ClientSecretInvalidException('Missing "installed" or "web" section in client_secret.')
+
+        logging.info(f'Found "{key}" section in client_secret.')
+
+        config_section: Dict[str, Any] = data[key]
+        missing: List[str] = [k for k in self.required_client_secret_keys if k not in config_section]
         if missing:
-            raise RuntimeError(f"Missing required fields in the '{key}' section: {missing}.")
+            raise status.ClientSecretInvalidException(
+                f'Missing required fields in the \'{key}\' section: {missing}.'
+            )
         return key
 
     def get_section(self, section_name: str) -> Dict[str, Any]:
@@ -510,7 +484,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logger.info('Setting entire client_secret data.')
+            logging.info('Setting entire client_secret data.')
             self.validate_client_secret(new_data)
             self.client_secret_data = new_data
             self.save_section('client_secret')
@@ -520,7 +494,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
         if section_name not in self.ledger_data:
             msg: str = f'Unknown section_name for set: "{section_name}"'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         current_section_data: Dict[str, Any] = self.ledger_data.get(section_name).copy()
@@ -532,7 +506,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             signals.configSectionChanged.emit(section_name)
 
         except (ValueError, TypeError) as e:
-            logger.error(f'Validation error on set_section("{section_name}"): {e}')
+            logging.error(f'Validation error on set_section("{section_name}"): {e}')
             self.ledger_data[section_name] = current_section_data
             raise
 
@@ -543,16 +517,16 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logger.info('Reloading client_secret from disk.')
-            self.client_secret_data = self._load_client_secret()
+            logging.info('Reloading client_secret from disk.')
+            self.load_client_secret()
             return
 
         if section_name not in self.ledger_data:
             msg: str = f'Unknown section_name for reload: "{section_name}"'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
-        logger.info(f'Reloading section "{section_name}" from disk.')
+        logging.info(f'Reloading section "{section_name}" from disk.')
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
@@ -562,7 +536,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             signals.configSectionChanged.emit(section_name)
 
         except (ValueError, TypeError, json.JSONDecodeError) as e:
-            logger.error(f'Failed to reload section "{section_name}": {e}')
+            logging.error(f'Failed to reload section "{section_name}": {e}')
             raise
 
     def revert_section(self, section_name: str) -> None:
@@ -572,14 +546,14 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logger.info('Reverting client_secret to template.')
+            logging.info('Reverting client_secret to template.')
             self.revert_client_secret_to_template()
-            self.client_secret_data = self._load_client_secret()
+            self.load_client_secret()
             return
 
         if section_name not in self.ledger_data:
             msg: str = f'Unknown section_name for revert: "{section_name}"'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         # Load template data
@@ -588,7 +562,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
         if section_name not in template_data:
             msg = f'No template-based revert logic for section "{section_name}".'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         # Revert to template data
@@ -603,20 +577,20 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         """
 
         if section_name == 'client_secret':
-            logger.info(f'Saving client_secret to "{self.client_secret_path}"')
+            logging.info(f'Saving client_secret to "{self.client_secret_path}"')
             self.validate_client_secret(self.client_secret_data)
             try:
                 with self.client_secret_path.open('w', encoding='utf-8') as f:
                     json.dump(self.client_secret_data, f, indent=4, ensure_ascii=False)
 
             except Exception as e:
-                logger.error(f'Error saving client_secret: {e}')
+                logging.error(f'Error saving client_secret: {e}')
                 raise
             return
 
         if section_name not in self.ledger_data:
             msg: str = f'Unknown section_name for save: "{section_name}"'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         with self.ledger_path.open('r', encoding='utf-8') as f:
@@ -624,7 +598,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
         if section_name not in original_data:
             msg = f'Unknown section_name for save: "{section_name}"'
-            logger.error(msg)
+            logging.error(msg)
             raise ValueError(msg)
 
         new_data: Dict[str, Any] = original_data.copy()
@@ -637,14 +611,14 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         """
         Saves ledger and client_secret. Rolls back ledger on validation failure.
         """
-        logger.info('Saving all settings.')
+        logging.info('Saving all settings.')
         original_ledger_data: Dict[str, Any] = dict(self.ledger_data)
         try:
             validate_ledger_data(self.ledger_data)
             with self.ledger_path.open('w', encoding='utf-8') as f:
                 json.dump(self.ledger_data, f, indent=4, ensure_ascii=False)
         except (ValueError, TypeError) as e:
-            logger.error(f'Failed to save ledger: {e}. Rolling back.')
+            logging.error(f'Failed to save ledger: {e}. Rolling back.')
             self.ledger_data = original_ledger_data
             raise
 
@@ -653,7 +627,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             with self.client_secret_path.open('w', encoding='utf-8') as f:
                 json.dump(self.client_secret_data, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            logger.error(f'Error saving client_secret: {e}')
+            logging.error(f'Error saving client_secret: {e}')
             raise
 
     def get_status(self) -> Status:

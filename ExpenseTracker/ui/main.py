@@ -180,7 +180,7 @@ class StatusIndicator(QtWidgets.QWidget):
         # Update the status before taking action
         self.update_status()
 
-        msg = lib.status_user_strings[self._status]
+        msg = lib.STATUS_MESSAGE[self._status]
 
         if self._status == lib.Status.ClientSecretNotFound:
             settings.show_settings_widget(parent=self.window())
