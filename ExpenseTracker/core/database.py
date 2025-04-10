@@ -13,12 +13,15 @@ import enum
 import logging
 import sqlite3
 import time
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from PySide6 import QtCore
 
+from ..settings import lib
+from ..settings import locale
 from ..status import status
+from ..ui.actions import signals
 
 CACHE_MAX_AGE_DAYS = 7
 DATE_COLUMN_FORMAT = '%Y-%m-%d'
@@ -56,7 +59,6 @@ def get_sql_type(column: str) -> str:
 
 
 def get_config_type(column: str) -> str:
-    from ..settings import lib
     config = lib.settings.get_section('header')
 
     if column not in config:
@@ -124,8 +126,6 @@ def cast_type(column: str, value: Any) -> Any:
 
             # Carry on to the guesswork...
             # Try to parse the date string by guessing the locale of the date format
-            from ..settings import locale
-            from ..settings import lib
 
             # Start with the current locale
             current_loc = lib.settings['locale']
@@ -156,6 +156,7 @@ def cast_type(column: str, value: Any) -> Any:
         except ValueError:
             logging.debug(f'Failed to convert "{value}" to string for column "{column}". Storing None')
 
+    logging.debug(f'Unknown config type "{config_type}" for column "{column}". Storing None.')
     return None
 
 
@@ -184,13 +185,12 @@ class DatabaseAPI(QtCore.QObject):
         self._connect_signals()
 
     def _connect_signals(self):
-        from ..ui.actions import signals
         signals.dataFetched.connect(self.cache_data)
 
     @classmethod
     def connection(cls) -> sqlite3.Connection:
         """Return a new SQLite database connection."""
-        from ..settings import lib
+
         return sqlite3.connect(str(lib.settings.db_path))
 
     @classmethod
@@ -210,7 +210,6 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def verify(cls) -> None:
         """Verify that the local cache database exists and is valid."""
-        from ..settings import lib
 
         conn = cls.connection()
         if not lib.settings.db_path.exists():
@@ -253,7 +252,11 @@ class DatabaseAPI(QtCore.QObject):
                 cls.set_state(CacheState.Stale)
                 raise status.CacheInvalidException('Cache is stale. Last sync date not found.')
 
-            last_sync = datetime.datetime.fromisoformat(row[0])
+            try:
+                last_sync = datetime.datetime.fromisoformat(row[0])
+            except ValueError:
+                logging.warning(f'Invalid last sync date format: {row[0]}. Defaulting to 1980-01-01.')
+                last_sync = datetime.datetime(1980, 1, 1)
 
             if row and row[0]:
                 age = datetime.datetime.now(datetime.timezone.utc) - last_sync
@@ -282,7 +285,7 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def create(cls) -> None:
         """Create a new local cache database."""
-        from ..settings import lib
+
         if lib.settings.db_path.exists():
             logging.warning('Cache database already exists. Ignoring create request.')
             return
@@ -310,7 +313,7 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def delete(cls) -> None:
         """Delete the local cache database ensuring the connection is properly closed."""
-        from ..settings import lib
+
         if not lib.settings.db_path.exists():
             logging.info('No cache database found to delete.')
             return
@@ -352,7 +355,7 @@ class DatabaseAPI(QtCore.QObject):
             conn.commit()
             conn.close()
 
-    def get_stamp(self):
+    def get_stamp(self) -> Optional[datetime.datetime]:
         """Get the last sync time from the database."""
         conn = self.connection()
         try:
@@ -363,7 +366,10 @@ class DatabaseAPI(QtCore.QObject):
             """)
             row = cursor.fetchone()
             if row and row[0]:
-                return datetime.datetime.fromisoformat(row[0])
+                try:
+                    return datetime.datetime.fromisoformat(row[0])
+                except ValueError:
+                    logging.warning(f'Invalid last sync date format: {row[0]}. Defaulting to None.')
             return None
         finally:
             conn.commit()
@@ -396,8 +402,8 @@ class DatabaseAPI(QtCore.QObject):
             """)
             row = cursor.fetchone()
             if row and row[0]:
-                return next((f for f in CacheState if f == row[0]), CacheState.Uninitialized)
-            return CacheState.Empty
+                return next((f for f in CacheState if f.name == row[0]), CacheState.Error)
+            return CacheState.Error
         finally:
             conn.commit()
             conn.close()
@@ -463,7 +469,6 @@ class DatabaseAPI(QtCore.QObject):
             logging.info(f'Checking columns...')
             df_columns = df.columns.tolist()
 
-            from ..settings import lib
             config = lib.settings.get_section('header')
             cf_columns = list(config.keys())
 

@@ -4,9 +4,9 @@ from . import ui
 from .yearmonth import RangeSelectorBar
 from ..data import model
 from ..data import view
-from ..settings import lib
 from ..ui import actions
 from ..ui.actions import signals
+from ..core import database
 
 main_window = None
 
@@ -90,8 +90,7 @@ class StatusIndicator(QtWidgets.QWidget):
             ui.Size.RowHeight(1.0)
         )
 
-        self._status = lib.Status.UnknownStatus
-
+        self._status = database.CacheState.Uninitialized
         self._connect_signals()
 
         QtCore.QTimer.singleShot(0, self.update_status)
@@ -125,7 +124,7 @@ class StatusIndicator(QtWidgets.QWidget):
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         pressed = option.state & QtWidgets.QStyle.State_Sunken
 
-        if self._status == lib.Status.StatusOkay:
+        if self._status == database.CacheState.Valid:
             icon = ui.get_icon('btn_ok', color=ui.Color.Green())
             color = ui.Color.Transparent()
         else:
@@ -171,39 +170,13 @@ class StatusIndicator(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def update_status(self):
-        self._status = lib.settings.get_status()
+        from ..core.database import database as db
+        self._status = db.get_state()
 
     @QtCore.Slot()
     def action(self):
-        from ..settings import settings
-
-        # Update the status before taking action
         self.update_status()
-
-        msg = lib.STATUS_MESSAGE[self._status]
-
-        if self._status == lib.Status.ClientSecretNotFound:
-            settings.show_settings_widget(parent=self.window())
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-        elif self._status == lib.Status.ClientSecretInvalid:
-            settings.show_settings_widget(parent=self.window())
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-        elif self._status == lib.Status.SpreadsheetIdNotConfigured:
-            settings.show_settings_widget(parent=self.window())
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-        elif self._status == lib.Status.SpreadsheetWorksheetNotConfigured:
-            settings.show_settings_widget(parent=self.window())
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-        elif self._status == lib.Status.ServiceUnavailable:
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-        elif self._status == lib.Status.NotAuthenticated:
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-            actions.authenticate()
-        elif self._status == lib.Status.CacheInvalid:
-            QtWidgets.QMessageBox.critical(self, 'Error', msg)
-            actions.fetch_data()
-        elif self._status == lib.Status.StatusOkay:
-            QtWidgets.QMessageBox.information(self, 'Status', msg)
+        QtWidgets.QMessageBox.critical(self, 'Error', self._status.value)
 
 
 class MainWindow(QtWidgets.QMainWindow):

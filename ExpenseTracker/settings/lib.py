@@ -47,6 +47,8 @@ METADATA_KEYS: List[str] = [
     'exclude_negative',
     'exclude_zero',
     'exclude_positive',
+    'yearmonth',
+    'span',
     'show_transactions_window',
     'theme'
 ]
@@ -631,49 +633,6 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         except Exception as e:
             logging.error(f'Error saving client_secret: {e}')
             raise
-
-    def get_status(self) -> status.Status:
-        """
-        Get the configuration state of the application.
-
-        Returns:
-            A Status value indicating the configuration state.
-        """
-        from ..auth import auth
-        from ..auth import service
-        from ..database import database
-
-        if not self.client_secret_path.exists():
-            return status.Status.ClientSecretNotFound
-
-        try:
-            client_secret: Dict[str, Any] = self.get_section('client_secret')
-            self.validate_client_secret(client_secret)
-        except:
-            return status.Status.ClientSecretInvalid
-
-        try:
-            auth.verify_creds()
-        except RuntimeError:
-            return status.Status.NotAuthenticated
-
-        config: Dict[str, Any] = self.get_section('spreadsheet')
-        if not config.get('id'):
-            return status.Status.SpreadsheetIdNotConfigured
-        if not config.get('worksheet'):
-            return status.Status.SpreadsheetWorksheetNotConfigured
-
-        try:
-            service.get_service()
-        except:
-            return status.Status.ServiceUnavailable
-
-        try:
-            database.verify()
-        except RuntimeError:
-            return status.Status.CacheInvalid
-
-        return status.Status.Okay
 
 
 settings: SettingsAPI = SettingsAPI()

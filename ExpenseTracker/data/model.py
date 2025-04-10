@@ -63,7 +63,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         signals.configSectionChanged.connect(self.init_data)
 
     def _load_data(self) -> None:
-        # Retrieve the breakdown DataFrame for the target period using the new data API.
+
         breakdown = get_monthly_expenses(self.year_month, span=self.span)
         # Optionally add a total row aggregating all categories.
         if not breakdown.empty:

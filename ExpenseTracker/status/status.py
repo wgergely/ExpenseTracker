@@ -3,8 +3,6 @@ import logging
 from typing import Dict
 
 
-
-
 class Status(enum.StrEnum):
     UnknownStatus = enum.auto()
     Okay = enum.auto()
