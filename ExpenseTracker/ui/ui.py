@@ -173,7 +173,6 @@ class FontDatabase(QtGui.QFontDatabase):
         if not FONT_PATH.is_file():
             raise FileNotFoundError(f'Font file not found: {FONT_PATH}')
         idx = self.addApplicationFont(str(FONT_PATH))
-        print(f'Font index: {idx}')
         if idx < 0:
             raise RuntimeError(f'Could not load font file: {FONT_PATH}')
         family = self.applicationFontFamilies(idx)
@@ -181,7 +180,6 @@ class FontDatabase(QtGui.QFontDatabase):
             raise RuntimeError(f'Could not find font family in file: {FONT_PATH} ({idx})')
 
         self._family = family[0]
-        print(f'Font family: {self._family}')
 
     def get(self, size, role):
         """Retrieve the font and metrics for the given font size and role.
