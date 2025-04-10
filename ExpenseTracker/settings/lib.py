@@ -8,8 +8,8 @@ from typing import Dict, Any, Optional, List
 
 from PySide6 import QtCore
 
-from ..ui.actions import signals
 from ..status import status
+from ..ui.actions import signals
 
 """
 Manages settings for ledger.json and client_secret.json files. Provides
@@ -18,8 +18,6 @@ operations and errors. Supports creating, removing, listing, and loading
 "preset" zips containing client_secret.json and ledger.json.
 
 """
-
-
 
 organization_name: str = 'ExpenseTracker'
 app_name: str = 'ExpenseTracker'
@@ -32,7 +30,7 @@ def is_valid_hex_color(value: str) -> bool:
     return bool(re.fullmatch(r'#[0-9A-Fa-f]{6}', value))
 
 
-EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions']
+EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions', 'description', 'weight']
 TRANSACTION_DATA_COLUMNS: List[str] = ['date', 'amount', 'description', 'category', 'account']
 
 DATA_MAPPING_KEYS: List[str] = ['date', 'amount', 'description', 'category', 'account']
@@ -101,7 +99,6 @@ LEDGER_SCHEMA: Dict[str, Any] = {
         }
     }
 }
-
 
 
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
@@ -368,7 +365,6 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         self._watcher.addPath(str(self.client_secret_path))
         self._watcher.addPath(str(self.ledger_path))
         self._watcher.addPath(str(self.creds_path))
-
 
     def _connect_signals(self) -> None:
         self._watcher.directoryChanged.connect(signals.configFileChanged)

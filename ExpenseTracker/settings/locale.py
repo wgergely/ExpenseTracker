@@ -3,6 +3,8 @@ Module for formatting decimal and currency values using Babel.
 
 """
 import datetime
+import logging
+from datetime import date
 from typing import List
 
 from babel import Locale, numbers, dates
@@ -99,6 +101,7 @@ def format_float(value: float, locale: str) -> str:
         formatted_value = numbers.format_decimal(value, locale=locale_obj)
         return formatted_value
     except Exception as e:
+        logging.debug(f'Error formatting float: {value} for locale: {locale}: {e}')
         return str(value)
 
 
@@ -121,11 +124,11 @@ def format_currency_value(value: float, locale: str) -> str:
         formatted_currency = numbers.format_currency(value, currency=currency_code, locale=locale_obj)
         return formatted_currency
     except Exception as e:
-        print(f'Error formatting currency: {e}')
+        logging.debug(f'Error formatting currency: {value} for locale: {locale}, error: {e}')
         return str(value)
 
 
-def parse_date(date_str: str, locale: str = None, format: str = 'short') -> datetime.datetime:
+def parse_date(date_str: str, locale: str = None, format: str = 'short') -> date:
     """
     Parse a date string into a datetime object based on the locale.
 

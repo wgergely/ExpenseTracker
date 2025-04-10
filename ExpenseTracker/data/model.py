@@ -9,14 +9,13 @@ for "category" and "amount" are derived from the ledger.json "mapping" configura
 """
 
 import logging
-import math
 from typing import Any
 
 import pandas as pd
 from PySide6 import QtCore, QtGui
 
-from .data import get_monthly_expenses
 from ..settings import lib
+from ..settings import locale
 from ..ui import ui
 from ..ui.actions import signals
 
@@ -26,7 +25,7 @@ MaximumRole = QtCore.Qt.UserRole + 2
 MinimumRole = QtCore.Qt.UserRole + 3
 AverageRole = QtCore.Qt.UserRole + 4
 TotalRole = QtCore.Qt.UserRole + 5
-RateRole = QtCore.Qt.UserRole + 6
+WeightRole = QtCore.Qt.UserRole + 6
 
 
 class ExpenseModel(QtCore.QAbstractTableModel):
@@ -40,82 +39,25 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         year_month (str): The starting target month in 'YYYY-MM' format.
         span (int): The number of months to include, starting from year_month.
     """
-    columns = ['Category', 'Chart', 'Amount']
+    header = ['Category', '', 'Amount']
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
-
-        self.year_month: str = '2023-01'
-        self.span: int = 1
-
-        self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
         self.setObjectName('ExpenseTrackerExpenseModel')
+
+        self._df: pd.DataFrame = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
 
         self._connect_signals()
 
     def _connect_signals(self) -> None:
         signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.dataFetchRequested.connect(self._load_data)
 
-        signals.dataRangeChanged.connect(self.on_range_changed)
         signals.dataFetched.connect(self.init_data)
-
+        signals.dataRangeChanged.connect(self.init_data)
         signals.configSectionChanged.connect(self.init_data)
 
-    def _load_data(self) -> None:
-
-        breakdown = get_monthly_expenses(self.year_month, span=self.span)
-        # Optionally add a total row aggregating all categories.
-        if not breakdown.empty:
-            overall_total = breakdown['total'].sum()
-            all_trans = []
-            for _, row in breakdown.iterrows():
-                if row['category'].strip().lower() != 'total':
-                    all_trans.extend(row['transactions'])
-            total_row = pd.DataFrame({
-                'category': ['Total'],
-                'total': [overall_total],
-                'transactions': [all_trans]
-            })
-            breakdown = pd.concat([breakdown, total_row], ignore_index=True)
-
-        self.data_df = breakdown
-
-        self.layoutChanged.emit()
-
-    def _get_trans_df(self, row: int) -> pd.DataFrame:
-        try:
-            trans_df = pd.DataFrame(self.data_df.iloc[row]['transactions'])
-        except:
-            trans_df = pd.DataFrame()
-
-        return trans_df
-
-    def _get_summary(self, row: int) -> str:
-        trans_df = self._get_trans_df(row)
-
-        category = trans_df.get('category', pd.Series()).unique()
-        category = ', '.join(category)
-
-        total = trans_df.get('amount', pd.Series()).sum()
-        total = f'€{abs(total):.2f}'
-
-        largest_transactions = trans_df.nsmallest(3, 'amount')
-        largest_transactions = ', '.join(
-            [f'€{abs(row["amount"]):.2f} ({row["description"]})\n\n' for _, row in largest_transactions.iterrows()]
-        )
-
-        accounts = trans_df.get('account', pd.Series()).unique()
-        accounts = ', '.join(accounts)
-
-        return (f'Category: {category}\n'
-                f'Total: {total}\n'
-                f'Accounts: {accounts}\n\n'
-                f'Transactions:\n\n{largest_transactions}...'
-                )
-
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return len(self.data_df)
+        return len(self._df)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return 3
@@ -126,38 +68,33 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         row = index.row()
         col = index.column()
-        if row < 0 or row >= self.data_df.shape[0]:
+        if row < 0 or row >= self._df.shape[0]:
             return None
 
-        record = self.data_df.iloc[row]
+        record = self._df.iloc[row]
+
         category = record['category']
         total_value = record['total']
 
-        df = self.data_df.iloc[:-1][['total']].abs()
+        df_total = self._df.iloc[:-1][['total']]
 
         if role == TransactionsRole:
-            return self._get_trans_df(row)
+            return self._df.iloc[row]['transactions'].copy()
 
         if role == AverageRole:
-            return df.mean().iloc[0]
+            return df_total.mean().iloc[0]
         if role == MaximumRole:
-            return df.max().iloc[0]
+            return df_total.max().iloc[0]
         if role == MinimumRole:
-            return df.min().iloc[0]
+            return df_total.min().iloc[0]
         if role == TotalRole:
-            return df.sum().iloc[0]
-        if role == RateRole:
-            total_value = abs(total_value)
-            v = float(abs(total_value))
-            _min = 0
-            _max = float(df.max().iloc[0])
-            v = (v - _min) / (_max - _min)
-            if total_value > 0:
-                v = max(v, 0.025)
-            return v
+            return total_value
+
+        if role == WeightRole:
+            return self._df.iloc[row]['weight']
 
         if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.StatusTipRole):
-            return self._get_summary(index.row())
+            return self._df.iloc[row]['description']
 
         if role == QtCore.Qt.FontRole:
             if index.row() == self.rowCount() - 1:
@@ -189,7 +126,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         elif col == 2:
             if role == QtCore.Qt.DisplayRole:
-                return f'€{math.ceil(abs(total_value))}'
+                return locale.format_currency_value(total_value, lib.settings['locale'])
             if role == QtCore.Qt.UserRole:
                 return total_value
 
@@ -198,25 +135,19 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
-            mapping = lib.settings.get_section('mapping')
-            if not mapping:
-                return None
-
-            if section == 0:
-                return mapping.get('category', 'Category')
-            elif section == 1:
-                return 'Chart'
-            elif section == 2:
-                return mapping.get('amount', 'Amount')
+            return self.header[section]
         return None
 
     @QtCore.Slot()
     def init_data(self) -> None:
+        logging.debug('Initializing model data')
         self.beginResetModel()
         try:
-            self._load_data()
+            from ..data import data
+            self._df = data.get_data()
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
+            self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
             raise
         finally:
             self.endResetModel()
@@ -226,32 +157,11 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         """
         Clear the model data and reset the DataFrame.
         """
-        logging.debug('ExpenseModel: Clearing data')
+        logging.debug('Clearing model data')
 
         self.beginResetModel()
-        self.data_df = pd.DataFrame(columns=self.columns)
+        self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
         self.endResetModel()
-
-    @QtCore.Slot()
-    def set_year_month(self, year_month: str) -> None:
-        self.year_month = year_month
-        self.init_data()
-
-    @QtCore.Slot()
-    def set_span(self, span: int) -> None:
-        self.span = span
-        self.init_data()
-
-    @QtCore.Slot(str)
-    @QtCore.Slot(int)
-    def on_range_changed(self, year_month: str, span: int) -> None:
-        """
-        Slot to handle range changes.
-        """
-        self.year_month = year_month
-        self.span = span
-
-        self.init_data()
 
 
 class TransactionsModel(QtCore.QAbstractTableModel):
@@ -264,7 +174,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
-        self.data_df: pd.DataFrame = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+        self._df: pd.DataFrame = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
 
         self._connect_signals()
 
@@ -283,18 +193,18 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         index = ui.index()
 
         if not index.isValid():
-            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+            self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
             return
 
         df = index.data(TransactionsRole)
 
         if df.empty:
             logging.warning('TransactionsModel: No data available.')
-            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+            self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
             return
 
         df = df.sort_values(by='amount', ascending=True)
-        self.data_df = df.copy()
+        self._df = df.copy()
 
     @QtCore.Slot()
     def init_data(self):
@@ -303,7 +213,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             self._load_data()
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
-            self.data_df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+            self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
         finally:
             self.endResetModel()
 
@@ -313,21 +223,21 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         Clear the model data and reset the DataFrame.
         """
         self.beginResetModel()
-        self.data_df = None
+        self._df = None
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        if self.data_df is None:
+        if self._df is None:
             return 0
-        return len(self.data_df)
+        return len(self._df)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        if self.data_df is None:
+        if self._df is None:
             return 0
-        return len(self.data_df.columns)
+        return len(self._df.columns)
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
-        if self.data_df is None:
+        if self._df is None:
             return None
         if not index.isValid():
             return None
@@ -337,7 +247,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         if row < 0 or row >= self.rowCount():
             return None
 
-        value = self.data_df.iloc[row, col]
+        value = self._df.iloc[row, col]
 
         if role == QtCore.Qt.DisplayRole:
             if col == 0:
@@ -346,8 +256,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 else:
                     return f'{value}'
             elif col == 1:
-                from ..settings import locale
-
                 if isinstance(value, (int, float)):
                     return locale.format_currency_value(value, lib.settings['locale'])
                 else:
@@ -418,9 +326,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     return f'{value}'
             elif col == 1:
                 if isinstance(value, float):
-                    return f'€{abs(value):.2f}'
+                    return locale.format_currency_value(value, lib.settings['locale'])
                 elif isinstance(value, int):
-                    return f'€{abs(value)}.00'
+                    return locale.format_currency_value(value, lib.settings['locale'])
                 else:
                     return f'{value}'
             elif col == 2:
@@ -441,13 +349,13 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
-        if self.data_df is None:
+        if self._df is None:
             return None
         if role != QtCore.Qt.DisplayRole:
             return None
         if orientation == QtCore.Qt.Horizontal:
             if 0 <= section < self.columnCount():
-                return self.data_df.columns[section].title()
+                return self._df.columns[section].title()
         elif orientation == QtCore.Qt.Vertical:
             return section + 1
         return None

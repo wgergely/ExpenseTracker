@@ -16,6 +16,40 @@ import pandas as pd
 
 from ..core import database
 from ..settings import lib
+from ..settings import locale
+
+METADATA_KEYS = [
+    'hide_empty_categories',
+    'exclude_negative',
+    'exclude_zero',
+    'exclude_positive',
+    'yearmonth',
+    'span',
+    'summary_mode',
+]
+
+
+class SummaryMode(enum.StrEnum):
+    Total = 'total'
+    Monthly = 'monthly'
+
+
+def metadata():
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            from ..settings import lib
+            from ..core.database import database as db
+            data = lib.settings.get_section('metadata')
+            for key in METADATA_KEYS:
+                if key in data:
+                    kwargs[key] = data[key]
+            db.verify()
+            return func(db.data(), **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
@@ -105,36 +139,73 @@ def _conform_period(df: pd.DataFrame, yearmonth: str, span: int) -> pd.DataFrame
     return df_month
 
 
-METADATA_KEYS = [
-    'hide_empty_categories',
-    'exclude_negative',
-    'exclude_zero',
-    'exclude_positive',
-    'yearmonth',
-    'span',
-    'summary_mode',
-]
+def _calculate_weights(df: pd.DataFrame,
+                       exclude_negative: bool,
+                       exclude_positive: bool,
+                       min_weight: float = 0.02) -> pd.DataFrame:
+    """Calculate and assign normalized weights for each row in df (grouped by category).
+    0.0 = pivot value (e.g. zero or min/max), 1.0 = dataset extreme.
 
+    Args:
+        df: The dataframe after grouping by category (and possibly a 'Total' row).
+        exclude_negative: Whether negative amounts were excluded from the dataset.
+        exclude_positive: Whether positive amounts were excluded from the dataset.
+        min_weight: The minimum weight to assign to non-zero rows (e.g. 0.05).
 
-class SummaryMode(enum.StrEnum):
-    Total = 'total'
-    Monthly = 'monthly'
+    Returns:
+        df: The same dataframe with a new 'weight' column updated.
+    """
+    # Exclude any "Total" row from min/max analysis
+    core_df = df[df['category'] != 'Total']
+    if core_df.empty:
+        return df
 
+    min_val = core_df['total'].min()
+    max_val = core_df['total'].max()
 
-def metadata():
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            from ..settings import lib
-            from ..core.database import database as db
-            data = lib.settings.get_section('metadata')
-            for key in METADATA_KEYS:
-                if key in data:
-                    kwargs[key] = data[key]
-            db.verify()
-            return func(db.data(), **kwargs)
-        return wrapper
-    return decorator
+    def clamp_weight(w: float, row_total: float) -> float:
+        # Clamp 0 ≤ w ≤ 1
+        w_clamped = max(0.0, min(w, 1.0))
+        # If total isn't zero, ensure at least min_weight
+        if row_total != 0:
+            w_clamped = max(w_clamped, min_weight)
+        return w_clamped
+
+    def weight_neg(row_total):
+        # for example pivot=0, extreme=min_val (which is negative or zero)
+        # row_total / min_val => 0..1  (largest negative becomes 1.0, zero => 0)
+        if min_val == 0:
+            return 0.0
+        w = row_total / min_val
+        return clamp_weight(w, row_total)
+
+    def weight_pos(row_total):
+        # pivot=0, extreme=max_val => row_total / max_val => 0..1
+        if max_val == 0:
+            return 0.0
+        w = row_total / max_val
+        return clamp_weight(w, row_total)
+
+    def weight_both(row_total):
+        # Standard min–max => (row_total - min_val) / (max_val - min_val)
+        denom = max_val - min_val
+        if denom == 0:
+            return 0.0
+        w = (row_total - min_val) / denom
+        return clamp_weight(w, row_total)
+
+    if exclude_positive and not exclude_negative:
+        # All data <= 0 -> negative weighting
+        df.loc[df['category'] != 'Total', 'weight'] = df['total'].apply(weight_neg)
+    elif exclude_negative and not exclude_positive:
+        # All data >= 0 -> positive weighting
+        df.loc[df['category'] != 'Total', 'weight'] = df['total'].apply(weight_pos)
+    else:
+        # Mixed data -> min–max
+        df.loc[df['category'] != 'Total', 'weight'] = df['total'].apply(weight_both)
+
+    return df
+
 
 @metadata()
 def get_data(
@@ -149,16 +220,13 @@ def get_data(
         add_total_row: bool = True,
 ) -> pd.DataFrame:
     """Load and wrap data from the database.
-
     """
     if df.empty:
         logging.warning('No data available in the database.')
         return pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
 
-    # Span must be a minimum of 1 month
-    span = int(span) if span else 1
-    if span < 1:
-        span = 1
+    # Ensure span is at least 1
+    span = max(int(span) if span else 1, 1)
 
     df = _conform_to_header_mapping(df)
     df = _conform_date_column(df)
@@ -179,31 +247,69 @@ def get_data(
     config = lib.settings.get_section('mapping')
     transaction_columns = list(config.keys())
 
-    breakdown = (
+    # Fallback locale
+    _locale = lib.settings['locale']
+    if _locale not in locale.LOCALE_MAP:
+        _locale = 'en_GB'
+
+    def _build_description(_df):
+        try:
+            total_val = _df['amount'].sum()
+            total_str = locale.format_currency_value(total_val, _locale)
+            accounts_str = ', '.join(_df.get('account', pd.Series()).unique())
+
+            # Example: smallest 3 by raw 'amount'
+            _max = _df.nsmallest(3, 'amount')
+            _max_str = ', '.join([
+                f'{locale.format_currency_value(row["amount"], _locale)} ({row["description"]})'
+                for _, row in _max.iterrows()
+            ])
+
+            return (
+                f'Category: {", ".join(_df["category"].unique())}\n'
+                f'Total: {total_str}\n'
+                f'Accounts: {accounts_str}\n\n'
+                f'Transactions:\n\n{_max_str}...'
+            )
+        except Exception as e:
+            logging.debug(f'Error building description: {e}')
+            return ''
+
+    # Group by category; aggregate totals & build transaction list
+    df = (
         df.groupby('category')
         .apply(
             lambda _df: pd.Series({
                 'total': _df['amount'].sum(),
-                'transactions': _df[transaction_columns].to_dict(orient='records')
-            }))
+                'transactions': _df[transaction_columns].to_dict(orient='records'),
+                'description': _build_description(_df),
+                'weight': 0.0,  # Will be filled by _calculate_weights
+            })
+        )
         .reset_index()
     )
 
-    # Normalize the total column
+    # Normalize the total column if monthly
     if summary_mode == SummaryMode.Monthly.value:
-        breakdown['total'] = breakdown['total'] / span
+        df['total'] = df['total'] / span
 
     # Hide empty categories
     if hide_empty_categories:
-        breakdown = breakdown[breakdown['category'].notna() & (breakdown['category'] != '')]
+        df = df[df['category'].notna() & (df['category'] != '')]
 
-    # Sort by total amount
-    breakdown = breakdown.sort_values('category', ascending=True).reset_index(drop=True)
+    # Sort categories
+    df = df.sort_values('category', ascending=True).reset_index(drop=True)
 
-    # Add total row
+    # Calculate weights
+    df = _calculate_weights(df, exclude_negative, exclude_positive, min_weight=0.02)
+
+    # Optionally add total row
     if add_total_row:
-        total = breakdown['total'].sum()
-        breakdown = pd.concat([breakdown, pd.DataFrame({'category': ['Total'], 'total': [total]})], ignore_index=True)
+        overall = df['total'].sum()
+        df = pd.concat(
+            [df, pd.DataFrame({'category': ['Total'], 'total': [overall]})],
+            ignore_index=True
+        )
 
 
-    return breakdown
+    return df

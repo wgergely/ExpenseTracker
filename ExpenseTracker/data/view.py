@@ -1,7 +1,12 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from .model import ExpenseModel, RateRole, TransactionsModel
-from .model import TransactionsSortFilterProxyModel
+from .model import (
+    ExpenseModel,
+    WeightRole,
+    TransactionsModel,
+    ExpenseSortFilterProxyModel,
+    TransactionsSortFilterProxyModel
+)
 from ..ui import ui
 from ..ui.actions import signals
 
@@ -88,8 +93,8 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
         gradient.setColorAt(0.0, ui.Color.Green())
         gradient.setColorAt(1.0, ui.Color.LightRed())
 
-        width = float(rect.width()) * index.data(RateRole)
-        width = max(width, ui.Size.Separator(1.0)) if index.data(RateRole) > 0.0 else width
+        width = float(rect.width()) * index.data(WeightRole)
+        width = max(width, ui.Size.Separator(1.0)) if index.data(WeightRole) > 0.0 else width
         rect.setWidth(width)
 
         painter.setBrush(gradient)
@@ -107,8 +112,8 @@ class ExpenseView(QtWidgets.QTableView):
     Tab and Shift+Tab navigate between rows (unless at the beginning or end of the list).
     """
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent=parent)
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
 
@@ -124,34 +129,37 @@ class ExpenseView(QtWidgets.QTableView):
         self.setWordWrap(True)
         self.setTextElideMode(QtCore.Qt.ElideRight)
 
-
-        self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         ui.set_stylesheet(self)
 
         self._init_delegates()
+        self._init_actions()
+        self._init_model()
         self._connect_signals()
+
+        QtCore.QTimer.singleShot(0, self.model().sourceModel().init_data)
+
+    def _init_model(self) -> None:
+        model = ExpenseModel()
+        proxy = ExpenseSortFilterProxyModel()
+        proxy.setSourceModel(model)
+        self.setModel(proxy)
+
+        self._init_section_sizing()
 
     def _init_delegates(self) -> None:
         self.setItemDelegate(GraphDelegate(self))
 
+    def _init_actions(self) -> None:
+        pass
+
     def _connect_signals(self) -> None:
         self.doubleClicked.connect(self.activate_action)
 
-    def setModel(self, model):
-        if not isinstance(model, ExpenseModel) and not isinstance(model, QtCore.QSortFilterProxyModel):
-            raise TypeError('Expected an ExpenseModel or its QSortFilterProxyModel wrapper.')
-        super().setModel(model)
-        self._init_section_sizing()
-        if isinstance(model, ExpenseModel):
-            self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
-            self.model().modelAboutToBeReset.connect(signals.categorySelectionChanged)
-            self.model().modelReset.connect(signals.categorySelectionChanged)
-        else:
-            # If using proxy, connect to the source model for signals
-            source = model.sourceModel()
-            source.modelAboutToBeReset.connect(signals.categorySelectionChanged)
-            source.modelReset.connect(signals.categorySelectionChanged)
+        self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
+        self.model().sourceModel().modelAboutToBeReset.connect(signals.categorySelectionChanged)
+        self.model().sourceModel().modelReset.connect(signals.categorySelectionChanged)
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
