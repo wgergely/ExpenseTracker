@@ -49,12 +49,14 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         self.span: int = 1
 
         self.data_df: pd.DataFrame = pd.DataFrame(columns=self.columns)
+        self.setObjectName('ExpenseTrackerExpenseModel')
 
-        self.setObjectName('ExpenseModel')
         self._connect_signals()
 
     def _connect_signals(self) -> None:
         signals.dataAboutToBeFetched.connect(self.clear_data)
+        signals.dataFetchRequested.connect(self._load_data)
+
         signals.dataRangeChanged.connect(self.on_range_changed)
         signals.dataFetched.connect(self.init_data)
 
@@ -224,6 +226,8 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         """
         Clear the model data and reset the DataFrame.
         """
+        logging.debug('ExpenseModel: Clearing data')
+
         self.beginResetModel()
         self.data_df = pd.DataFrame(columns=self.columns)
         self.endResetModel()

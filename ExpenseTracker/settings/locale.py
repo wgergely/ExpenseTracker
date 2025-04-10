@@ -3,12 +3,9 @@ Module for formatting decimal and currency values using Babel.
 
 """
 import datetime
-import logging
 from typing import List
 
 from babel import Locale, numbers, dates
-
-
 
 CURRENCY_MAP: dict[str, str] = {
     'US': 'USD',
@@ -135,6 +132,7 @@ def parse_date(date_str: str, locale: str = None, format: str = 'short') -> date
     Args:
         date_str (str): The date string to be parsed.
         locale (str, optional): Locale string, e.g. 'en_US'. Defaults to None.
+        format: (str, optional): The format of the date string. Defaults to 'short'.
 
     Returns:
         datetime.datetime: The parsed datetime object.

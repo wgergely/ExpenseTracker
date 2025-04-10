@@ -143,7 +143,8 @@ def cast_type(column: str, value: Any) -> Any:
                     pass
 
             dt = datetime.datetime(1980, 1, 1)
-            logging.debug(f'Unable to parse "{text_val}" as a date for column "{column}". Storing {dt.strftime("%Y-%m-%d")}')
+            logging.debug(
+                f'Unable to parse "{text_val}" as a date for column "{column}". Storing {dt.strftime("%Y-%m-%d")}')
             return dt.strftime('%Y-%m-%d')
 
     elif config_type == 'string':
@@ -203,6 +204,7 @@ class DatabaseAPI(QtCore.QObject):
             )
             return cursor.fetchone() is not None
         finally:
+            conn.commit()
             conn.close()
 
     @classmethod
@@ -218,6 +220,7 @@ class DatabaseAPI(QtCore.QObject):
 
         try:
             if not cls.table_exists(Table.Transactions):
+                conn.commit()
                 cls.set_state(CacheState.Uninitialized)
                 raise status.CacheInvalidException(
                     'Database uninitialized. No transactions table found.'
@@ -230,6 +233,7 @@ class DatabaseAPI(QtCore.QObject):
             logging.info(f'Cached transactions with {len(columns)} columns: {columns}')
             config = lib.settings.get_section('header')
             if not config:
+                conn.commit()
                 cls.set_state(CacheState.Stale)
                 raise status.HeadersInvalidException(
                     'No header data found in configuration, data needs sync.'
@@ -238,12 +242,14 @@ class DatabaseAPI(QtCore.QObject):
             difference = set(columns).symmetric_difference(set(config.keys()))
             if difference:
                 logging.info(f'Columns differ between config and cache: {difference}')
+                conn.commit()
                 cls.set_state(CacheState.Stale)
                 raise status.CacheInvalidException(f'Column mismatch: {difference}')
 
             cursor = conn.execute(f"""SELECT last_sync FROM {Table.Meta} WHERE meta_id=1""")
             row = cursor.fetchone()
             if row and not row[0]:
+                conn.commit()
                 cls.set_state(CacheState.Stale)
                 raise status.CacheInvalidException('Cache is stale. Last sync date not found.')
 
@@ -252,6 +258,7 @@ class DatabaseAPI(QtCore.QObject):
             if row and row[0]:
                 age = datetime.datetime.now(datetime.timezone.utc) - last_sync
                 if age.days >= CACHE_MAX_AGE_DAYS:
+                    conn.commit()
                     cls.set_state(CacheState.Stale)
                     raise status.CacheInvalidException(f'Cache is stale. Last sync: {last_sync}')
 
@@ -259,9 +266,12 @@ class DatabaseAPI(QtCore.QObject):
             row = cursor.fetchone()
             if row and row[0] == 0:
                 logging.info('Cache is empty. No transactions found.')
+                conn.commit()
                 cls.set_state(CacheState.Empty)
                 return
 
+            conn.commit()
+            cls.set_state(CacheState.Valid)
             logging.info(
                 f'Cache is valid. Last sync={last_sync}, Rows={row[0]}, Columns={len(columns)}'
             )
@@ -328,9 +338,10 @@ class DatabaseAPI(QtCore.QObject):
                 f'Failed to remove cache database after {max_attempts} attempts.'
             )
 
-    def stamp(self) -> None:
+    @classmethod
+    def stamp(cls) -> None:
         """Update the last sync time in the database."""
-        conn = self.connection()
+        conn = cls.connection()
         try:
             conn.execute(f"""
                 UPDATE {Table.Meta}
@@ -434,7 +445,6 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def cache_data(cls, df: pd.DataFrame) -> None:
-
         conn = cls.connection()
 
         logging.info(f'Caching data.')
@@ -443,8 +453,11 @@ class DatabaseAPI(QtCore.QObject):
             logging.info(f'Dropped the transactions table: {Table.Transactions}')
 
             if df.empty:
+                conn.commit()
                 cls.set_state(CacheState.Empty)
+                cls.stamp()
                 logging.warning('DataFrame is empty. No data to cache.')
+                return
 
             # Get the column names from the DataFrame
             logging.info(f'Checking columns...')
@@ -457,6 +470,7 @@ class DatabaseAPI(QtCore.QObject):
             difference = set(df_columns).symmetric_difference(set(cf_columns))
             if difference:
                 cls.set_state(CacheState.Stale)
+                cls.stamp()
                 raise status.HeadersInvalidException(f'Columns differ between config and cache: {difference}')
             else:
                 logging.info(f'Columns match: {df_columns}')
@@ -485,37 +499,17 @@ class DatabaseAPI(QtCore.QObject):
                 f'VALUES ({placeholders})'
             )
 
-            logging.info(f'Inserting {len(rows)} rows into the "{Table.Transactions}" table.')
+            logging.debug(f'Inserting {len(rows)} rows into the "{Table.Transactions}" table.')
             values = [[cast_type(h, val) for h, val in zip(df_columns, row)] for row in rows]
             conn.executemany(sql, values)
+            conn.commit()
 
+            logging.info(f'Cached {len(rows)} rows into the "{Table.Transactions}" table.')
+            cls.set_state(CacheState.Valid)
+            cls.stamp()
         finally:
             conn.commit()
             conn.close()
 
 
 database = DatabaseAPI()
-
-#     headers = [str(col) for col in data.columns]
-#     rows = list(data.itertuples(index=False, name=None))
-#     col_names = []
-#     for h in headers:
-#         raw_name = _sanitize_column_name(h)
-#         escaped = raw_name.replace('"', '""')
-#         col_names.append(f'"{escaped}"')
-#     placeholders = ','.join(['?'] * len(col_names))
-#     insert_stmt = (
-#         f'INSERT INTO "{Table.Transactions}" '
-#         f'({",".join(col_names)}) '
-#         f'VALUES ({placeholders})'
-#     )
-#     logging.info(f'Inserting {len(rows)} rows into the "{Table.Transactions}" table.')
-#     # For performance, consider using executemany if the dataset grows large.
-#     for row in rows:
-#         converted = [cast_type(h, val, header_data) for h, val in zip(headers, row)]
-#         conn.execute(insert_stmt, converted)
-#
-#
-
-#
-#

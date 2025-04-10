@@ -9,8 +9,6 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from ..status import status
 
 
-
-
 class Signals(QtCore.QObject):
     configFileChanged = QtCore.Signal(str)
     configSectionChanged = QtCore.Signal(str)  # Section, config
@@ -35,13 +33,9 @@ class Signals(QtCore.QObject):
         self.dataRangeChanged.connect(self.categorySelectionChanged)
         self.dataFetched.connect(self.categorySelectionChanged)
 
-        self.dataFetched.connect(lambda df: logging.info(f'Data fetched [{df.shape[0]} rows, {df.shape[1]} columns]'))
-        self.dataReady.connect(lambda df: logging.info(f'Data ready [{df.shape[0]} rows, {df.shape[1]} columns]'))
-
 
 # Create a singleton instance of Signals
 signals = Signals()
-
 
 
 @QtCore.Slot()
