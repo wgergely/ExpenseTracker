@@ -18,17 +18,16 @@ from PySide6 import QtCore, QtWidgets
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from . import auth
-from ..settings import lib
 from ..status import status
 
-DEFAULT_TIMEOUT: int = 180
+TOTAL_TIMEOUT: int = 180
+MAX_RETRIES: int = 6
 BATCH_SIZE: int = 3000  # Number of rows per batch for large sheets
 
 
 class AsyncWorker(QtCore.QThread):
     """
-    Generic worker that runs a blocking function in a QThread.
+    Generic worker that runs a blocking function in a QThread with retry logic.
 
     Emits:
       - resultReady(object): with the function's result on success.
@@ -41,14 +40,35 @@ class AsyncWorker(QtCore.QThread):
         super().__init__()
         self.func = func
         self.args = args
+        # Retry parameters centralized here.
+        self.max_attempts = kwargs.pop('max_attempts', MAX_RETRIES)
+        self.wait_seconds = kwargs.pop('wait_seconds', 2.0)
         self.kwargs = kwargs
 
     def run(self) -> None:
-        try:
-            result = self.func(*self.args, **self.kwargs)
-            self.resultReady.emit(result)
-        except Exception as ex:
-            self.errorOccurred.emit(str(ex))
+        attempts = 0
+        last_exception = None
+        while attempts < self.max_attempts:
+            attempts += 1
+            try:
+                result = self.func(*self.args, **self.kwargs)
+                self.resultReady.emit(result)
+                return
+            except (
+                    status.AuthenticationExceptionException,
+                    status.CredsNotFoundException,
+                    status.CredsInvalidException,
+                    status.SpreadsheetIdNotConfiguredException,
+                    status.SpreadsheetWorksheetNotConfiguredException,
+                    status.HeadersInvalidException,
+                    status.HeaderMappingInvalidException
+            ) as ex:
+                self.errorOccurred.emit(str(ex))
+                return
+            except Exception as ex:
+                last_exception = ex
+                time.sleep(self.wait_seconds)
+        self.errorOccurred.emit(str(last_exception))
 
 
 class SheetsFetchProgressDialog(QtWidgets.QDialog):
@@ -60,11 +80,11 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
     """
     cancelled = QtCore.Signal()
 
-    def __init__(self, timeout_seconds: int = DEFAULT_TIMEOUT, parent: Optional[QtWidgets.QWidget] = None,
+    def __init__(self, total_timeout: int = TOTAL_TIMEOUT, parent: Optional[QtWidgets.QWidget] = None,
                  status_text: str = 'Fetching data.') -> None:
         super().__init__(parent)
-        self.timeout_seconds: int = timeout_seconds
-        self.remaining: int = timeout_seconds
+        self.total_timeout: int = total_timeout
+        self.remaining: int = total_timeout
         self.setWindowTitle('Fetching Data')
         self.setModal(True)
         self.countdown_timer = QtCore.QTimer(self)
@@ -79,19 +99,27 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
         self.countdown_timer.start()
 
     def _create_ui(self) -> None:
-        QtWidgets.QVBoxLayout(self)
         from ..ui import ui
+
+        QtWidgets.QVBoxLayout(self)
+        margin = ui.Size.Margin(1.0)
+        self.layout().setContentsMargins(margin, margin, margin, margin)
         self.layout().setSpacing(ui.Size.Indicator(1.0))
+
         self.status_label = QtWidgets.QLabel(self.status_text)
         self.layout().addWidget(self.status_label, 1)
-        self.countdown_label = QtWidgets.QLabel(f'Please wait ({self.remaining}s)...')
+        self.countdown_label = QtWidgets.QLabel(f'Please wait ({self.remaining}s).')
         self.layout().addWidget(self.countdown_label, 1)
+
+        self.layout().addSpacing(margin)
+
         self.cancel_button = QtWidgets.QPushButton('Cancel')
         self.layout().addWidget(self.cancel_button, 1)
 
     def _connect_signals(self) -> None:
         self.countdown_timer.timeout.connect(self.update_countdown)
         self.cancel_button.clicked.connect(self.on_cancel)
+        self.accepted.connect(self.on_cancel)
 
     @QtCore.Slot()
     def update_countdown(self) -> None:
@@ -114,6 +142,7 @@ def get_service() -> Any:
     Returns:
         The Sheets API Resource.
     """
+    from . import auth
     creds: Any = auth.get_creds()
     try:
         service: Any = build('sheets', 'v4', credentials=creds)
@@ -162,8 +191,9 @@ def _query_sheet_size(service: Any, spreadsheet_id: str, worksheet_name: str) ->
         spreadsheetId=spreadsheet_id,
         fields='sheets(properties(title,gridProperties(rowCount,columnCount)))'
     ).execute()
-    sheet: Optional[Dict[str, Any]] = next((s for s in result.get('sheets', [])
-                                            if s.get('properties', {}).get('title', '') == worksheet_name), None)
+    sheet: Optional[Dict[str, Any]] = next(
+        (s for s in result.get('sheets', [])
+         if s.get('properties', {}).get('title', '') == worksheet_name), None)
     if not sheet:
         raise status.WorksheetNotFoundException(f'Worksheet "{worksheet_name}" not found.')
     grid_props: Dict[str, Any] = sheet.get('properties', {}).get('gridProperties', {})
@@ -184,6 +214,8 @@ def _verify_sheet_access() -> Any:
         SpreadsheetIdNotConfiguredException, ServiceUnavailableException,
         SpreadsheetWorksheetNotConfiguredException, WorksheetNotFoundException.
     """
+    from ..settings import lib
+
     service: Any = get_service()
     config: Dict[str, Any] = lib.settings.get_section('spreadsheet')
     spreadsheet_id: Optional[str] = config.get('id', None)
@@ -224,53 +256,70 @@ def _verify_sheet_access() -> Any:
     if not worksheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
 
-    sheet: Optional[Dict[str, Any]] = next((s for s in result.get('sheets', [])
-                                            if s.get('properties', {}).get('title', '') == worksheet_name), None)
+    sheet: Optional[Dict[str, Any]] = next(
+        (s for s in result.get('sheets', [])
+         if s.get('properties', {}).get('title', '') == worksheet_name), None)
     if not sheet:
-        raise status.WorksheetNotFoundException
+        raise status.WorksheetNotFoundException(
+            f'Worksheet "{worksheet_name}" not found in spreadsheet "{spreadsheet_id}".')
 
     logging.info(f'Worksheet "{worksheet_name}" found in spreadsheet "{spreadsheet_id}".')
     return service
 
 
-def verify_sheet_access(timeout_seconds: int = DEFAULT_TIMEOUT) -> Any:
+def verify_sheet_access(total_timeout: int = TOTAL_TIMEOUT) -> Any:
     """
     Asynchronously verifies access to the spreadsheet, returning the Sheets API resource.
     """
-    return start_asynchronous(_verify_sheet_access, timeout_seconds=timeout_seconds,
+    return start_asynchronous(_verify_sheet_access, total_timeout=total_timeout,
                               status_text='Verifying sheet access.')
 
 
-def verify_headers() -> Set[str]:
+def _verify_headers(remote_headers: List[str] = None) -> Set[str]:
     """
     Verify the headers of the remote spreadsheet against the local configuration.
     """
+    from ..settings import lib
+
     config: Dict[str, Any] = lib.settings.get_section('header')
     if not config:
         raise status.HeadersInvalidException
 
-    remote_headers: List[str] = _fetch_headers()
+    remote_headers = remote_headers or _fetch_headers()
     if not remote_headers:
         raise status.HeadersInvalidException('No data found in the remote sheet.')
-    remote_headers_set: Set[str] = set(sorted(remote_headers))
 
-    expected_headers: Set[str] = set(sorted(config.keys()))
-    mismatch: Set[str] = expected_headers.difference(remote_headers_set)
+    remote_headers_set = set(sorted(remote_headers))
+    expected_headers = set(sorted(config.keys()))
+    mismatch = expected_headers.difference(remote_headers_set)
+
     if mismatch:
         raise status.HeadersInvalidException(
             f'Remote sheet headers do not match the expected configuration: '
             f'{", ".join(mismatch)} not found.'
         )
-    logging.info(
-        f'Found {len(expected_headers)} headers in the local configuration: [{",".join(sorted(expected_headers))}].')
 
+    logging.info(
+        f'Found {len(expected_headers)} headers in the local configuration: '
+        f'[{",".join(sorted(expected_headers))}].'
+    )
     return remote_headers_set
 
 
-def verify_mapping() -> None:
+def verify_headers(total_timeout: int = TOTAL_TIMEOUT) -> Set[str]:
+    """
+    Asynchronously verifies the headers of the remote spreadsheet.
+    """
+    return start_asynchronous(_verify_headers, total_timeout=total_timeout,
+                              status_text='Verifying headers.')
+
+
+def _verify_mapping(remote_headers: List[str] = None) -> None:
     """
     Verify the header mapping configuration against the remote spreadsheet's column values.
     """
+    from ..settings import lib
+
     config: Dict[str, Any] = lib.settings.get_section('mapping')
     if not config:
         raise status.HeaderMappingInvalidException
@@ -285,7 +334,7 @@ def verify_mapping() -> None:
     config_headers_set: Set[str] = set(sorted(config_headers))
     logging.info(f'Header mapping configuration found {len(config_headers_set)} columns.')
 
-    remote_headers: List[str] = _fetch_headers()
+    remote_headers: List[str] = remote_headers or _fetch_headers()
     remote_headers_set: Set[str] = set(sorted(remote_headers))
 
     if not config_headers_set.issubset(remote_headers_set):
@@ -295,18 +344,17 @@ def verify_mapping() -> None:
         )
 
     logging.info(
-        f'Header mapping references {len(config_headers_set)} valid columns: [{",".join(sorted(config_headers_set))}].')
+        f'Header mapping references {len(config_headers_set)} valid columns: '
+        f'[{",".join(sorted(config_headers_set))}].'
+    )
 
-    # Verify the types of the date and amount columns - these are required column types
     config_headers_full: Dict[str, Any] = lib.settings.get_section('header')
-
     date_column: str = config.get('date')
     _type: str = config_headers_full[date_column]
     if _type != 'date':
         raise status.HeaderMappingInvalidException(
             f'Date column source must be a date type, but column "{date_column}" is of type "{_type}".'
         )
-
     logging.info(f'date="{date_column}" is of accepted type "{_type}".')
 
     amount_column: str = config.get('amount')
@@ -315,68 +363,47 @@ def verify_mapping() -> None:
         raise status.HeaderMappingInvalidException(
             f'Amount column source must be a numeric type, but column "{amount_column}" is of type "{_type}".'
         )
-
     logging.info(f'amount="{amount_column}" is of accepted type "{_type}".')
-
     logging.info(f'Header mapping verified successfully. Found {len(config_headers_full)} columns.')
 
 
-def _fetch_data() -> pd.DataFrame:
+def verify_mapping(total_timeout: int = TOTAL_TIMEOUT) -> None:
+    """
+    Asynchronously verifies the header mapping configuration against the remote spreadsheet's column values.
+    """
+    return start_asynchronous(_verify_mapping, total_timeout=total_timeout,
+                              status_text='Verifying header mapping.')
+
+
+def _fetch_data(
+        value_render_option: str = 'UNFORMATTED_VALUE'
+) -> pd.DataFrame:
     """
     Retrieves ledger data as a pandas DataFrame using the spreadsheet configuration.
 
     Returns:
         A pandas DataFrame containing the ledger data.
     """
+    from ..settings import lib
+
     config: Dict[str, Any] = lib.settings.get_section('spreadsheet')
+
     spreadsheet_id: Optional[str] = config.get('id', None)
     if not spreadsheet_id:
         raise status.SpreadsheetIdNotConfiguredException
+
     worksheet_name: Optional[str] = config.get('worksheet', None)
     if not worksheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
+
     service: Any = _verify_sheet_access()
-    return _fetch_worksheet_data(service, spreadsheet_id, worksheet_name)
 
-
-def _fetch_worksheet_data(
-        service: Any,
-        spreadsheet_id: str,
-        worksheet_name: str,
-        max_attempts: int = 3,
-        wait_seconds: float = 2.0,
-        value_render_option: str = 'UNFORMATTED_VALUE'
-) -> pd.DataFrame:
-    """
-    Retrieves worksheet data as a pandas DataFrame using batchGet.
-
-    This function first obtains the grid dimensions (row_count, column_count) of the worksheet,
-    then fetches the header row and all data rows in batches (using a fixed batch size defined
-    by BATCH_SIZE) so that only the necessary payload is retrieved via the fields parameter.
-
-    Args:
-        service: The Google Sheets API resource.
-        spreadsheet_id (str): The spreadsheet ID.
-        worksheet_name (str): The worksheet title.
-        max_attempts (int): The maximum number of retry attempts.
-        wait_seconds (float): Seconds to wait between retry attempts.
-        value_render_option (str): Specifies how values should be rendered.
-
-    Returns:
-        A pandas DataFrame containing the worksheet data.
-
-    Raises:
-        status.ServiceUnavailableException: If fetching the header or data fails after max_attempts.
-    """
-    # Get dimensions of the worksheet.
     row_count, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
     if row_count < 2:
         logging.warning(f'No data rows found in "{worksheet_name}".')
         return pd.DataFrame()
 
     last_col: str = string.ascii_uppercase[col_count - 1]
-
-    # Build batched ranges for data rows (rows 2 to row_count).
     data_ranges: List[str] = []
     data_start: int = 1
     while data_start <= row_count:
@@ -384,131 +411,103 @@ def _fetch_worksheet_data(
         data_ranges.append(f'{worksheet_name}!A{data_start}:{last_col}{data_end}')
         data_start = data_end + 1
 
-    # Fetch the data rows in batches.
-    data_rows: List[List[Any]] = []
-    attempt: int = 0
-    while attempt < max_attempts:
-        attempt += 1
-        try:
-            logging.info(f'Fetching data rows 1-{row_count} in batches (Attempt {attempt}).')
-            batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
-                spreadsheetId=spreadsheet_id,
-                ranges=data_ranges,
-                valueRenderOption=value_render_option,
-                fields='valueRanges(values)'
-            ).execute()
-            for vr in batch_result.get('valueRanges', []):
-                values: List[List[Any]] = vr.get('values', [])
-                if values:
-                    data_rows.extend(values)
-            logging.info(f'Total data rows fetched: {len(data_rows)}.')
-            break  # Exit retry loop if successful.
-        except Exception as ex:
-            logging.error(f'Error during batch data fetch (Attempt {attempt}): {ex}')
-            if attempt < max_attempts:
-                logging.info(f'Retrying data batch fetch in {wait_seconds} seconds...')
-                time.sleep(wait_seconds)
-    else:
-        raise status.ServiceUnavailableException(
-            f'All {max_attempts} attempts to fetch data from sheet "{worksheet_name}" have failed.'
-        )
+    logging.info(f'Fetching data rows 1-{row_count} in batches.')
+    batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
+        spreadsheetId=spreadsheet_id,
+        ranges=data_ranges,
+        valueRenderOption=value_render_option,
+        fields='valueRanges(values)'
+    ).execute()
 
-    # Construct and return the DataFrame - using the first row as the header.
+    data_rows: List[List[Any]] = []
+    for vr in batch_result.get('valueRanges', []):
+        values: List[List[Any]] = vr.get('values', [])
+        if values:
+            data_rows.extend(values)
+    logging.info(f'Total data rows fetched: {len(data_rows)}.')
+
     header: List[Any] = data_rows.pop(0) if data_rows else []
     df: pd.DataFrame = pd.DataFrame(data_rows, columns=header)
+
     logging.info(f'Constructed DataFrame: {df.shape[0]} rows x {df.shape[1]} columns from sheet "{worksheet_name}".')
+
+    _verify_mapping()
+    _verify_headers(remote_headers=header)
+
     return df
 
 
-def fetch_data(timeout_seconds: int = DEFAULT_TIMEOUT) -> pd.DataFrame:
+def fetch_data(total_timeout: int = TOTAL_TIMEOUT) -> pd.DataFrame:
     """
     Asynchronously fetches ledger data as a pandas DataFrame.
     """
-    return start_asynchronous(_fetch_data, timeout_seconds=timeout_seconds,
-                              status_text='Fetching data. This could take a while, please wait...')
+    data = start_asynchronous(_fetch_data, total_timeout=total_timeout, status_text='Fetching data.')
+
+    from ..ui.actions import signals
+    signals.dataFetched.emit(data.copy())
 
 
 def _fetch_headers(
-        max_attempts: int = 3,
-        wait_seconds: float = 2.0,
         value_render_option: str = 'UNFORMATTED_VALUE'
 ) -> List[str]:
     """
     Retrieves the header row from the remote sheet's worksheet.
 
     Returns:
-        A dict mapping header names to their declared format types.
+        A list of header names.
 
     Raises:
-        SpreadsheetIdNotConfiguredException: If no spreadsheet ID is configured.
-        SpreadsheetWorksheetNotConfiguredException: If no worksheet is configured.
-        WorksheetNotFoundException: If the worksheet is not found.
-        ServiceUnavailableException: For underlying HTTP or grid data errors.
-        UnknownException: If no grid data or row data is returned.
+        Various exceptions if not properly configured or data not found.
     """
+    from ..settings import lib
+
     config: Dict[str, Any] = lib.settings.get_section('spreadsheet')
+
     spreadsheet_id: Optional[str] = config.get('id', None)
     if not spreadsheet_id:
         raise status.SpreadsheetIdNotConfiguredException
+
     worksheet_name: Optional[str] = config.get('worksheet', None)
     if not worksheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
+
     service: Any = _verify_sheet_access()
 
-    # Determine the column count and compute the last column letter.
     _, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
     end_col: str = string.ascii_uppercase[col_count - 1]
+    range_ = f'{worksheet_name}!A1:{end_col}1'
+
+    logging.info(f'Fetching headers from range "{range_}".')
+    batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
+        spreadsheetId=spreadsheet_id,
+        ranges=[range_],
+        valueRenderOption=value_render_option,
+        fields='valueRanges(values)'
+    ).execute()
 
     data_rows: List[List[Any]] = []
-    attempt: int = 0
-    while attempt < max_attempts:
-        attempt += 1
-        try:
-            logging.info(f'Fetching headers from range "{worksheet_name}!A1:{end_col}1" (Attempt {attempt}).')
-            batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
-                spreadsheetId=spreadsheet_id,
-                ranges=[f'{worksheet_name}!A1:{end_col}1', ],
-                valueRenderOption=value_render_option,
-                fields='valueRanges(values)'
-            ).execute()
-            for vr in batch_result.get('valueRanges', []):
-                values: List[List[Any]] = vr.get('values', [])
-                if values:
-                    data_rows.extend(values)
-            logging.info(f'Total header rows fetched: {len(data_rows)}.')
-            break
-        except Exception as ex:
-            logging.error(f'Error during batch data fetch (Attempt {attempt}): {ex}')
-            if attempt < max_attempts:
-                logging.info(f'Retrying data batch fetch in {wait_seconds} seconds...')
-                time.sleep(wait_seconds)
-    else:
-        raise status.ServiceUnavailableException(
-            f'All {max_attempts} attempts to fetch data from sheet "{worksheet_name}" have failed.'
-        )
+    for vr in batch_result.get('valueRanges', []):
+        values: List[List[Any]] = vr.get('values', [])
+        if values:
+            data_rows.extend(values)
+    logging.info(f'Total header rows fetched: {len(data_rows)}.')
 
     if not data_rows:
         raise status.UnknownException('No data found in the remote sheet.')
-    # Extract the first row as the header.
-    header_row: List[Any] = data_rows[0]
-    header_row = header_row if header_row else []
+    header_row: List[Any] = data_rows[0] if data_rows[0] else []
     header_row = [str(cell) for cell in header_row]
-
     logging.info(f'Found {len(header_row)} headers in the remote sheet: [{",".join(sorted(header_row))}].')
     return header_row
 
 
-def fetch_headers(timeout_seconds: int = DEFAULT_TIMEOUT) -> List[str]:
+def fetch_headers(total_timeout: int = TOTAL_TIMEOUT) -> List[str]:
     """
-    Asynchronously fetches the header row as a dict.
+    Asynchronously fetches the header row.
     """
-    return start_asynchronous(_fetch_headers, timeout_seconds=timeout_seconds,
-                              status_text='Fetching headers.')
+    return start_asynchronous(_fetch_headers, total_timeout=total_timeout, status_text='Fetching headers.')
 
 
 def _fetch_categories(
-        max_attempts: int = 3,
-        wait_seconds: float = 2.0,
         value_render_option: str = 'UNFORMATTED_VALUE'
 ) -> List[str]:
     """
@@ -517,10 +516,11 @@ def _fetch_categories(
     Returns:
         A sorted list of unique category values.
     """
-    logging.info('Fetching categories from the remote sheet...')
+    from ..settings import lib
 
+    logging.info('Fetching categories from the remote sheet...')
     service: Any = _verify_sheet_access()
-    verify_mapping()
+    _verify_mapping()
 
     config: Dict[str, Any] = lib.settings.get_section('mapping')
     category_column: Optional[str] = config.get('category', None)
@@ -539,34 +539,20 @@ def _fetch_categories(
     column_letter: str = string.ascii_uppercase[idx]
     range_: str = f'{worksheet_name}!{column_letter}2:{column_letter}'
 
-    # Fetch the data rows in batches.
+    logging.info(f'Fetching categories from range "{range_}".')
+    batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
+        spreadsheetId=spreadsheet_id,
+        ranges=[range_],
+        valueRenderOption=value_render_option,
+        fields='valueRanges(values)'
+    ).execute()
+
     data_rows: List[List[Any]] = []
-    attempt: int = 0
-    while attempt < max_attempts:
-        attempt += 1
-        try:
-            logging.info(f'Fetching categories from range "{range_}" (Attempt {attempt}).')
-            batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
-                spreadsheetId=spreadsheet_id,
-                ranges=[range_],
-                valueRenderOption=value_render_option,
-                fields='valueRanges(values)'
-            ).execute()
-            for vr in batch_result.get('valueRanges', []):
-                values: List[List[Any]] = vr.get('values', [])
-                if values:
-                    data_rows.extend(values)
-            logging.info(f'Total data rows fetched: {len(data_rows)}.')
-            break  # Exit retry loop if successful.
-        except Exception as ex:
-            logging.error(f'Error during batch data fetch (Attempt {attempt}): {ex}')
-            if attempt < max_attempts:
-                logging.info(f'Retrying data batch fetch in {wait_seconds} seconds...')
-                time.sleep(wait_seconds)
-    else:
-        raise status.ServiceUnavailableException(
-            f'All {max_attempts} attempts to fetch data from sheet "{worksheet_name}" have failed.'
-        )
+    for vr in batch_result.get('valueRanges', []):
+        values: List[List[Any]] = vr.get('values', [])
+        if values:
+            data_rows.extend(values)
+    logging.info(f'Total data rows fetched: {len(data_rows)}.')
 
     if not data_rows:
         raise status.UnknownException('No data found in the remote sheet.')
@@ -576,15 +562,14 @@ def _fetch_categories(
     return categories
 
 
-def fetch_categories(timeout_seconds: int = DEFAULT_TIMEOUT) -> List[str]:
+def fetch_categories(total_timeout: int = TOTAL_TIMEOUT) -> List[str]:
     """
     Asynchronously fetches the unique list of categories.
     """
-    return start_asynchronous(_fetch_categories, timeout_seconds=timeout_seconds,
-                              status_text='Fetching categories.')
+    return start_asynchronous(_fetch_categories, total_timeout=total_timeout, status_text='Fetching categories.')
 
 
-def start_asynchronous(func: Callable[..., Any], *args: Any, timeout_seconds: int = DEFAULT_TIMEOUT,
+def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int = TOTAL_TIMEOUT,
                        status_text: str = 'Fetching data.', **kwargs: Any) -> Any:
     """
     Generic asynchronous operation wrapper.
@@ -594,7 +579,7 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, timeout_seconds: in
     Args:
         func: The blocking function to run.
         *args, **kwargs: Arguments passed to func.
-        timeout_seconds (int): Operation timeout.
+        total_timeout (int): Total operation timeout.
         status_text (str): Label displayed in the progress dialog.
 
     Returns:
@@ -603,7 +588,7 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, timeout_seconds: in
     Raises:
         Exception: If the operation is cancelled, times out, or an error occurs.
     """
-    dialog: SheetsFetchProgressDialog = SheetsFetchProgressDialog(timeout_seconds=timeout_seconds,
+    dialog: SheetsFetchProgressDialog = SheetsFetchProgressDialog(total_timeout=total_timeout,
                                                                   status_text=status_text)
     worker: AsyncWorker = AsyncWorker(func, *args, **kwargs)
     result: Dict[str, Any] = {'data': None, 'error': None}
@@ -618,7 +603,7 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, timeout_seconds: in
 
     timer: QtCore.QTimer = QtCore.QTimer()
     timer.setSingleShot(True)
-    timer.setInterval(timeout_seconds * 1000)
+    timer.setInterval(total_timeout * 1000)
     timer.timeout.connect(lambda: (dialog.countdown_timer.stop(), loop.quit()))
     timer.start()
     loop.exec()

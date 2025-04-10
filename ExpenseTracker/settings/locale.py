@@ -2,11 +2,11 @@
 Module for formatting decimal and currency values using Babel.
 
 """
+import datetime
 import logging
 from typing import List
 
-from babel import Locale, numbers
-from babel.dates import get_date_format
+from babel import Locale, numbers, dates
 
 
 
@@ -128,25 +128,15 @@ def format_currency_value(value: float, locale: str) -> str:
         return str(value)
 
 
-def get_strptime_fmt(locale: str) -> str:
+def parse_date(date_str: str, locale: str = None, format: str = 'short') -> datetime.datetime:
     """
-    Get the date format string for a given locale.
+    Parse a date string into a datetime object based on the locale.
 
     Args:
-        locale (str): Locale string, for example 'en_US'.
+        date_str (str): The date string to be parsed.
+        locale (str, optional): Locale string, e.g. 'en_US'. Defaults to None.
 
     Returns:
-        str: The date format string.
+        datetime.datetime: The parsed datetime object.
     """
-    if locale not in LOCALE_MAP:
-        return '%d/%m/%Y'  # Default format
-
-    pattern = get_date_format('short', Locale.parse(locale)).pattern
-    return (
-        pattern
-        .replace('yyyy', '%Y')
-        .replace('yy', '%y')
-        .replace('MM', '%m')
-        .replace('dd', '%d')
-        .replace('d', '%-d')
-    )
+    return dates.parse_date(date_str, locale=locale, format=format)

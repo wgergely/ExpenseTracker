@@ -19,11 +19,9 @@ import google.oauth2.credentials
 import google_auth_oauthlib.flow
 from PySide6 import QtCore, QtWidgets
 
-
 from ..status import status
 
-
-DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly',]
+DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly', ]
 
 
 class AuthFlowWorker(QtCore.QThread):

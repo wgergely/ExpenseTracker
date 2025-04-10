@@ -361,14 +361,12 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
     def _init_watcher(self):
         self._watcher.addPath(str(self.config_dir))
-        self._watcher.addPath(str(self.presets_dir))
         self._watcher.addPath(str(self.auth_dir))
-        self._watcher.addPath(str(self.db_dir))
 
         self._watcher.addPath(str(self.client_secret_path))
         self._watcher.addPath(str(self.ledger_path))
         self._watcher.addPath(str(self.creds_path))
-        self._watcher.addPath(str(self.db_path))
+
 
     def _connect_signals(self) -> None:
         self._watcher.directoryChanged.connect(signals.configFileChanged)
@@ -671,7 +669,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             return status.Status.ServiceUnavailable
 
         try:
-            database.verify_db()
+            database.verify()
         except RuntimeError:
             return status.Status.CacheInvalid
 

@@ -37,12 +37,68 @@ def setup_logging():
     # Clear all handlers to avoid formatting conflicts
     root_logger.handlers.clear()
 
-    stream_handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=LOG_DATEFMT)
+
+    stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(LOG_LEVEL)
-
     root_logger.addHandler(stream_handler)
+
+    tank_handler = TankHandler()
+    tank_handler.setFormatter(formatter)
+    tank_handler.setLevel(LOG_LEVEL)
+    root_logger.addHandler(tank_handler)
 
     # Qt messages will now also be routed through this formatter
     qInstallMessageHandler(qt_message_handler)
+
+
+
+class TankHandler(logging.Handler):
+    """
+    Custom logging handler that stores formatted log messages in an in-memory tank.
+
+    This handler collects log records which can later be browsed and filtered based on
+    the logging level.
+
+    Attributes:
+        tank (list[tuple[int, str]]): A list of tuples each containing a log level and the
+            corresponding formatted log message.
+    """
+    def __init__(self):
+        """
+        Initializes the TankHandler with an empty tank.
+        """
+        super().__init__()
+        self.tank = []
+
+    def emit(self, record):
+        """
+        Converts a log record to a formatted message and stores it in the tank.
+
+        Args:
+            record (logging.LogRecord): The log record to be processed.
+        """
+        try:
+            message = self.format(record)
+            self.tank.append((record.levelno, message))
+        except (Exception, KeyboardInterrupt):
+            self.handleError(record)
+
+    def get_logs(self, level=logging.NOTSET):
+        """
+        Returns the list of stored log messages filtered by a minimum logging level.
+
+        Args:
+            level (int, optional): The minimum logging level. Defaults to logging.NOTSET.
+
+        Returns:
+            list[str]: A list of formatted log messages with a level >= the specified level.
+        """
+        return [msg for lvl, msg in self.tank if lvl >= level]
+
+    def clear_logs(self):
+        """
+        Clears all the stored log messages from the tank.
+        """
+        self.tank.clear()

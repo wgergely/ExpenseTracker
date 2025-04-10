@@ -4,3 +4,4 @@ setup_logging()
 
 from .ui.actions import signals
 from .settings.lib import settings
+from .core.database import database
