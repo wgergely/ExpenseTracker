@@ -620,7 +620,7 @@ HeaderEditor:focus:hover QTableView {
 
 JsonPreviewWidget {
     font-weight: 300;
-    color: <LightBlue>;
+    color: <Blue>;
 }
 
 

@@ -14,6 +14,10 @@ CATEGORY_ICON_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' /
 
 font_db = None
 
+class Theme(enum.StrEnum):
+    Light = 'light'
+    Dark = 'dark'
+
 
 class Font(enum.Enum):
     """Enumeration of font names."""
@@ -93,36 +97,81 @@ class Size(enum.Enum):
 class Color(enum.Enum):
     """Enumeration of colours used across the UI."""
 
-    Opaque = (0, 0, 0, 30)
-    Transparent = (0, 0, 0, 0)
-    VeryDarkBackground = (30, 30, 30)
-    DarkBackground = (45, 45, 45)
-    Background = (65, 65, 65)
-    LightBackground = (85, 85, 85)
-    DisabledText = (135, 135, 135)
-    SecondaryText = (185, 185, 185)
-    Text = (225, 225, 225)
-    SelectedText = (255, 255, 255)
-    Blue = (88, 138, 180)
-    LightBlue = (98, 158, 190)
-    MediumBlue = (66, 118, 160, 180)
-    DarkBlue = (31, 39, 46)
-    Red = (219, 114, 114)
-    LightRed = (240, 100, 100, 180)
-    MediumRed = (210, 75, 75, 180)
-    DarkRed = (65, 35, 35, 180)
-    Green = (90, 200, 155)
-    LightGreen = (80, 150, 100, 180)
-    MediumGreen = (65, 110, 75, 180)
-    DarkGreen = (35, 65, 45)
-    Yellow = (253, 166, 1, 200)
-    LightYellow = (255, 220, 100, 180)
-    MediumYellow = (255, 200, 50, 180)
-    DarkYellow = (155, 125, 25)
+    Opaque = {
+        Theme.Light.value: (250, 250, 250, 30),
+        Theme.Dark.value: (0, 0, 0, 30),
+    }
+    Transparent = {
+        Theme.Light.value: (0, 0, 0, 0),
+        Theme.Dark.value: (0, 0, 0, 0),
+    }
+    VeryDarkBackground = {
+        Theme.Light.value: (225, 225, 225),
+        Theme.Dark.value: (30, 30, 30),
+    }
+    DarkBackground = {
+        Theme.Light.value: (210, 210, 210),
+        Theme.Dark.value: (45, 45, 45),
+    }
+    Background = {
+        Theme.Light.value: (190, 190, 190),
+        Theme.Dark.value: (65, 65, 65),
+    }
+    LightBackground = {
+        Theme.Light.value: (170, 170, 170),
+        Theme.Dark.value: (85, 85, 85),
+    }
+    DisabledText = {
+        Theme.Light.value: (120, 120, 120),
+        Theme.Dark.value: (135, 135, 135),
+    }
+    SecondaryText = {
+        Theme.Light.value: (70, 70, 70),
+        Theme.Dark.value: (185, 185, 185),
+    }
+    Text = {
+        Theme.Light.value: (30, 30, 30),
+        Theme.Dark.value: (225, 225, 225),
+    }
+    SelectedText = {
+        Theme.Light.value: (0, 0, 0),
+        Theme.Dark.value: (255, 255, 255),
+    }
+    Blue = {
+        Theme.Light.value: (0, 50, 100),
+        Theme.Dark.value: (88, 138, 180),
+    }
+    LightBlue = {
+        Theme.Light.value: (20, 70, 120),
+        Theme.Dark.value: (98, 158, 190),
+    }
+    Red = {
+        Theme.Light.value: (179, 94, 94),
+        Theme.Dark.value: (229, 114, 114),
+    }
+    Green = {
+        Theme.Light.value: (60, 180, 125),
+        Theme.Dark.value: (90, 200, 155),
+    }
+    Yellow = {
+        Theme.Light.value: (233, 146, 1),
+        Theme.Dark.value: (253, 166, 1),
+    }
 
-    def __new__(cls, r, g, b, a=255):
+    @classmethod
+    def _get_theme(cls):
+        from ..settings import lib
+        theme = lib.settings['theme']
+        if theme not in [f.value for f in Theme]:
+            theme = Theme.Dark.value
+        return theme
+
+
+    def __new__(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError(f'Invalid color value: {v}. Must be a dictionary, got {type(v)}: {v}')
         obj = object.__new__(cls)
-        obj._value_ = (r, g, b, a)
+        obj._value_ = v
         return obj
 
     def __call__(self, qss=False):
@@ -135,10 +184,16 @@ class Color(enum.Enum):
         Returns:
             QColor or str: A QColor instance if qss=False, otherwise a CSS rgba string.
         """
-        v = QtGui.QColor(*self._value_)
+        theme = self._get_theme()
+        if theme not in self._value_:
+            theme = Theme.Dark.value
+
+        # Get color from theme
+        color = QtGui.QColor(*self._value_[theme])
         if not qss:
-            return v
-        return self.rgb(v)
+            return color
+
+        return self.rgb(color)
 
     @staticmethod
     def rgb(color):

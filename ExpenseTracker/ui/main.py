@@ -3,7 +3,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from . import ui
 from .yearmonth import RangeSelectorBar
 from ..data import model
-from ..data import view
+from ..data.view.expense import ExpenseView
 from ..ui import actions
 from ..ui.actions import signals
 from ..core import database
@@ -227,7 +227,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.range_selector.setObjectName('ExpenseTrackerRangeSelector')
         self.toolbar.addWidget(self.range_selector)
 
-        self.expense_view = view.ExpenseView(parent=central)
+        self.expense_view = ExpenseView(parent=central)
         self.expense_view.setObjectName('ExpenseTrackerExpenseView')
         central.layout().addWidget(self.expense_view, 1)
 
