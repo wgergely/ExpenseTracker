@@ -47,6 +47,17 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         self._df: pd.DataFrame = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
 
+        self._cache = {
+            'category': [],
+            'total': [],
+            'transactions': [],
+            'weight': [],
+            'description': [],
+            'mean': 0,
+            'max': 0,
+            'min': 0,
+        }
+
         self._connect_signals()
 
     def _connect_signals(self) -> None:
@@ -65,70 +76,82 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
             return None
-
         row = index.row()
         col = index.column()
-        if row < 0 or row >= self._df.shape[0]:
+
+        if row < 0 or row >= self.rowCount():
             return None
 
-        record = self._df.iloc[row]
+        # Grab cached values
+        category = self._cache['category'][row]
+        total_value = self._cache['total'][row]
+        weight_value = self._cache['weight'][row]
+        description_value = self._cache['description'][row]
+        transactions = self._cache['transactions'][row]
 
-        category = record['category']
-        total_value = record['total']
+        # Determine if this row is the special “Total” row
+        is_total_row = (category == 'Total' and row == self.rowCount() - 1)
 
-        df_total = self._df.iloc[:-1][['total']]
-
+        # Custom roles for aggregated stats
         if role == TransactionsRole:
-            return self._df.iloc[row]['transactions'].copy()
-
+            # Return a copy if you don’t want the caller modifying your cache in-place
+            return list(transactions)
         if role == AverageRole:
-            return df_total.mean().iloc[0]
+            return self._cache['mean']
         if role == MaximumRole:
-            return df_total.max().iloc[0]
+            return self._cache['max']
         if role == MinimumRole:
-            return df_total.min().iloc[0]
+            return self._cache['min']
         if role == TotalRole:
             return total_value
-
         if role == WeightRole:
-            return self._df.iloc[row]['weight']
+            return weight_value
 
+        # Tooltip and status tips
         if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.StatusTipRole):
-            return self._df.iloc[row]['description']
+            return description_value
 
+        # Bold/underline font for “Total” row (optional)
         if role == QtCore.Qt.FontRole:
-            if index.row() == self.rowCount() - 1:
+            if is_total_row:
                 font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
                 font.setBold(True)
-                if col == 2:
-                    font.setUnderline(True)
                 return font
 
+        # Handle columns
         if col == 0:
+            # Icon or DisplayName
             if role == QtCore.Qt.DecorationRole:
                 return ui.get_icon(category)
             if role == QtCore.Qt.DisplayRole:
-                categories = lib.settings.get_section('categories')
-                if not categories:
+                categories_cfg = lib.settings.get_section('categories')
+                if not categories_cfg:
                     return category
-
-                if category in categories and categories[category]['display_name']:
-                    display_name = categories[category]['display_name']
-                else:
-                    display_name = category
-                return display_name
+                # Use a display name if present
+                if category in categories_cfg and categories_cfg[category].get('display_name'):
+                    return categories_cfg[category]['display_name']
+                return category
+            if role == QtCore.Qt.FontRole:
+                font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
+                font.setWeight(QtGui.QFont.Bold)
+                return font
 
         elif col == 1:
+            # Typically an empty or “notes” column
             if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
                 return ''
-            if role == QtCore.Qt.UserRole:
-                return total_value
 
         elif col == 2:
+            # Amount column
             if role == QtCore.Qt.DisplayRole:
-                return locale.format_currency_value(total_value, lib.settings['locale'])
-            if role == QtCore.Qt.UserRole:
-                return total_value
+                return locale.format_currency_value(int(total_value), lib.settings['locale'])
+            if role == QtCore.Qt.FontRole:
+                # Make amounts bold
+                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
+                font.setWeight(QtGui.QFont.Black)
+                return font
+            if role == QtCore.Qt.TextAlignmentRole:
+                return QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
 
         return None
 
@@ -144,7 +167,22 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         self.beginResetModel()
         try:
             from ..data import data
-            self._df = data.get_data()
+            df = data.get_data()
+            self._df = df.reset_index(drop=True)
+
+            for k in lib.EXPENSE_DATA_COLUMNS:
+                self._cache[k] = self._df[k].tolist()
+
+            #    If your last row is a "Total" row, exclude it from stats
+            if len(self._df) > 1 and self._df.iloc[-1]['category'] == 'Total':
+                core_df = self._df.iloc[:-1]
+            else:
+                core_df = self._df
+
+            self._cache['mean'] = core_df['total'].mean()
+            self._cache['max'] = core_df['total'].max()
+            self._cache['min'] = core_df['total'].min()
+
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
             self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
@@ -160,7 +198,19 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         logging.debug('Clearing model data')
 
         self.beginResetModel()
+
+        self._cache = {
+            'category': [],
+            'total': [],
+            'transactions': [],
+            'weight': [],
+            'description': [],
+            'mean': 0,
+            'max': 0,
+            'min': 0,
+        }
         self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
+
         self.endResetModel()
 
 

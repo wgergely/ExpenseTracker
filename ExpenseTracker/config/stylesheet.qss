@@ -590,6 +590,10 @@ TransactionListView:focus:hover {
     border: <Separator@2.0>px solid <Transparent>;
 }
 
+ExpenseView {
+    padding: <Margin@1.5>px;
+}
+
 
 CategoryEditor,
 CategoryEditor:focus,
