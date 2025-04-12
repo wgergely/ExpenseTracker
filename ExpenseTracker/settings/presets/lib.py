@@ -232,7 +232,6 @@ class PresetsAPI(lib.ConfigPaths):
         with zipfile.ZipFile(preset.path, 'r') as zipf:
             zipf.extractall(self.config_dir)
 
-        signals.dataFetched.emit()
         signals.configSectionChanged.emit('client_secret')
         for k in lib.LEDGER_SCHEMA:
             signals.configSectionChanged.emit(k)

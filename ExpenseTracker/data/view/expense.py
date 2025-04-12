@@ -1,7 +1,7 @@
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .transaction import TransactionsWidget
-from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole
+from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns
 from ...ui import ui
 from ...ui.actions import signals
 
@@ -14,7 +14,8 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
         super().paint(painter, option, index)
-        if index.column() != 1 or index.row() == index.model().rowCount() - 1:
+
+        if index.column() != Columns.Weight or index.row() == index.model().rowCount() - 1:
             return
 
         selected = option.state & QtWidgets.QStyle.State_Selected
@@ -77,8 +78,8 @@ class ExpenseView(QtWidgets.QTableView):
         ui.set_stylesheet(self)
 
         self._init_delegates()
-        self._init_actions()
         self._init_model()
+        self._init_actions()
         self._connect_signals()
 
         QtCore.QTimer.singleShot(0, self.model().sourceModel().init_data)
@@ -95,7 +96,90 @@ class ExpenseView(QtWidgets.QTableView):
         self.setItemDelegate(GraphDelegate(self))
 
     def _init_actions(self) -> None:
-        pass
+        action_group = QtGui.QActionGroup(self)
+        action_group.setExclusive(False)
+
+        action = QtGui.QAction('Show Icons', self)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setShortcut('alt+I')
+        action.toggled.connect(lambda v: self.setColumnHidden(Columns.Icon.value, not v))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Show Category', self)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setShortcut('alt+C')
+        action.toggled.connect(lambda v: self.setColumnHidden(Columns.Category.value, not v))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Show Graph', self)  # weights
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setShortcut('alt+G')
+        action.toggled.connect(lambda v: self.setColumnHidden(Columns.Weight.value, not v))
+        action.toggled.connect(
+            lambda v:
+            self.horizontalHeader().setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents) if v else
+            self.horizontalHeader().setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.Stretch)
+        )
+        action_group.addAction(action)
+        self.addAction(action)
+
+        # separator
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        # sort column
+        # action group
+        action_group = QtGui.QActionGroup(self)
+        action_group.setExclusive(True)
+
+        action = QtGui.QAction('Sort by Category', self)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.triggered.connect(lambda: self.model().sourceModel().sort(Columns.Category.value))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort by Amount', self)
+        action.setCheckable(True)
+        action.setChecked(False)
+        action.triggered.connect(lambda: self.model().sourceModel().sort(Columns.Amount.value))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        action = QtGui.QAction('Refresh Data...', self)
+        action.setShortcut('Ctrl+R')
+        action.setIcon(ui.get_icon('btn_fetch', color=ui.Color.Green()))
+        action.triggered.connect(signals.dataFetchRequested)
+        self.addAction(action)
+
+        action = QtGui.QAction('Reload', self)
+        action.setShortcut('Ctrl+Shift+R')
+        action.setIcon(ui.get_icon('btn_reload'))
+        action.triggered.connect(self.model().sourceModel().init_data)
+        self.addAction(action)
+
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        action = QtGui.QAction('Open Settings...', self)
+        action.setShortcuts(['Ctrl+,', 'Ctrl+.', 'Ctrl+P'])
+        action.setIcon(ui.get_icon('btn_settings'))
+        action.triggered.connect(signals.openSettings)
+        self.addAction(action)
 
     def _connect_signals(self) -> None:
         self.doubleClicked.connect(self.activate_action)
@@ -106,9 +190,10 @@ class ExpenseView(QtWidgets.QTableView):
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Icon.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Weight.value, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.4))

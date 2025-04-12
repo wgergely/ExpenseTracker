@@ -237,63 +237,60 @@ class MainWindow(QtWidgets.QMainWindow):
         pass
 
     def _init_actions(self):
-        @QtCore.Slot()
-        def open_settings():
-            from ..settings import settings
-            settings.show_settings_widget(parent=self)
-
-        # Stretchable spacer
-        w = QtWidgets.QWidget(self)
-        w.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Preferred)
-        w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        w.setStyleSheet('background: transparent;')
-        self.toolbar.addWidget(w)
-
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.addAction(action)
-
-        action = QtGui.QAction('Open Spreadsheet...', self)
-        action.setIcon(ui.get_icon('btn_ledger'))
-        action.setShortcut('Ctrl+O')
-        action.setStatusTip('Open the spreadsheet in the browser')
-        action.triggered.connect(actions.open_spreadsheet)
-        self.addAction(action)
-        self.toolbar.addAction(action)
-
-        action = QtGui.QAction('Fetch Remote Data', self)
-        action.setIcon(ui.get_icon('btn_sync'))
-        action.setShortcut('Ctrl+R')
-        action.setStatusTip('Fetch the data from the remote spreadsheet')
-        action.triggered.connect(actions.fetch_data)
-        self.addAction(action)
-        self.toolbar.addAction(action)
-
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.addAction(action)
-        self.toolbar.addAction(action)
-
-        action = QtGui.QAction('Open Settings...', self)
-        action.setIcon(ui.get_icon('btn_settings'))
-        action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
-        action.setStatusTip('Open Settings')
-        action.triggered.connect(open_settings)
-        self.addAction(action)
-        self.toolbar.addAction(action)
-
-        action = QtGui.QAction('Quit', self)
-        action.setIcon(ui.get_icon('btn_quit', color=ui.Color.Red()))
-        action.setShortcut('Ctrl+Q')
-        action.setStatusTip('Quit the application')
-        action.triggered.connect(QtWidgets.QApplication.instance().quit)
-        self.addAction(action)
-
-        self.toolbar.addSeparator()
-
-        self.toolbar.addWidget(self.status_indicator)
+        pass
+        #
+        # # Stretchable spacer
+        # w = QtWidgets.QWidget(self)
+        # w.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Preferred)
+        # w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        # w.setStyleSheet('background: transparent;')
+        # self.toolbar.addWidget(w)
+        #
+        # action = QtGui.QAction(self)
+        # action.setSeparator(True)
+        # action.setEnabled(False)
+        # self.addAction(action)
+        #
+        # action = QtGui.QAction('Open Spreadsheet...', self)
+        # action.setIcon(ui.get_icon('btn_ledger'))
+        # action.setShortcut('Ctrl+O')
+        # action.setStatusTip('Open the spreadsheet in the browser')
+        # action.triggered.connect(actions.open_spreadsheet)
+        # self.addAction(action)
+        # self.toolbar.addAction(action)
+        #
+        # action = QtGui.QAction('Fetch Remote Data', self)
+        # action.setIcon(ui.get_icon('btn_sync'))
+        # action.setShortcut('Ctrl+R')
+        # action.setStatusTip('Fetch the data from the remote spreadsheet')
+        # action.triggered.connect(actions.fetch_data)
+        # self.addAction(action)
+        # self.toolbar.addAction(action)
+        #
+        # action = QtGui.QAction(self)
+        # action.setSeparator(True)
+        # action.setEnabled(False)
+        # self.addAction(action)
+        # self.toolbar.addAction(action)
+        #
+        # action = QtGui.QAction('Open Settings...', self)
+        # action.setIcon(ui.get_icon('btn_settings'))
+        # action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
+        # action.setStatusTip('Open Settings')
+        # action.triggered.connect(open_settings)
+        # self.addAction(action)
+        # self.toolbar.addAction(action)
+        #
+        # action = QtGui.QAction('Quit', self)
+        # action.setIcon(ui.get_icon('btn_quit', color=ui.Color.Red()))
+        # action.setShortcut('Ctrl+Q')
+        # action.setStatusTip('Quit the application')
+        # action.triggered.connect(QtWidgets.QApplication.instance().quit)
+        # self.addAction(action)
+        #
+        # self.toolbar.addSeparator()
+        #
+        # self.toolbar.addWidget(self.status_indicator)
 
     def _init_model(self):
         self.model = model.ExpenseModel(parent=self.expense_view)

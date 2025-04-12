@@ -23,10 +23,11 @@ WeightRole = QtCore.Qt.UserRole + 6
 
 
 class Columns(enum.IntEnum):
-    Icon = enum.auto()
-    Category = enum.auto()
-    Weight = enum.auto()
-    Amount = enum.auto()
+    Icon = 0
+    Category = 1
+    Weight = 2
+    Amount = 3
+
 
 
 class ExpenseModel(QtCore.QAbstractTableModel):
@@ -62,7 +63,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         return len(self._df)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return 3
+        return len(self.header)
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
@@ -109,11 +110,12 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 font.setBold(True)
                 return font
 
-        # Handle columns
-        if col == 0:
-            # Icon or DisplayName
+        if col == Columns.Icon:
             if role == QtCore.Qt.DecorationRole:
                 return ui.get_icon(category)
+
+        # Handle columns
+        if col == Columns.Category:
             if role == QtCore.Qt.DisplayRole:
                 categories_cfg = lib.settings.get_section('categories')
                 if not categories_cfg:
@@ -127,19 +129,17 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 font.setWeight(QtGui.QFont.Bold)
                 return font
 
-        elif col == 1:
-            # Typically an empty or “notes” column
-            if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
-                return ''
+        elif col == Columns.Weight:
+           return None
 
-        elif col == 2:
+        elif col == Columns.Amount:
             # Amount column
             if role == QtCore.Qt.DisplayRole:
                 return locale.format_currency_value(int(total_value), lib.settings['locale'])
             if role == QtCore.Qt.FontRole:
                 # Make amounts bold
-                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
-                font.setWeight(QtGui.QFont.Black)
+                font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+                font.setWeight(QtGui.QFont.Bold)
                 return font
             if role == QtCore.Qt.TextAlignmentRole:
                 return QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter

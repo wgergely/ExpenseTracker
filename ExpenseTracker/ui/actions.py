@@ -9,34 +9,11 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from ..status import status
 
 
-class Signals(QtCore.QObject):
-    configFileChanged = QtCore.Signal(str)
-    configSectionChanged = QtCore.Signal(str)  # Section, config
 
-    dataFetchRequested = QtCore.Signal()
-
-    dataAboutToBeFetched = QtCore.Signal()
-    dataFetched = QtCore.Signal(pandas.DataFrame)
-    dataReady = QtCore.Signal(pandas.DataFrame)
-
-    dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
-
-    categorySelectionChanged = QtCore.Signal()
-
-    statusError = QtCore.Signal(status.Status)
-
-    def __init__(self):
-        super().__init__()
-        self._connect_signals()
-
-    def _connect_signals(self):
-        self.dataRangeChanged.connect(self.categorySelectionChanged)
-        self.dataFetched.connect(self.categorySelectionChanged)
-
-
-# Create a singleton instance of Signals
-signals = Signals()
-
+@QtCore.Slot()
+def open_settings():
+    from ..settings import settings
+    settings.show_settings_widget()
 
 @QtCore.Slot()
 def open_spreadsheet(self) -> None:
@@ -61,3 +38,42 @@ def open_spreadsheet(self) -> None:
         url += f'&sheet={sheet_name}'
     logging.info(f'Opening spreadsheet: {url}')
     QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
+
+
+
+class Signals(QtCore.QObject):
+    configFileChanged = QtCore.Signal(str)
+    configSectionChanged = QtCore.Signal(str)  # Section, config
+
+    dataFetchRequested = QtCore.Signal()
+
+    dataAboutToBeFetched = QtCore.Signal()
+    dataFetched = QtCore.Signal(pandas.DataFrame)
+    dataReady = QtCore.Signal(pandas.DataFrame)
+
+    dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
+
+    categorySelectionChanged = QtCore.Signal()
+
+    statusError = QtCore.Signal(status.Status)
+
+    openSettings = QtCore.Signal()
+    openSpreadsheet = QtCore.Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._connect_signals()
+
+    def _connect_signals(self):
+        self.dataRangeChanged.connect(self.categorySelectionChanged)
+        self.dataFetched.connect(self.categorySelectionChanged)
+
+        self.openSettings.connect(open_settings)
+        self.openSpreadsheet.connect(open_spreadsheet)
+
+        from ..core import service
+        self.dataFetchRequested.connect(service.fetch_data)
+
+
+# Create a singleton instance of Signals
+signals = Signals()
