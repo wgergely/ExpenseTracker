@@ -1,12 +1,13 @@
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .transaction import TransactionsWidget
-from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns
+from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole
 from ...ui import ui
 from ...ui.actions import signals
+from ...settings import lib
 
 
-class GraphDelegate(QtWidgets.QStyledItemDelegate):
+class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
     """A custom delegate to draw a simple bar chart for the chart column.
 
     """
@@ -48,12 +49,52 @@ class GraphDelegate(QtWidgets.QStyledItemDelegate):
         painter.drawRoundedRect(rect, o, o)
 
 
+class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
+    """A custom delegate to draw the icon for the icon column.
+
+    """
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
+              index: QtCore.QModelIndex) -> None:
+        super().paint(painter, option, index)
+
+        if index.column() != Columns.Icon or index.row() == index.model().rowCount() - 1:
+            return
+
+        # Background
+        category = index.data(CategoryRole)
+        config = lib.settings.get_section('categories')
+        color = config.get(category, {}).get('color', None)
+        if color:
+            color = QtGui.QColor.fromString(color)
+            rect = QtCore.QRectF(option.rect)
+            m = ui.Size.Margin(0.5)
+            rect = rect.adjusted(
+                m, m, -m, -m
+            )
+            o = ui.Size.Indicator(2.0)
+            painter.setBrush(color)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawRoundedRect(rect, o, o)
+
+        # Icon
+        center = option.rect.center()
+
+        rect = QtCore.QRect(
+            0,0,
+            ui.Size.Margin(1.0),
+            ui.Size.Margin(1.0),
+        )
+        rect.moveCenter(center)
+
+        icon = index.data(QtCore.Qt.DecorationRole)
+        if icon is not None:
+            icon.paint(painter, rect, QtCore.Qt.AlignCenter)
+
+
 class ExpenseView(QtWidgets.QTableView):
     """
-    ExpenseView is a custom QTableView for displaying monthly expense data.
-
-    Double-clicking or pressing Enter on a row opens a dockable TransactionsWidget on the right.
-    Tab and Shift+Tab navigate between rows (unless at the beginning or end of the list).
+    The view to display the expense data in a table format.
     """
 
     def __init__(self, parent=None) -> None:
@@ -93,7 +134,8 @@ class ExpenseView(QtWidgets.QTableView):
         self._init_section_sizing()
 
     def _init_delegates(self) -> None:
-        self.setItemDelegate(GraphDelegate(self))
+        self.setItemDelegateForColumn(Columns.Weight.value, WeightColumnDelegate(self))
+        self.setItemDelegateForColumn(Columns.Icon.value, IconColumnDelegate(self))
 
     def _init_actions(self) -> None:
         action_group = QtGui.QActionGroup(self)
@@ -122,7 +164,8 @@ class ExpenseView(QtWidgets.QTableView):
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Weight.value, not v))
         action.toggled.connect(
             lambda v:
-            self.horizontalHeader().setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents) if v else
+            self.horizontalHeader().setSectionResizeMode(Columns.Amount.value,
+                                                         QtWidgets.QHeaderView.ResizeToContents) if v else
             self.horizontalHeader().setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.Stretch)
         )
         action_group.addAction(action)
@@ -142,14 +185,14 @@ class ExpenseView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Category', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.triggered.connect(lambda: self.model().sourceModel().sort(Columns.Category.value))
+        action.triggered.connect(lambda: self.model().sort(Columns.Category.value))
         action_group.addAction(action)
         self.addAction(action)
 
         action = QtGui.QAction('Sort by Amount', self)
         action.setCheckable(True)
         action.setChecked(False)
-        action.triggered.connect(lambda: self.model().sourceModel().sort(Columns.Amount.value))
+        action.triggered.connect(lambda: self.model().sort(Columns.Amount.value))
         action_group.addAction(action)
         self.addAction(action)
 

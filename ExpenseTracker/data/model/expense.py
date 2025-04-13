@@ -19,6 +19,7 @@ MinimumRole = QtCore.Qt.UserRole + 3
 AverageRole = QtCore.Qt.UserRole + 4
 TotalRole = QtCore.Qt.UserRole + 5
 WeightRole = QtCore.Qt.UserRole + 6
+CategoryRole = QtCore.Qt.UserRole + 7
 
 
 
@@ -83,6 +84,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         # Determine if this row is the special “Total” row
         is_total_row = (category == 'Total' and row == self.rowCount() - 1)
+
+        if role == CategoryRole:
+            return category
 
         # Custom roles for aggregated stats
         if role == TransactionsRole:
@@ -212,9 +216,15 @@ class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
 
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
-        if left.column() == 2 and right.column() == 2:
-            # Sort by absolute numeric value
-            left_data = abs(left.model().data(left, QtCore.Qt.UserRole) or 0)
-            right_data = abs(right.model().data(right, QtCore.Qt.UserRole) or 0)
-            return left_data < right_data
-        return super().lessThan(left, right)
+        left_data = left.data(CategoryRole)
+        right_data = right.data(CategoryRole)
+        if left_data == 'Total' and right_data != 'Total':
+            return False
+
+        if left.column() == Columns.Category:
+            return str(left_data).lower() < str(right_data).lower()
+
+        if left.column() == Columns.Amount:
+            left_data = left.data(TotalRole)
+            right_data = right.data(TotalRole)
+            return int(left_data) < int(right_data)
