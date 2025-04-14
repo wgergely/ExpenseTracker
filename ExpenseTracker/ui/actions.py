@@ -4,6 +4,7 @@
 import logging
 
 import pandas
+import pandas as pd
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from ..status import status
@@ -53,7 +54,7 @@ class Signals(QtCore.QObject):
 
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
 
-    categorySelectionChanged = QtCore.Signal()
+    categorySelectionChanged = QtCore.Signal(list)
 
     statusError = QtCore.Signal(status.Status)
 
@@ -65,9 +66,6 @@ class Signals(QtCore.QObject):
         self._connect_signals()
 
     def _connect_signals(self):
-        self.dataRangeChanged.connect(self.categorySelectionChanged)
-        self.dataFetched.connect(self.categorySelectionChanged)
-
         self.openSettings.connect(open_settings)
         self.openSpreadsheet.connect(open_spreadsheet)
 

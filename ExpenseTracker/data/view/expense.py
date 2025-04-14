@@ -1,10 +1,14 @@
+import logging
+from copy import deepcopy
+
+import pandas as pd
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .transaction import TransactionsWidget
-from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole
+from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole, TransactionsRole
+from ...settings import lib
 from ...ui import ui
 from ...ui.actions import signals
-from ...settings import lib
 
 
 class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
@@ -81,7 +85,7 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         center = option.rect.center()
 
         rect = QtCore.QRect(
-            0,0,
+            0, 0,
             ui.Size.Margin(1.0),
             ui.Size.Margin(1.0),
         )
@@ -227,9 +231,32 @@ class ExpenseView(QtWidgets.QTableView):
     def _connect_signals(self) -> None:
         self.doubleClicked.connect(self.activate_action)
 
-        self.selectionModel().selectionChanged.connect(signals.categorySelectionChanged)
-        self.model().sourceModel().modelAboutToBeReset.connect(signals.categorySelectionChanged)
-        self.model().sourceModel().modelReset.connect(signals.categorySelectionChanged)
+        @QtCore.Slot()
+        def emit_category_selection_changed() -> None:
+            """
+            Emit the category selection changed signal.
+            """
+            if not self.selectionModel().hasSelection():
+                logging.debug('No selection')
+                signals.categorySelectionChanged.emit([])
+                return
+
+            index = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                logging.debug('No valid index')
+                signals.categorySelectionChanged.emit([])
+                return
+
+            v = index.data(TransactionsRole)
+            if not v:
+                v = []
+            else:
+                v = deepcopy(v)
+            logging.debug('Category selection changed')
+            signals.categorySelectionChanged.emit(v)
+
+        self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
+        self.model().sourceModel().modelReset.connect(emit_category_selection_changed)
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()

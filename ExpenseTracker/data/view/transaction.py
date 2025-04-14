@@ -1,7 +1,8 @@
 from PySide6 import QtWidgets, QtCore
 
-from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel
+from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
 from ...ui import ui
+from ...settings import lib
 
 
 class TransactionsWidget(QtWidgets.QDockWidget):
@@ -23,9 +24,8 @@ class TransactionsWidget(QtWidgets.QDockWidget):
             ui.Size.DefaultHeight(1.0)
         )
         self.view = None
-        self.proxy_model = None
+
         self._create_ui()
-        self._init_model()
 
     def _create_ui(self) -> None:
         content = QtWidgets.QWidget(self)
@@ -40,14 +40,6 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         content.layout().addWidget(self.view, 1)
 
         self.setWidget(content)
-
-    def _init_model(self) -> None:
-        model = TransactionsModel()
-        self.proxy_model = TransactionsSortFilterProxyModel(self)
-        self.proxy_model.setSourceModel(model)
-        self.view.setModel(self.proxy_model)
-        self.view.setSortingEnabled(True)
-        self.view.horizontalHeader().setSortIndicator(1, QtCore.Qt.DescendingOrder)
 
     def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(
@@ -77,22 +69,39 @@ class TransactionsView(QtWidgets.QTableView):
             QtWidgets.QSizePolicy.MinimumExpanding
         )
 
-    def setModel(self, model: QtCore.QAbstractItemModel) -> None:
-        """Sets the model for the view and initializes the header."""
-        super().setModel(model)
-        self.model().modelAboutToBeReset.connect(self._init_headers)
-        self.model().modelReset.connect(self._init_headers)
+        ui.set_stylesheet(self)
+
+        self._init_model()
+        self._init_actions()
+        self._connect_signals()
+
+    def _init_model(self) -> None:
+        model = TransactionsModel()
+        proxy = TransactionsSortFilterProxyModel(self)
+        proxy.setSourceModel(model)
+        self.setModel(proxy)
+
+        self._init_section_sizing()
+
+        self.setSortingEnabled(True)
+        self.sortByColumn(Columns.Amount.value, QtCore.Qt.DescendingOrder)
+
+
+    def _init_actions(self) -> None:
+        pass
 
     @QtCore.Slot()
-    def _init_headers(self) -> None:
+    def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
         header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
+
+        header.setSectionResizeMode(Columns.Account.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Date.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Description.value, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
 
         header.setSortIndicatorShown(True)
         header.setSortIndicator(0, QtCore.Qt.AscendingOrder)
@@ -103,3 +112,6 @@ class TransactionsView(QtWidgets.QTableView):
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.8))
         header.setHidden(True)
+
+    def _connect_signals(self):
+        self.model().sourceModel().modelReset.connect(lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))

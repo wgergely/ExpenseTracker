@@ -12,7 +12,6 @@ from ...ui import ui
 from ...ui.actions import signals
 
 
-
 TransactionsRole = QtCore.Qt.UserRole + 1
 MaximumRole = QtCore.Qt.UserRole + 2
 MinimumRole = QtCore.Qt.UserRole + 3
@@ -90,8 +89,21 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         # Custom roles for aggregated stats
         if role == TransactionsRole:
-            # Return a copy if you don’t want the caller modifying your cache in-place
-            return list(transactions)
+            if is_total_row:
+                # return all transactions
+                all_transactions = []
+                for i in range(self.rowCount()):
+                    try:
+                        all_transactions += self._cache['transactions'][i]
+                    except Exception as ex:
+                        logging.debug(f'Error fetching transactions for row {i}: {ex}')
+                return all_transactions
+            else:
+                if not transactions:
+                    return []
+                if not isinstance(transactions, list):
+                    return []
+                return transactions.copy()
         if role == AverageRole:
             return self._cache['mean']
         if role == MaximumRole:
@@ -211,13 +223,13 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
     Sort/Filter proxy for ExpenseModel.
-    Allows sorting by either Category (column 0) or Amount (column 2).
-    For filtering, not used by default, but can be extended.
     """
 
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
         left_data = left.data(CategoryRole)
         right_data = right.data(CategoryRole)
+
+        # Keep the "Total" row at the end
         if left_data == 'Total' and right_data != 'Total':
             return False
 

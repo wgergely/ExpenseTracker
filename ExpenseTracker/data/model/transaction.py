@@ -1,4 +1,6 @@
+import enum
 import logging
+from copy import deepcopy
 from typing import Any
 
 import pandas as pd
@@ -9,7 +11,13 @@ from ...settings import locale
 from ...ui import ui
 from ...ui.actions import signals
 
-from .expense import TransactionsRole
+
+class Columns(enum.IntEnum):
+    Date = 0
+    Amount = 1
+    Description = 2
+    Category = 3
+    Account = 4
 
 
 class TransactionsModel(QtCore.QAbstractTableModel):
@@ -22,42 +30,26 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
-        self._df: pd.DataFrame = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+        self._data = []
 
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(1, self.init_data)
-
     def _connect_signals(self) -> None:
         signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.dataFetched.connect(self.init_data)
-        signals.dataRangeChanged.connect(self.init_data)
-
-        signals.configSectionChanged.connect(self.init_data)
         signals.categorySelectionChanged.connect(self.init_data)
 
-    @QtCore.Slot()
-    def init_data(self):
+    @QtCore.Slot(list)
+    def init_data(self, data) -> None:
         self.beginResetModel()
+        self._data = []
         try:
-            index = ui.index()
-
-            if not index.isValid():
-                self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
-                return
-
-            df = index.data(TransactionsRole)
-
-            if df.empty:
+            if not data:
                 logging.warning('TransactionsModel: No data available.')
-                self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
                 return
-
-            df = df.sort_values(by='amount', ascending=True)
-            self._df = df.copy()
+            self._data = data
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
-            self._df = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
+            self._data = []
         finally:
             self.endResetModel()
 
@@ -67,44 +59,40 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         Clear the model data and reset the DataFrame.
         """
         self.beginResetModel()
-        self._df = None
+        self._data = []
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        if self._df is None:
-            return 0
-        return len(self._df)
+        return len(self._data)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        if self._df is None:
-            return 0
-        return len(self._df.columns)
+        return len(lib.TRANSACTION_DATA_COLUMNS)
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
-        if self._df is None:
+        if not self._data:
             return None
         if not index.isValid():
             return None
         row = index.row()
-        col = index.column()
+        col_idx = index.column()
+        col_key = lib.TRANSACTION_DATA_COLUMNS[col_idx]
 
         if row < 0 or row >= self.rowCount():
             return None
 
-        value = self._df.iloc[row, col]
+        value = self._data[row][col_key]
 
         if role == QtCore.Qt.DisplayRole:
-            if col == 0:
+            if col_idx == Columns.Date.value:
                 if isinstance(value, pd.Timestamp):
                     return value.strftime('%d/%m/%Y')
-                else:
-                    return f'{value}'
-            elif col == 1:
+                return f'{value}'
+            elif col_idx == Columns.Amount.value:
                 if isinstance(value, (int, float)):
                     return locale.format_currency_value(value, lib.settings['locale'])
                 else:
                     return f'{value}'
-            elif col == 2:
+            elif col_idx == Columns.Description.value:
                 if isinstance(value, str):
                     lines = value.split('\n')
                     first_line = lines[0]
@@ -117,11 +105,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     return f'{first_line}\n{other_lines}'
                 else:
                     return f'{value}'
-            elif col == 3:
+            elif col_idx == Columns.Category.value:
                 categories = lib.settings.get_section('categories')
                 if not categories:
                     return f'{value}'
-
                 if value in categories:
                     display_name = categories[value]['display_name']
                 else:
@@ -129,26 +116,24 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 return display_name
             else:
                 return f'{value}'
-
         elif role == QtCore.Qt.DecorationRole:
-            if col == 3:
+            if col_idx == Columns.Category.value:
                 return ui.get_icon(value)
-
         elif role == QtCore.Qt.FontRole:
-            if index.column() == 0:
+            if col_idx == Columns.Date.value:
                 font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
                 font.setWeight(QtGui.QFont.Normal)
                 return font
-            if index.column() == 1:
+            if col_idx == Columns.Amount.value:
                 font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
                 font.setWeight(QtGui.QFont.Black)
                 return font
-            if index.column() == 2:
+            if col_idx == Columns.Description.value:
                 font, _ = ui.Font.MediumFont(ui.Size.SmallText(1.0))
                 return font
 
         elif role == QtCore.Qt.ForegroundRole:
-            if index.column() == 1:
+            if col_idx == Columns.Amount.value:
                 if not isinstance(value, (int, float)):
                     return None
                 if value < 0:
@@ -158,27 +143,26 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                 if value > 0:
                     return ui.Color.Green()
 
-
         elif role == QtCore.Qt.EditRole:
             return value
 
         elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
-            if col == 0:
+            if col_idx == 0:
                 if isinstance(value, pd.Timestamp):
                     return value.strftime('%d/%m/%Y')
                 else:
                     return f'{value}'
-            elif col == 1:
+            elif col_idx == Columns.Amount.value:
                 if isinstance(value, float):
                     return locale.format_currency_value(value, lib.settings['locale'])
                 elif isinstance(value, int):
                     return locale.format_currency_value(value, lib.settings['locale'])
                 else:
                     return f'{value}'
-            elif col == 2:
+            elif col_idx == Columns.Description.value:
                 if isinstance(value, str):
                     return f'{value}'
-            elif col == 3:
+            elif col_idx == Columns.Category.value:
                 categories = lib.settings.get_section('categories')
                 if not categories:
                     return f'{value}'
@@ -193,15 +177,15 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
-        if self._df is None:
+        if not self._data:
             return None
         if role != QtCore.Qt.DisplayRole:
             return None
         if orientation == QtCore.Qt.Horizontal:
             if 0 <= section < self.columnCount():
-                return self._df.columns[section].title()
+                return lib.TRANSACTION_DATA_COLUMNS[section].title()
         elif orientation == QtCore.Qt.Vertical:
-            return section + 1
+            return f'{section + 1}'
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
@@ -224,7 +208,7 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
 
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
-        if left.column() == 1 and right.column() == 1:
+        if left.column() == Columns.Amount.value and right.column() == Columns.Amount.value:
             left_val = left.model().data(left, QtCore.Qt.EditRole)
             right_val = right.model().data(right, QtCore.Qt.EditRole)
             left_abs = abs(left_val) if isinstance(left_val, (int, float)) else 0

@@ -441,9 +441,10 @@ def fetch_data(total_timeout: int = TOTAL_TIMEOUT) -> pd.DataFrame:
     """
     Asynchronously fetches ledger data as a pandas DataFrame.
     """
-    data = start_asynchronous(_fetch_data, total_timeout=total_timeout, status_text='Fetching data.')
-
     from ..ui.actions import signals
+
+    signals.dataAboutToBeFetched.emit()
+    data = start_asynchronous(_fetch_data, total_timeout=total_timeout, status_text='Fetching data.')
     signals.dataFetched.emit(data.copy())
 
 
