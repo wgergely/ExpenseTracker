@@ -68,110 +68,103 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(lib.TRANSACTION_DATA_COLUMNS)
 
-    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
-        if not self._data:
-            return None
-        if not index.isValid():
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole):
+        """Returns data for the specified index and role.
+
+        Args:
+            index (QtCore.QModelIndex): The model index.
+            role (int): The data role.
+
+        Returns:
+            Any: Data appropriate for the role, or None.
+        """
+        if not self._data or not index.isValid():
             return None
         row = index.row()
         col_idx = index.column()
-        col_key = lib.TRANSACTION_DATA_COLUMNS[col_idx]
-
         if row < 0 or row >= self.rowCount():
             return None
 
+        col_key = lib.TRANSACTION_DATA_COLUMNS[col_idx]
         value = self._data[row][col_key]
 
-        if role == QtCore.Qt.DisplayRole:
-            if col_idx == Columns.Date.value:
+        if role == QtCore.Qt.EditRole:
+            return value
+
+        if col_idx == Columns.Date.value:
+            if role == QtCore.Qt.DisplayRole:
                 if isinstance(value, pd.Timestamp):
                     return value.strftime('%d/%m/%Y')
                 return f'{value}'
-            elif col_idx == Columns.Amount.value:
+            elif role == QtCore.Qt.FontRole:
+                font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+                font.setWeight(QtGui.QFont.Normal)
+                return font
+            elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+                if isinstance(value, pd.Timestamp):
+                    return value.strftime('%d/%m/%Y')
+                return f'{value}'
+
+        elif col_idx == Columns.Amount.value:
+            if role == QtCore.Qt.DisplayRole:
                 if isinstance(value, (int, float)):
                     return locale.format_currency_value(value, lib.settings['locale'])
+                return f'{value}'
+            elif role == QtCore.Qt.FontRole:
+                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
+                font.setWeight(QtGui.QFont.Black)
+                return font
+            elif role == QtCore.Qt.ForegroundRole:
+                if not isinstance(value, (int, float)):
+                    return None
+                if value < 0:
+                    return ui.Color.Red()
+                elif value == 0:
+                    return ui.Color.DisabledText()
                 else:
-                    return f'{value}'
-            elif col_idx == Columns.Description.value:
+                    return ui.Color.Green()
+            elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+                if isinstance(value, (int, float)):
+                    return locale.format_currency_value(value, lib.settings['locale'])
+                return f'{value}'
+
+        elif col_idx == Columns.Description.value:
+            if role == QtCore.Qt.DisplayRole:
                 if isinstance(value, str):
                     lines = value.split('\n')
                     first_line = lines[0]
                     other_lines = lines[1:] if len(lines) > 1 else []
                     other_lines = [line.strip() for line in other_lines if line.strip()]
-                    if other_lines:
-                        other_lines = f', '.join(other_lines)
-                    else:
-                        other_lines = ''
-                    return f'{first_line}\n{other_lines}'
-                else:
-                    return f'{value}'
-            elif col_idx == Columns.Category.value:
-                categories = lib.settings.get_section('categories')
-                if not categories:
-                    return f'{value}'
-                if value in categories:
-                    display_name = categories[value]['display_name']
-                else:
-                    display_name = f'{value}'
-                return display_name
-            else:
+                    return f'{first_line}\n{", ".join(other_lines)}' if other_lines else first_line
                 return f'{value}'
-        elif role == QtCore.Qt.DecorationRole:
-            if col_idx == Columns.Category.value:
-                return ui.get_icon(value)
-        elif role == QtCore.Qt.FontRole:
-            if col_idx == Columns.Date.value:
-                font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
-                font.setWeight(QtGui.QFont.Normal)
-                return font
-            if col_idx == Columns.Amount.value:
-                font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
-                font.setWeight(QtGui.QFont.Black)
-                return font
-            if col_idx == Columns.Description.value:
+            elif role == QtCore.Qt.FontRole:
                 font, _ = ui.Font.MediumFont(ui.Size.SmallText(1.0))
                 return font
-
-        elif role == QtCore.Qt.ForegroundRole:
-            if col_idx == Columns.Amount.value:
-                if not isinstance(value, (int, float)):
-                    return None
-                if value < 0:
-                    return ui.Color.Red()
-                if value == 0:
-                    return ui.Color.DisabledText()
-                if value > 0:
-                    return ui.Color.Green()
-
-        elif role == QtCore.Qt.EditRole:
-            return value
-
-        elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
-            if col_idx == 0:
-                if isinstance(value, pd.Timestamp):
-                    return value.strftime('%d/%m/%Y')
-                else:
-                    return f'{value}'
-            elif col_idx == Columns.Amount.value:
-                if isinstance(value, float):
-                    return locale.format_currency_value(value, lib.settings['locale'])
-                elif isinstance(value, int):
-                    return locale.format_currency_value(value, lib.settings['locale'])
-                else:
-                    return f'{value}'
-            elif col_idx == Columns.Description.value:
+            elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
                 if isinstance(value, str):
-                    return f'{value}'
-            elif col_idx == Columns.Category.value:
-                categories = lib.settings.get_section('categories')
-                if not categories:
-                    return f'{value}'
+                    return value
 
+        elif col_idx == Columns.Category.value:
+            if role == QtCore.Qt.DisplayRole:
+                categories = lib.settings.get_section('categories') or {}
+                if value in categories:
+                    return categories[value].get('display_name', value)
+                return f'{value}'
+            elif role == QtCore.Qt.DecorationRole:
+                return ui.get_icon(value)
+            elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+                categories = lib.settings.get_section('categories') or {}
                 if value in categories:
                     display_name = categories[value]['display_name']
                 else:
                     display_name = f'{value}'
                 return f'{display_name} ({value})'
+
+        else:
+            if role == QtCore.Qt.DisplayRole:
+                return f'{value}'
+            elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+                return f'{value}'
 
         return None
 
@@ -203,8 +196,7 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setDynamicSortFilter(True)
-        # By default, filter on the description column (2).
-        self.setFilterKeyColumn(2)
+        self.setFilterKeyColumn(Columns.Description.value)
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
 
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:

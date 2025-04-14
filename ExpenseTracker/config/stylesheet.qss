@@ -382,16 +382,12 @@ QHeaderView::section {
     border-right: <Separator@1.0>px solid <Transparent>;
 }
 QHeaderView::section:down-arrow {
-    image: none;
 }
 QHeaderView::section:up-arrow {
-    image: none;
 }
 QHeaderView::up-arrow {
-    image: none;
 }
 QHeaderView::down-arrow {
-    image: none;
 }
 
 

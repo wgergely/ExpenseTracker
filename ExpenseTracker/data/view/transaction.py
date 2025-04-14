@@ -1,4 +1,4 @@
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore, QtGui
 
 from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
 from ...ui import ui
@@ -63,6 +63,7 @@ class TransactionsView(QtWidgets.QTableView):
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.setShowGrid(True)
         self.setAlternatingRowColors(False)
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
@@ -88,7 +89,71 @@ class TransactionsView(QtWidgets.QTableView):
 
 
     def _init_actions(self) -> None:
-        pass
+        action_group = QtGui.QActionGroup(self)
+        action_group.setExclusive(True)
+
+        action = QtGui.QAction('Sort by Date', self)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setShortcut('alt+1')
+        action.triggered.connect(lambda: self.sortByColumn(Columns.Date.value, self.model().sortOrder()))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort by Amount', self)
+        action.setCheckable(True)
+        action.setShortcut('alt+2')
+        action.triggered.connect(lambda: self.sortByColumn(Columns.Amount.value, self.model().sortOrder()))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort by Description', self)
+        action.setCheckable(True)
+        action.setShortcut('alt+3')
+        action.triggered.connect(lambda: self.sortByColumn(Columns.Description.value, self.model().sortOrder()))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort by Category', self)
+        action.setCheckable(True)
+        action.setShortcut('alt+4')
+        action.triggered.connect(lambda: self.sortByColumn(Columns.Category.value, self.model().sortOrder()))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort by Account', self)
+        action.setCheckable(True)
+        action.setShortcut('alt+5')
+        action.triggered.connect(lambda: self.sortByColumn(Columns.Account.value, self.model().sortOrder()))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        # separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        action_group = QtGui.QActionGroup(self)
+        action_group.setExclusive(True)
+
+
+        action = QtGui.QAction('Sort Ascending', self)
+        action.setCheckable(True)
+        action.setShortcut('alt+up')
+        action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.AscendingOrder))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Sort Descending', self)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setShortcut('alt+down')
+        action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.DescendingOrder))
+        action_group.addAction(action)
+        self.addAction(action)
+
+
 
     @QtCore.Slot()
     def _init_section_sizing(self) -> None:
