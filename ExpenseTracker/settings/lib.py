@@ -301,7 +301,7 @@ class MetadataAPI:
         if 'metadata' not in self.ledger_data:
             raise RuntimeError('Malformed ledger data, missing "metadata" section.')
 
-        # Verify type
+        # Verify tsype
         _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
         if _type and not isinstance(value, _type):
             logging.warning(f'Metadata key "{key}" is not of type {_type}, got {type(value)}.')
@@ -326,6 +326,11 @@ class MetadataAPI:
 
         self.ledger_data['metadata'][key] = value
         self.save_section('metadata')
+
+        if key == 'theme':
+            from ..ui.actions import signals
+            logging.info(f'Setting theme to {value}')
+            signals.themeChanged.emit(value)
 
 
 class SettingsAPI(ConfigPaths, MetadataAPI):

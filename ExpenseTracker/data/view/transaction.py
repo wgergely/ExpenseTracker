@@ -2,7 +2,6 @@ from PySide6 import QtWidgets, QtCore, QtGui
 
 from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
 from ...ui import ui
-from ...settings import lib
 
 
 class TransactionsWidget(QtWidgets.QDockWidget):
@@ -85,8 +84,7 @@ class TransactionsView(QtWidgets.QTableView):
         self._init_section_sizing()
 
         self.setSortingEnabled(True)
-        self.sortByColumn(Columns.Amount.value, QtCore.Qt.DescendingOrder)
-
+        self.sortByColumn(Columns.Amount.value, QtCore.Qt.AscendingOrder)
 
     def _init_actions(self) -> None:
         action_group = QtGui.QActionGroup(self)
@@ -137,7 +135,6 @@ class TransactionsView(QtWidgets.QTableView):
         action_group = QtGui.QActionGroup(self)
         action_group.setExclusive(True)
 
-
         action = QtGui.QAction('Sort Ascending', self)
         action.setCheckable(True)
         action.setShortcut('alt+up')
@@ -153,6 +150,67 @@ class TransactionsView(QtWidgets.QTableView):
         action_group.addAction(action)
         self.addAction(action)
 
+        # separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def set_search_filter():
+            # popup up a dialog to set the search filter
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle('Set Search Filter')
+            dialog.setModal(True)
+            dialog.setSizeGripEnabled(True)
+            dialog.setMinimumSize(
+                ui.Size.DefaultWidth(0.5),
+                ui.Size.RowHeight(1.0)
+            )
+            dialog.setSizePolicy(
+                QtWidgets.QSizePolicy.MinimumExpanding,
+                QtWidgets.QSizePolicy.MinimumExpanding
+            )
+            dialog.setWindowFlags(dialog.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+
+            QtWidgets.QVBoxLayout(dialog)
+            o = ui.Size.Margin(1.0)
+            dialog.layout().setContentsMargins(o, o, o, o)
+            dialog.layout().setSpacing(0)
+            dialog.layout().addWidget(QtWidgets.QLabel('Search Filter:'), 0)
+            line_edit = QtWidgets.QLineEdit(dialog)
+            line_edit.setPlaceholderText('Enter search filter')
+            line_edit.setSizePolicy(
+                QtWidgets.QSizePolicy.MinimumExpanding,
+                QtWidgets.QSizePolicy.MinimumExpanding
+            )
+            dialog.layout().addWidget(line_edit, 1)
+
+            button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, dialog)
+            button_box.setSizePolicy(
+                QtWidgets.QSizePolicy.MinimumExpanding,
+                QtWidgets.QSizePolicy.MinimumExpanding
+            )
+            button_box.button(QtWidgets.QDialogButtonBox.Ok).setText('Apply')
+            button_box.button(QtWidgets.QDialogButtonBox.Cancel).setText('Close')
+            button_box.accepted.connect(dialog.accept)
+            button_box.rejected.connect(dialog.reject)
+            dialog.layout().addWidget(button_box, 1)
+
+            line_edit.setText(self.model().filter_string())
+
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                filter_text = line_edit.text()
+                if filter_text:
+                    self.model().set_filter_string(filter_text)
+                else:
+                    self.model().set_filter_string('')
+
+
+        action = QtGui.QAction('Find...', self)
+        action.setShortcut('ctrl+f')
+        action.triggered.connect(set_search_filter)
+        self.addAction(action)
 
 
     @QtCore.Slot()
@@ -169,7 +227,7 @@ class TransactionsView(QtWidgets.QTableView):
         header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
 
         header.setSortIndicatorShown(True)
-        header.setSortIndicator(0, QtCore.Qt.AscendingOrder)
+        header.setSortIndicator(Columns.Amount.value, QtCore.Qt.AscendingOrder)
         header.setSectionsClickable(True)
         header.setSectionsMovable(False)
 
@@ -179,4 +237,5 @@ class TransactionsView(QtWidgets.QTableView):
         header.setHidden(True)
 
     def _connect_signals(self):
-        self.model().sourceModel().modelReset.connect(lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))
+        self.model().sourceModel().modelReset.connect(
+            lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))

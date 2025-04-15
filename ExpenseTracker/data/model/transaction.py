@@ -36,7 +36,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     def _connect_signals(self) -> None:
         signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.categorySelectionChanged.connect(self.init_data)
+        signals.expenseCategoryChanged.connect(self.init_data)
 
     @QtCore.Slot(list)
     def init_data(self, data) -> None:
@@ -194,16 +194,21 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
+
         self.setDynamicSortFilter(True)
         self.setFilterKeyColumn(Columns.Description.value)
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self.setSortRole(QtCore.Qt.EditRole)
 
-    def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
-        if left.column() == Columns.Amount.value and right.column() == Columns.Amount.value:
-            left_val = left.model().data(left, QtCore.Qt.EditRole)
-            right_val = right.model().data(right, QtCore.Qt.EditRole)
-            left_abs = abs(left_val) if isinstance(left_val, (int, float)) else 0
-            right_abs = abs(right_val) if isinstance(right_val, (int, float)) else 0
-            return left_abs < right_abs
-        return super().lessThan(left, right)
+        self._filter_string = ''
+
+    def filter_string(self):
+        """Get the current filter string."""
+        return self._filter_string
+
+    def set_filter_string(self, filter_string: str) -> None:
+        """Set the filter string for filtering the model data."""
+        self._filter_string = filter_string
+        self.setFilterWildcard(filter_string)
+        self.invalidateFilter()

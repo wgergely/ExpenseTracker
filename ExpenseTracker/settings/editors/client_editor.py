@@ -8,7 +8,7 @@ import logging
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from ...auth import auth
+from ...core import auth
 from ...settings.lib import settings
 from ...ui import ui
 from ...ui.actions import signals

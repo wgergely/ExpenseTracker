@@ -1,5 +1,4 @@
 import enum
-import functools
 import logging
 import math
 import os
@@ -13,6 +12,7 @@ FONT_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'font' /
 CATEGORY_ICON_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'icons'
 
 font_db = None
+
 
 class Theme(enum.StrEnum):
     Light = 'light'
@@ -166,7 +166,6 @@ class Color(enum.Enum):
             theme = Theme.Dark.value
         return theme
 
-
     def __new__(cls, v):
         if not isinstance(v, dict):
             raise ValueError(f'Invalid color value: {v}. Must be a dictionary, got {type(v)}: {v}')
@@ -287,7 +286,6 @@ class FontDatabase(QtGui.QFontDatabase):
         return font, self.metrics_cache[role][size]
 
 
-@functools.lru_cache(maxsize=1)
 def init_stylesheet():
     """Loads and stores the custom style sheet used by the app.
 
@@ -362,6 +360,26 @@ def set_stylesheet(widget: QtWidgets.QWidget) -> None:
 
     qss = init_stylesheet()
     widget.setStyleSheet(qss)
+
+
+def apply_theme() -> None:
+    """Set the style sheet for the entire app.
+
+    This function should be called after the QApplication is created.
+
+    """
+    if not QtWidgets.QApplication.instance():
+        raise RuntimeError('set_app_stylesheet() must be called after a QApplication is initiated.')
+
+    qss = init_stylesheet()
+    QtWidgets.QApplication.instance().setStyleSheet(qss)
+
+    for widget in QtWidgets.QApplication.instance().allWidgets():
+        try:
+            widget.setStyleSheet(qss)
+            widget.update()
+        except:
+            logging.debug(f'Failed to set style sheet for widget: {widget}')
 
 
 icon_cache = {}

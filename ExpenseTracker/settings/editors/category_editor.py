@@ -660,6 +660,7 @@ class CategoryEditor(QtWidgets.QWidget):
                 return
 
             if not lib.settings.ledger_template.exists():
+                logging.warning('ledger.json.template not found.')
                 QtWidgets.QMessageBox.warning(
                     self,
                     'Error',

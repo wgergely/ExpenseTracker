@@ -1,11 +1,12 @@
 """Section editor for ledger.json "header" definitions.
 
 """
+import logging
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import lib
-from ...auth import service
+from ...core import service
 from ...ui import ui
 from ...ui.actions import signals
 
@@ -454,6 +455,7 @@ class HeaderEditor(QtWidgets.QWidget):
             try:
                 headers = service.fetch_headers()
             except Exception as e:
+                logging.error(f'Failed to load header definitions: {e}')
                 QtWidgets.QMessageBox.critical(
                     self,
                     'Error',
@@ -461,7 +463,27 @@ class HeaderEditor(QtWidgets.QWidget):
                 )
                 raise RuntimeError(f'Failed to load header definitions: {e}') from e
 
-            lib.settings.set_section('header', headers)
+            if not headers:
+                logging.warning('No header definitions found.')
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    'Warning',
+                    'No header definitions found.'
+                )
+                return
+
+            # Convert List to header -> type mapping Dict with a default string type
+            data = {k:'string' for k in headers}
+
+            lib.settings.set_section('header', data)
+
+            msg = f'Found {len(headers)} header columns. Dont\' forget to verify and set the column data types.'
+            QtWidgets.QMessageBox.information(
+                self,
+                'Sync Headers Complete',
+                msg,
+                QtWidgets.QMessageBox.Ok
+            )
 
         action = QtGui.QAction('Sync', self)
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -477,6 +499,7 @@ class HeaderEditor(QtWidgets.QWidget):
             try:
                 service.verify_headers()
                 msg = 'Header definitions are valid.'
+                logging.info(msg)
                 QtWidgets.QMessageBox.information(
                     self,
                     'Verify Headers',

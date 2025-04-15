@@ -54,12 +54,14 @@ class Signals(QtCore.QObject):
 
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
 
-    categorySelectionChanged = QtCore.Signal(list)
+    expenseCategoryChanged = QtCore.Signal(list)
 
     statusError = QtCore.Signal(status.Status)
 
     openSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
+    
+    themeChanged = QtCore.Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -71,6 +73,9 @@ class Signals(QtCore.QObject):
 
         from ..core import service
         self.dataFetchRequested.connect(service.fetch_data)
+
+        from . import ui
+        self.themeChanged.connect(ui.apply_theme)
 
 
 # Create a singleton instance of Signals

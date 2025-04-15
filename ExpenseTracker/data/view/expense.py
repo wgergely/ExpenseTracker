@@ -238,13 +238,13 @@ class ExpenseView(QtWidgets.QTableView):
             """
             if not self.selectionModel().hasSelection():
                 logging.debug('No selection')
-                signals.categorySelectionChanged.emit([])
+                signals.expenseCategoryChanged.emit([])
                 return
 
             index = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
             if not index.isValid():
                 logging.debug('No valid index')
-                signals.categorySelectionChanged.emit([])
+                signals.expenseCategoryChanged.emit([])
                 return
 
             v = index.data(TransactionsRole)
@@ -253,7 +253,7 @@ class ExpenseView(QtWidgets.QTableView):
             else:
                 v = deepcopy(v)
             logging.debug('Category selection changed')
-            signals.categorySelectionChanged.emit(v)
+            signals.expenseCategoryChanged.emit(v)
 
         self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
         self.model().sourceModel().modelReset.connect(emit_category_selection_changed)
