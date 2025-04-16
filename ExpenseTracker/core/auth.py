@@ -216,9 +216,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
     logging.info('Starting new OAuth flow...')
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(data, scopes=scopes)
 
-    from ..ui import ui
     dialog = AuthProgressDialog(timeout_seconds=60)
-    ui.set_stylesheet(dialog)
 
     auth_worker = AuthFlowWorker(flow)
     result = {'creds': None, 'error': None}

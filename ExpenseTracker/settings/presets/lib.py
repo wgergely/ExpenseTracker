@@ -6,8 +6,6 @@ from pathlib import Path
 
 from .. import lib
 
-
-
 PRESET_FORMAT = 'zip'
 
 

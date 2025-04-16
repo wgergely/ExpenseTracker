@@ -134,7 +134,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
     """
     HEADERS = {
-        COL_NAME: 'Spreadsheet Value',
+        COL_NAME: 'Spreadsheet Name',
         COL_DISPLAY_NAME: 'Display Name',
         COL_DESCRIPTION: 'Description',
         COL_ICON: '',
@@ -229,7 +229,6 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.FontRole:
             if col == COL_NAME:
                 font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
-                font.setItalic(True)
             elif col == COL_DISPLAY_NAME:
                 font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
             else:
@@ -239,7 +238,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
             if col in (COL_NAME, COL_DISPLAY_NAME):
                 return QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
             elif col == COL_DESCRIPTION:
-                return QtCore.Qt.AlignRight | QtCore.Qt.AlignTop
+                return QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
             return QtCore.Qt.AlignCenter
         if role == QtCore.Qt.ForegroundRole:
             if col == COL_NAME:
@@ -370,7 +369,6 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         super().__init__(parent)
 
     def paint(self, painter, option, index):
-        painter.save()
 
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         selected = option.state & QtWidgets.QStyle.State_Selected
@@ -428,8 +426,6 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRoundedRect(rect, o, o)
 
         elif col == COL_EXCLUDED:
-            super().paint(painter, option, index)
-
             is_excl = bool(val)
             text_val = '❌' if is_excl else '✅'
             painter.setPen(ui.Color.Text())
@@ -437,7 +433,6 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             font.setWeight(QtGui.QFont.ExtraBold)
 
             painter.drawText(option.rect, QtCore.Qt.AlignCenter, text_val)
-        painter.restore()
 
     def createEditor(self, parent, option, index):
         col = index.column()
@@ -540,8 +535,6 @@ class CategoryEditor(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Maximum
         )
 
-        ui.set_stylesheet(self)
-
         self._create_ui()
         self._init_model()
         self._init_actions()
@@ -599,16 +592,62 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.verticalHeader().setVisible(False)
 
     def _init_actions(self):
+        def sync_action():
+            from ...core import service
+            categories = service.fetch_categories()
+            if categories:
+                msg = (f'Found {len(categories)} categories in the remote spreadsheet.\n\n'
+                       'Do you want to replace and override the current definition? '
+                       'This action cannot be undone.')
+
+                res = QtWidgets.QMessageBox.question(
+                    self,
+                    'Sync Categories',
+                    msg,
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+                )
+                if res == QtWidgets.QMessageBox.No:
+                    return
+
+                data = {}
+                default_category_item = {
+                    'display_name': '',
+                    'color': ui.Color.Blue().name(QtGui.QColor.HexRgb),
+                    'description': '',
+                    'icon': 'Cash.png',
+                    'excluded': False
+                }
+                for cat in categories:
+                    data[cat] = default_category_item.copy()
+                if not categories:
+                    return
+                lib.settings.set_section('categories', data)
+
+        action = QtGui.QAction('Sync', self)
+        action.setShortcut('Ctrl+S')
+        action.setStatusTip('Sync categories from the remote spreadsheet')
+        action.triggered.connect(sync_action)
+        action.setIcon(ui.get_icon('btn_sync'))
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        # separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
         @QtCore.Slot()
-        def edit_action():
+        def add_action():
             self.view.model().add_new()
 
         action = QtGui.QAction('Add', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+N')
         action.setStatusTip('Add a new category')
         action.setIcon(ui.get_icon('btn_add'))
-        action.triggered.connect(edit_action)
+        action.triggered.connect(add_action)
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
@@ -627,7 +666,7 @@ class CategoryEditor(QtWidgets.QWidget):
             self.view.model().removeRow(index.row())
 
         action = QtGui.QAction('Remove', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Delete')
         action.setStatusTip('Remove selected category')
         action.setIcon(ui.get_icon('btn_delete'))
@@ -637,7 +676,7 @@ class CategoryEditor(QtWidgets.QWidget):
 
         # Separator
         action = QtGui.QAction(self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -680,7 +719,7 @@ class CategoryEditor(QtWidgets.QWidget):
                 return
 
         action = QtGui.QAction('Revert', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+Shift+R')
         action.setStatusTip('Restore categories from template')
 
@@ -693,7 +732,7 @@ class CategoryEditor(QtWidgets.QWidget):
             lib.settings.reload_section('categories')
 
         action = QtGui.QAction('Refresh', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+R')
         action.setStatusTip('Reload categories from disk')
         action.triggered.connect(reload_from_disk)
@@ -702,7 +741,7 @@ class CategoryEditor(QtWidgets.QWidget):
 
         # Separator
         action = QtGui.QAction(self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -726,7 +765,7 @@ class CategoryEditor(QtWidgets.QWidget):
             model.setData(index, not model.data(index, QtCore.Qt.EditRole), QtCore.Qt.EditRole)
 
         action = QtGui.QAction('Exclude', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+E')
         action.setStatusTip('Exclude selected category')
         action.setIcon(ui.get_icon('btn_remove'))

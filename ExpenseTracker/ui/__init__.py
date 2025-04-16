@@ -5,6 +5,7 @@ def parent():
     from . import main
     return main.main_window
 
+
 def show():
     """Show the main widget."""
     from . import main
@@ -16,6 +17,7 @@ def get_year_month():
     from . import main
     start, end = main.main_window.action_bar.range_selector.get_range()
     return start, end
+
 
 def get_span():
     """Get the current date span from the main widget."""

@@ -1,7 +1,6 @@
-from ...ui import ui
-from .. import lib
-
 from PySide6 import QtWidgets, QtCore, QtGui
+
+from ...ui import ui
 
 
 class PresetListView(QtWidgets.QListView):
@@ -24,8 +23,6 @@ class PresetWidget(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Expanding,
             QtWidgets.QSizePolicy.Expanding
         )
-
-        ui.set_stylesheet(self)
 
         self._create_ui()
         self._init_actions()

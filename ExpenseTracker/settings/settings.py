@@ -8,8 +8,8 @@ from .editors import category_editor
 from .editors import client_editor
 from .editors import data_mapping_editor
 from .editors import header_editor
-from .editors import spreadsheet_editor
 from .editors import metadata_editor
+from .editors import spreadsheet_editor
 from ..ui import ui
 
 settings_widget = None
@@ -75,8 +75,6 @@ class SettingsWidget(QtWidgets.QDialog):
         self.data_mapping_editor = None
         self.category_editor = None
         self.metadata_editor = None
-
-        ui.set_stylesheet(self)
 
         self._create_ui()
         self._connect_signals()

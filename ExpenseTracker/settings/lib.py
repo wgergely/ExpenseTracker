@@ -9,7 +9,6 @@ from typing import Dict, Any, Optional, List
 from PySide6 import QtCore
 
 from ..status import status
-from ..ui.actions import signals
 
 """
 Manages settings for ledger.json and client_secret.json files. Provides
@@ -181,7 +180,10 @@ class ConfigPaths:
         self.icon_dir: pathlib.Path = self.template_dir / 'icons'
         self.client_secret_template: pathlib.Path = self.template_dir / 'client_secret.json.template'
         self.ledger_template: pathlib.Path = self.template_dir / 'ledger.json.template'
+
         self.gcp_help_path: pathlib.Path = self.template_dir / 'gcp.md'
+        self.stylesheet_path = self.template_dir / 'stylesheet.qss'
+        self.font_path = self.template_dir / 'font' / 'Inter.ttc'
 
         # Config directories
         self.presets_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
@@ -301,7 +303,7 @@ class MetadataAPI:
         if 'metadata' not in self.ledger_data:
             raise RuntimeError('Malformed ledger data, missing "metadata" section.')
 
-        # Verify tsype
+        # Verify
         _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
         if _type and not isinstance(value, _type):
             logging.warning(f'Metadata key "{key}" is not of type {_type}, got {type(value)}.')
@@ -327,10 +329,18 @@ class MetadataAPI:
         self.ledger_data['metadata'][key] = value
         self.save_section('metadata')
 
+        from ..ui.actions import signals
         if key == 'theme':
-            from ..ui.actions import signals
             logging.info(f'Setting theme to {value}')
             signals.themeChanged.emit(value)
+        if key == 'hide_empty_categories':
+            signals.calculationChanged.emit()
+        if key == 'exclude_negative':
+            signals.calculationChanged.emit()
+        if key == 'exclude_zero':
+            signals.calculationChanged.emit()
+        if key == 'exclude_positive':
+            signals.calculationChanged.emit()
 
 
 class SettingsAPI(ConfigPaths, MetadataAPI):
@@ -372,6 +382,7 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         self._watcher.addPath(str(self.creds_path))
 
     def _connect_signals(self) -> None:
+        from ..ui.actions import signals
         self._watcher.directoryChanged.connect(signals.configFileChanged)
         self._watcher.fileChanged.connect(signals.configFileChanged)
 
@@ -654,6 +665,7 @@ class UserSettings(QtCore.QSettings):
         self._connect_signals()
 
     def _connect_signals(self) -> None:
+        from ..ui.actions import signals
         signals.dataRangeChanged.connect(self.save_data_range)
 
     @QtCore.Slot(str, int)

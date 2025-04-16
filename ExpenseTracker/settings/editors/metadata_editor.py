@@ -62,7 +62,9 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
         valid = self.validate_value(stored)
         idx = self.findData(valid)
         if idx != -1:
+            self.blockSignals(True)
             self.setCurrentIndex(idx)
+            self.blockSignals(False)
 
     def validate_value(self, value):
         """Check if value exists in options; otherwise return the default."""
@@ -179,6 +181,7 @@ class MetadataWidget(QtWidgets.QWidget):
         self.text_changed_timer.setInterval(QtWidgets.QApplication.keyboardInputInterval())
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Maximum)
+
         self._create_ui()
         self._init_actions()
         self._connect_signals()

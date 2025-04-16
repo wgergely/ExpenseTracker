@@ -2,11 +2,10 @@ from PySide6 import QtWidgets, QtCore, QtGui
 
 from . import ui
 from .yearmonth import RangeSelectorBar
+from ..core import database
 from ..data import model
 from ..data.view.expense import ExpenseView
-from ..ui import actions
 from ..ui.actions import signals
-from ..core import database
 
 main_window = None
 
@@ -197,8 +196,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.load_indicator.hide()
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
-        ui.set_stylesheet(self)
 
         self._create_ui()
         self._init_actions()

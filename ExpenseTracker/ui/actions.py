@@ -4,17 +4,16 @@
 import logging
 
 import pandas
-import pandas as pd
 from PySide6 import QtCore, QtWidgets, QtGui
 
 from ..status import status
-
 
 
 @QtCore.Slot()
 def open_settings():
     from ..settings import settings
     settings.show_settings_widget()
+
 
 @QtCore.Slot()
 def open_spreadsheet(self) -> None:
@@ -41,7 +40,6 @@ def open_spreadsheet(self) -> None:
     QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
 
-
 class Signals(QtCore.QObject):
     configFileChanged = QtCore.Signal(str)
     configSectionChanged = QtCore.Signal(str)  # Section, config
@@ -60,8 +58,9 @@ class Signals(QtCore.QObject):
 
     openSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
-    
+
     themeChanged = QtCore.Signal(str)
+    calculationChanged = QtCore.Signal()
 
     def __init__(self):
         super().__init__()

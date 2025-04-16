@@ -1,11 +1,11 @@
 import logging
 from copy import deepcopy
 
-import pandas as pd
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .transaction import TransactionsWidget
-from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole, TransactionsRole
+from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole, \
+    TransactionsRole
 from ...settings import lib
 from ...ui import ui
 from ...ui.actions import signals
@@ -119,8 +119,6 @@ class ExpenseView(QtWidgets.QTableView):
         self.setTextElideMode(QtCore.Qt.ElideRight)
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
-        ui.set_stylesheet(self)
 
         self._init_delegates()
         self._init_model()

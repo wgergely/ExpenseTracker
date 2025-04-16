@@ -59,7 +59,6 @@ class JsonPreviewWidget(QtWidgets.QPlainTextEdit):
             self.setPlainText('Failed to parse JSON: Invalid data.')
 
 
-
 class ImportSecretDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
@@ -73,8 +72,6 @@ class ImportSecretDialog(QtWidgets.QDialog):
 
         self.import_button = None
         self.paste_button = None
-
-        ui.set_stylesheet(self)
 
         self._create_ui()
         self._connect_signals()
@@ -246,8 +243,6 @@ class ClientEditor(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Maximum
         )
 
-        ui.set_stylesheet(self)
-
         self._create_ui()
         self._init_actions()
         self._connect_signals()
@@ -294,10 +289,9 @@ class ClientEditor(QtWidgets.QWidget):
         self.auth_button.setToolTip('Authenticate with Google API')
         self.layout().addRow('', self.auth_button)
 
-
     def _init_actions(self):
         action = QtGui.QAction('Import Google OAuth Client Secret', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setToolTip('Import Google OAuth Client Secret')
         action.setShortcut('Ctrl+I')
         action.setIcon(ui.get_icon('btn_ledger'))

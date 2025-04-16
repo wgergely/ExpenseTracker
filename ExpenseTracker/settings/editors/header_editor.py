@@ -349,8 +349,6 @@ class HeaderEditor(QtWidgets.QWidget):
         self.setMinimumHeight(ui.Size.RowHeight(10))
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
-        ui.set_stylesheet(self)
-
         self._create_ui()
         self._init_model()
         self._init_actions()
@@ -416,7 +414,7 @@ class HeaderEditor(QtWidgets.QWidget):
             self.view.setCurrentIndex(index)
 
         action = QtGui.QAction('Add', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+N')
         action.setStatusTip('Add a new header')
         action.setIcon(ui.get_icon('btn_add'))
@@ -434,7 +432,7 @@ class HeaderEditor(QtWidgets.QWidget):
                 self.view.model().removeRow(index.row())
 
         action = QtGui.QAction('Remove', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Delete')
         action.setStatusTip('Remove selected header')
         action.setIcon(ui.get_icon('btn_delete'))
@@ -443,7 +441,7 @@ class HeaderEditor(QtWidgets.QWidget):
         self.addAction(action)
 
         action = QtGui.QAction(self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -473,7 +471,7 @@ class HeaderEditor(QtWidgets.QWidget):
                 return
 
             # Convert List to header -> type mapping Dict with a default string type
-            data = {k:'string' for k in headers}
+            data = {k: 'string' for k in headers}
 
             lib.settings.set_section('header', data)
 
@@ -486,7 +484,7 @@ class HeaderEditor(QtWidgets.QWidget):
             )
 
         action = QtGui.QAction('Sync', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+L')
         action.setIcon(ui.get_icon('btn_sync'))
         action.setStatusTip('Load header definitions from the remote Google spreadsheet')
@@ -514,7 +512,7 @@ class HeaderEditor(QtWidgets.QWidget):
                 )
 
         action = QtGui.QAction('Verify', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+I')
         action.setStatusTip('Verify header definitions')
         action.setIcon(ui.get_icon('btn_ok'))
@@ -522,10 +520,8 @@ class HeaderEditor(QtWidgets.QWidget):
         self.toolbar.addAction(action)
         self.addAction(action)
 
-
-
         action = QtGui.QAction(self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -553,7 +549,7 @@ class HeaderEditor(QtWidgets.QWidget):
                 return
 
         action = QtGui.QAction('Revert', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+Shift+R')
         action.setStatusTip('Restore header definitions from template')
         action.triggered.connect(reset_action)
@@ -565,7 +561,7 @@ class HeaderEditor(QtWidgets.QWidget):
             lib.settings.reload_section('header')
 
         action = QtGui.QAction('Refresh', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+R')
         action.setStatusTip('Reload header definitions from disk')
         action.triggered.connect(reload_action)
@@ -573,7 +569,7 @@ class HeaderEditor(QtWidgets.QWidget):
         self.addAction(action)
 
         action = QtGui.QAction(self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setSeparator(True)
         action.setEnabled(False)
         action.setVisible(True)
@@ -594,7 +590,7 @@ class HeaderEditor(QtWidgets.QWidget):
             model.moveRow(QtCore.QModelIndex(), row, QtCore.QModelIndex(), dest_row)
 
         action = QtGui.QAction('Move Up', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+Up')
         action.setStatusTip('Move selected header up')
         action.setIcon(ui.get_icon('arrow_up'))
@@ -624,7 +620,7 @@ class HeaderEditor(QtWidgets.QWidget):
                 self.view.setCurrentIndex(new_index)
 
         action = QtGui.QAction('Move Down', self)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut('Ctrl+Down')
         action.setStatusTip('Move selected header down')
         action.setIcon(ui.get_icon('arrow_down'))

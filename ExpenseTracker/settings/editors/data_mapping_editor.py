@@ -227,8 +227,6 @@ class DataMappingEditor(QtWidgets.QWidget):
         )
         self.setMinimumHeight(ui.Size.RowHeight(1.0) * 6.5)
 
-        ui.set_stylesheet(self)
-
         self.delegate = DataMappingDelegate(self)
 
         self._create_ui()
@@ -265,7 +263,7 @@ class DataMappingEditor(QtWidgets.QWidget):
             lib.settings.set_section('mapping', self.view.modelw().get_current_section_data())
 
         action = QtGui.QAction('Save to Disk', self.view)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
         action.triggered.connect(save_to_disk)
         self.view.addAction(action)
@@ -275,7 +273,7 @@ class DataMappingEditor(QtWidgets.QWidget):
             lib.settings.revert_section('mapping')
 
         action = QtGui.QAction('Revert', self.view)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
         action.triggered.connect(revert_to_defaults)
         self.view.addAction(action)
@@ -285,7 +283,7 @@ class DataMappingEditor(QtWidgets.QWidget):
             lib.settings.reload_section('mapping')
 
         action = QtGui.QAction('Refresh', self.view)
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
         action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
         action.triggered.connect(reload_from_disk)
         self.view.addAction(action)
@@ -299,12 +297,10 @@ class DataMappingEditor(QtWidgets.QWidget):
         self.view.verticalHeader().setDefaultSectionSize(rh)
         self.view.verticalHeader().setVisible(False)
 
-
         self.view.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.view.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         self.view.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-
 
     def _connect_signals(self):
         pass

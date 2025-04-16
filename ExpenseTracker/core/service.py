@@ -89,8 +89,6 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
         self.setModal(True)
         self.countdown_timer = QtCore.QTimer(self)
         self.countdown_timer.setInterval(1000)
-        from ..ui import ui  # Retaining original import style.
-        ui.set_stylesheet(self)
         self.status_text: str = status_text
         self._create_ui()
         self._connect_signals()

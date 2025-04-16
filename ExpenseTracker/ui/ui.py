@@ -2,21 +2,9 @@ import enum
 import logging
 import math
 import os
-import pathlib
 import re
 
 from PySide6 import QtWidgets, QtGui
-
-STYLESHEET_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'stylesheet.qss'
-FONT_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'font' / 'Inter.ttc'
-CATEGORY_ICON_PATH = pathlib.Path(os.path.dirname(__file__)).parent / 'config' / 'icons'
-
-font_db = None
-
-
-class Theme(enum.StrEnum):
-    Light = 'light'
-    Dark = 'dark'
 
 
 class Font(enum.Enum):
@@ -30,6 +18,7 @@ class Font(enum.Enum):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.db = None
 
     def __call__(self, size):
         """
@@ -41,7 +30,99 @@ class Font(enum.Enum):
         Returns:
             QFont: The font object.
         """
-        return font_db.get(size, self)
+        if self.db is None:
+            self.db = FontDatabase()
+        return self.db.get(size, self)
+
+
+class FontDatabase(QtGui.QFontDatabase):
+    """Custom QFontDatabase used to load and provide the fonts needed by Bookmarks."""
+
+    def __init__(self):
+        if not QtWidgets.QApplication.instance():
+            raise RuntimeError('FontDatabase must be created after a QApplication is initiated.')
+        super().__init__()
+
+        self._family = None
+        self.font_cache = {role: {} for role in Font}
+        self.metrics_cache = {role: {} for role in Font}
+
+        self._init_custom_fonts()
+
+    @property
+    def family(self):
+        """Return the font family used by Bookmarks."""
+        if self._family is None:
+            raise RuntimeError('Font family not initialized!')
+        return self._family
+
+    def _init_custom_fonts(self):
+        """Load the fonts used by Bookmarks into the font database."""
+        from ..settings import lib
+        if not lib.settings.font_path.is_file():
+            raise FileNotFoundError(f'Font file not found: {lib.settings.font_path}')
+        idx = self.addApplicationFont(str(lib.settings.font_path))
+        if idx < 0:
+            raise RuntimeError(f'Could not load font file: {lib.settings.font_path}')
+        family = self.applicationFontFamilies(idx)
+        if not family:
+            raise RuntimeError(f'Could not find font family in file: {lib.settings.font_path} ({idx})')
+
+        self._family = family[0]
+
+    def get(self, size, role):
+        """Retrieve the font and metrics for the given font size and role.
+
+        Args:
+            size (float): The font size.
+            role (Font): The font role.
+
+        Returns:
+            tuple: (QFont, QFontMetricsF)
+        """
+        # Validate role
+        if not isinstance(role, Font):
+            raise ValueError(f'Invalid font role: {role}. Must be a member of Font.')
+
+        # Validate size
+        if size <= 0:
+            raise RuntimeError(f'Font size must be greater than 0, got {size}')
+
+        # Check cache
+        if size in self.font_cache[role] and size in self.metrics_cache[role]:
+            return (QtGui.QFont(self.font_cache[role][size]),
+                    QtGui.QFontMetricsF(self.metrics_cache[role][size]))
+
+        # Map role to style
+        if role == Font.BlackFont:
+            style = 'SemiBold'
+        elif role == Font.BoldFont:
+            style = 'Bold'
+        elif role == Font.MediumFont:
+            style = 'Medium'
+        elif role == Font.LightFont:
+            style = 'Regular'
+        elif role == Font.ThinFont:
+            style = 'Thin'
+        else:
+            raise ValueError(f'Invalid font role: {role}')
+
+        font = super().font(role.value, style, size)
+        if font.family() != role.value:
+            raise RuntimeError(f'Could not find font: {role.value} {style} {size}')
+
+        font.setPixelSize(size)
+
+        # Cache the font and metrics
+        self.font_cache[role][size] = font
+        self.metrics_cache[role][size] = QtGui.QFontMetricsF(font)
+
+        return font, self.metrics_cache[role][size]
+
+
+class Theme(enum.StrEnum):
+    Light = 'light'
+    Dark = 'dark'
 
 
 class Size(enum.Enum):
@@ -201,91 +282,6 @@ class Color(enum.Enum):
         return f'rgba({",".join(rgb)})'
 
 
-class FontDatabase(QtGui.QFontDatabase):
-    """Custom QFontDatabase used to load and provide the fonts needed by Bookmarks."""
-
-    def __init__(self):
-        if not QtWidgets.QApplication.instance():
-            raise RuntimeError('FontDatabase must be created after a QApplication is initiated.')
-        super().__init__()
-
-        self._family = None
-        self.font_cache = {role: {} for role in Font}
-        self.metrics_cache = {role: {} for role in Font}
-
-        self._init_custom_fonts()
-
-    @property
-    def family(self):
-        """Return the font family used by Bookmarks."""
-        if self._family is None:
-            raise RuntimeError('Font family not initialized!')
-        return self._family
-
-    def _init_custom_fonts(self):
-        """Load the fonts used by Bookmarks into the font database."""
-        if not FONT_PATH.is_file():
-            raise FileNotFoundError(f'Font file not found: {FONT_PATH}')
-        idx = self.addApplicationFont(str(FONT_PATH))
-        if idx < 0:
-            raise RuntimeError(f'Could not load font file: {FONT_PATH}')
-        family = self.applicationFontFamilies(idx)
-        if not family:
-            raise RuntimeError(f'Could not find font family in file: {FONT_PATH} ({idx})')
-
-        self._family = family[0]
-
-    def get(self, size, role):
-        """Retrieve the font and metrics for the given font size and role.
-
-        Args:
-            size (float): The font size.
-            role (Font): The font role.
-
-        Returns:
-            tuple: (QFont, QFontMetricsF)
-        """
-        # Validate role
-        if not isinstance(role, Font):
-            raise ValueError(f'Invalid font role: {role}. Must be a member of Font.')
-
-        # Validate size
-        if size <= 0:
-            raise RuntimeError(f'Font size must be greater than 0, got {size}')
-
-        # Check cache
-        if size in self.font_cache[role] and size in self.metrics_cache[role]:
-            return (QtGui.QFont(self.font_cache[role][size]),
-                    QtGui.QFontMetricsF(self.metrics_cache[role][size]))
-
-        # Map role to style
-        if role == Font.BlackFont:
-            style = 'SemiBold'
-        elif role == Font.BoldFont:
-            style = 'Bold'
-        elif role == Font.MediumFont:
-            style = 'Medium'
-        elif role == Font.LightFont:
-            style = 'Regular'
-        elif role == Font.ThinFont:
-            style = 'Thin'
-        else:
-            raise ValueError(f'Invalid font role: {role}')
-
-        # Retrieve font from database
-        font = super().font(role.value, style, size)
-        if font.family() != role.value:
-            raise RuntimeError(f'Could not find font: {role.value} {style} {size}')
-
-        font.setPixelSize(size)
-
-        # Cache the font and metrics
-        self.font_cache[role][size] = font
-        self.metrics_cache[role][size] = QtGui.QFontMetricsF(font)
-
-        return font, self.metrics_cache[role][size]
-
-
 def init_stylesheet():
     """Loads and stores the custom style sheet used by the app.
 
@@ -299,15 +295,12 @@ def init_stylesheet():
     if not QtWidgets.QApplication.instance():
         raise RuntimeError('init_stylesheet() must be called after a QApplication is initiated.')
 
-    if not os.path.isfile(STYLESHEET_PATH):
-        raise FileNotFoundError(f'Style sheet file not found: {STYLESHEET_PATH}')
+    from ..settings import lib
+    if not os.path.isfile(lib.settings.stylesheet_path):
+        raise FileNotFoundError(f'Style sheet file not found: {lib.settings.stylesheet_path}')
 
-    with open(STYLESHEET_PATH, 'r', encoding='utf-8') as f:
+    with open(lib.settings.stylesheet_path, 'r', encoding='utf-8') as f:
         qss = f.read()
-
-    # Load the font database
-    global font_db
-    font_db = FontDatabase()
 
     kwargs = {}
 
@@ -348,20 +341,6 @@ def init_stylesheet():
     return qss
 
 
-def set_stylesheet(widget: QtWidgets.QWidget) -> None:
-    """Set the style sheet for the given widget.
-
-    Args:
-        widget (QtWidgets.QWidget): The widget to set the style sheet for.
-
-    """
-    if not QtWidgets.QApplication.instance():
-        raise RuntimeError('set_stylesheet() must be called after a QApplication is initiated.')
-
-    qss = init_stylesheet()
-    widget.setStyleSheet(qss)
-
-
 def apply_theme() -> None:
     """Set the style sheet for the entire app.
 
@@ -379,7 +358,7 @@ def apply_theme() -> None:
             widget.setStyleSheet(qss)
             widget.update()
         except:
-            logging.debug(f'Failed to set style sheet for widget: {widget}')
+            pass
 
 
 icon_cache = {}
@@ -399,7 +378,8 @@ def get_icon(category: str, color: QtGui.QColor = None) -> QtGui.QIcon:
     if k in icon_cache:
         return icon_cache[k]
 
-    icon_path = CATEGORY_ICON_PATH / f'{category}.png'
+    from ..settings import lib
+    icon_path = lib.settings.icon_dir / f'{category}.png'
     if not icon_path.is_file():
         logging.warning(f'Icon not found for category: {category}. Using default icon.')
         v = QtGui.QIcon()

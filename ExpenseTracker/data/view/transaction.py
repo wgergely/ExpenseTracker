@@ -69,8 +69,6 @@ class TransactionsView(QtWidgets.QTableView):
             QtWidgets.QSizePolicy.MinimumExpanding
         )
 
-        ui.set_stylesheet(self)
-
         self._init_model()
         self._init_actions()
         self._connect_signals()
@@ -186,7 +184,8 @@ class TransactionsView(QtWidgets.QTableView):
             )
             dialog.layout().addWidget(line_edit, 1)
 
-            button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, dialog)
+            button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+                                                    dialog)
             button_box.setSizePolicy(
                 QtWidgets.QSizePolicy.MinimumExpanding,
                 QtWidgets.QSizePolicy.MinimumExpanding
@@ -206,12 +205,10 @@ class TransactionsView(QtWidgets.QTableView):
                 else:
                     self.model().set_filter_string('')
 
-
         action = QtGui.QAction('Find...', self)
         action.setShortcut('ctrl+f')
         action.triggered.connect(set_search_filter)
         self.addAction(action)
-
 
     @QtCore.Slot()
     def _init_section_sizing(self) -> None:

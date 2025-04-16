@@ -31,8 +31,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Maximum
         )
 
-        ui.set_stylesheet(self)
-
         self._create_ui()
         self._init_actions()
         self._connect_signals()

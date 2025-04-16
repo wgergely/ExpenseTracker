@@ -51,7 +51,6 @@ class YearMonthPopup(QtWidgets.QFrame):
         # Convert dates to comparable integers (year*12 + month)
         self.min_val = int(min_date[:4]) * 12 + int(min_date[5:7]) if min_date else None
         self.max_val = int(max_date[:4]) * 12 + int(max_date[5:7]) if max_date else None
-        ui.set_stylesheet(self)
         self._create_ui()
 
     def _create_ui(self):
@@ -207,14 +206,11 @@ class RangeSelectorBar(QtWidgets.QToolBar):
             QtWidgets.QSizePolicy.Maximum
         )
 
-        ui.set_stylesheet(self)
-
         self._init_actions()
         self._init_min_max_dates()
         self._connect_signals()
 
         QtCore.QTimer.singleShot(150, self.load_saved_state)
-
 
     def _connect_signals(self):
         self.start_selector.yearMonthChanged.connect(self._start_changed)

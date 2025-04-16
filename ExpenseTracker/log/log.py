@@ -1,10 +1,12 @@
 import logging
 import sys
+
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
 LOG_LEVEL = logging.DEBUG
 LOG_FORMAT = '[%(asctime)s] <%(module)s> %(levelname)s:  %(message)s'
 LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
+
 
 def qt_message_handler(mode, context, message):
     """
@@ -26,6 +28,7 @@ def qt_message_handler(mode, context, message):
     elif mode == QtMsgType.QtFatalMsg:
         logger.critical(message)
         sys.exit(1)
+
 
 def setup_logging():
     """
@@ -53,7 +56,6 @@ def setup_logging():
     qInstallMessageHandler(qt_message_handler)
 
 
-
 class TankHandler(logging.Handler):
     """
     Custom logging handler that stores formatted log messages in an in-memory tank.
@@ -65,6 +67,7 @@ class TankHandler(logging.Handler):
         tank (list[tuple[int, str]]): A list of tuples each containing a log level and the
             corresponding formatted log message.
     """
+
     def __init__(self):
         """
         Initializes the TankHandler with an empty tank.

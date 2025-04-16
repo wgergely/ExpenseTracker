@@ -11,7 +11,6 @@ from ...settings import locale
 from ...ui import ui
 from ...ui.actions import signals
 
-
 TransactionsRole = QtCore.Qt.UserRole + 1
 MaximumRole = QtCore.Qt.UserRole + 2
 MinimumRole = QtCore.Qt.UserRole + 3
@@ -21,13 +20,11 @@ WeightRole = QtCore.Qt.UserRole + 6
 CategoryRole = QtCore.Qt.UserRole + 7
 
 
-
 class Columns(enum.IntEnum):
     Icon = 0
     Category = 1
     Weight = 2
     Amount = 3
-
 
 
 class ExpenseModel(QtCore.QAbstractTableModel):
@@ -58,6 +55,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         signals.dataFetched.connect(self.init_data)
         signals.dataRangeChanged.connect(self.init_data)
         signals.configSectionChanged.connect(self.init_data)
+        signals.calculationChanged.connect(self.init_data)
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self._df)
@@ -146,7 +144,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 return font
 
         elif col == Columns.Weight:
-           return None
+            return None
 
         elif col == Columns.Amount:
             # Amount column

@@ -276,18 +276,28 @@ def get_data(
             return ''
 
     # Group by category; aggregate totals & build transaction list
-    df = (
-        df.groupby('category')
-        .apply(
-            lambda _df: pd.Series({
-                'total': _df['amount'].sum(),
-                'transactions': _df[transaction_columns].to_dict(orient='records'),
-                'description': _build_description(_df),
-                'weight': 0.0,  # Will be filled by _calculate_weights
-            })
+    if not df.empty:
+        df = (
+            df.groupby('category')
+            .apply(
+                lambda _df: pd.Series({
+                    'total': _df['amount'].sum(),
+                    'transactions': _df[transaction_columns].to_dict(orient='records'),
+                    'description': _build_description(_df),
+                    'weight': 0.0,  # Will be filled by _calculate_weights
+                })
+            )
+            .reset_index()
         )
-        .reset_index()
-    )
+    else:
+        df = pd.DataFrame(columns=['category', 'total', 'transactions', 'description', 'weight'])
+
+    # add missing categories
+    if not hide_empty_categories:
+        categories = lib.settings.get_section('categories')
+        for category in categories:
+            if category not in df['category'].values:
+                df = pd.concat([df, pd.DataFrame({'category': [category], 'total': [0.0]})], ignore_index=True)
 
     # Normalize the total column if monthly
     if summary_mode == SummaryMode.Monthly.value:
@@ -310,6 +320,5 @@ def get_data(
             [df, pd.DataFrame({'category': ['Total'], 'total': [overall]})],
             ignore_index=True
         )
-
 
     return df
