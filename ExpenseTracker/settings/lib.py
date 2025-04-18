@@ -46,7 +46,6 @@ METADATA_KEYS: List[str] = [
     'exclude_positive',
     'yearmonth',
     'span',
-    'show_transactions_window',
     'theme'
 ]
 
@@ -76,7 +75,6 @@ LEDGER_SCHEMA: Dict[str, Any] = {
             'exclude_negative': {'type': bool, 'required': True},
             'exclude_zero': {'type': bool, 'required': True},
             'exclude_positive': {'type': bool, 'required': True},
-            'show_transactions_window': {'type': bool, 'required': True},
             'theme': {'type': str, 'required': True}
         }
     },
@@ -186,7 +184,7 @@ class ConfigPaths:
         self.font_path = self.template_dir / 'font' / 'Inter.ttc'
 
         # Config directories
-        self.presets_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
+        self.presets_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'presets'
         self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
         self.auth_dir: pathlib.Path = self.config_dir / 'auth'
         self.db_dir: pathlib.Path = self.config_dir / 'db'
@@ -279,6 +277,13 @@ class MetadataAPI:
 
     """
 
+    def __init__(self) -> None:
+        self._signals_blocked: bool = False
+
+    def block_signals(self, v: bool) -> None:
+        """Blocks signals from being emitted."""
+        self._signals_blocked = v
+
     def __getitem__(self, key: str) -> Any:
         if key not in METADATA_KEYS:
             raise KeyError(f'Invalid metadata key: {key}, must be one of {METADATA_KEYS}')
@@ -329,6 +334,9 @@ class MetadataAPI:
         self.ledger_data['metadata'][key] = value
         self.save_section('metadata')
 
+        if self._signals_blocked:
+            return
+
         from ..ui.actions import signals
         if key == 'theme':
             logging.info(f'Setting theme to {value}')
@@ -341,6 +349,13 @@ class MetadataAPI:
             signals.calculationChanged.emit()
         if key == 'exclude_positive':
             signals.calculationChanged.emit()
+        if key == 'summary_mode':
+            signals.calculationChanged.emit()
+
+        if key == 'yearmonth':
+            signals.dataRangeChanged.emit(value, self.ledger_data['metadata']['span'])
+        if key == 'span':
+            signals.dataRangeChanged.emit(self.ledger_data['metadata']['yearmonth'], value)
 
 
 class SettingsAPI(ConfigPaths, MetadataAPI):
@@ -648,33 +663,3 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
 
 
 settings: SettingsAPI = SettingsAPI()
-
-
-class UserSettings(QtCore.QSettings):
-
-    def __init__(self) -> None:
-        super().__init__(organization_name, app_name)
-
-        self.setPath(
-            QtCore.QSettings.IniFormat,
-            QtCore.QSettings.UserScope,
-            str(settings.usersettings_path)
-        )
-
-        self.setFallbacksEnabled(True)
-        self._connect_signals()
-
-    def _connect_signals(self) -> None:
-        from ..ui.actions import signals
-        signals.dataRangeChanged.connect(self.save_data_range)
-
-    @QtCore.Slot(str, int)
-    def save_data_range(self, start_date: str, span: int) -> None:
-        """Saves the data range to settings.
-
-        """
-        self.setValue('data_range/start_date', start_date)
-        self.setValue('data_range/span', span)
-
-
-state: UserSettings = UserSettings()

@@ -207,6 +207,30 @@ def _calculate_weights(df: pd.DataFrame,
     return df
 
 
+def _build_description(_df, _locale):
+    try:
+        total_val = _df['amount'].sum()
+        total_str = locale.format_currency_value(total_val, _locale)
+        accounts_str = ', '.join(_df.get('account', pd.Series()).unique())
+
+        # Example: smallest 3 by raw 'amount'
+        _max = _df.nsmallest(3, 'amount')
+        _max_str = ', '.join([
+            f'{locale.format_currency_value(row["amount"], _locale)} ({row["description"]})'
+            for _, row in _max.iterrows()
+        ])
+
+        return (
+            f'Category: {", ".join(_df["category"].unique())}\n'
+            f'Total: {total_str}\n'
+            f'Accounts: {accounts_str}\n\n'
+            f'Transactions:\n\n{_max_str}...'
+        )
+    except Exception as e:
+        logging.debug(f'Error building description: {e}')
+        return ''
+
+
 @metadata()
 def get_data(
         df: pd.DataFrame,
@@ -252,29 +276,6 @@ def get_data(
     if _locale not in locale.LOCALE_MAP:
         _locale = 'en_GB'
 
-    def _build_description(_df):
-        try:
-            total_val = _df['amount'].sum()
-            total_str = locale.format_currency_value(total_val, _locale)
-            accounts_str = ', '.join(_df.get('account', pd.Series()).unique())
-
-            # Example: smallest 3 by raw 'amount'
-            _max = _df.nsmallest(3, 'amount')
-            _max_str = ', '.join([
-                f'{locale.format_currency_value(row["amount"], _locale)} ({row["description"]})'
-                for _, row in _max.iterrows()
-            ])
-
-            return (
-                f'Category: {", ".join(_df["category"].unique())}\n'
-                f'Total: {total_str}\n'
-                f'Accounts: {accounts_str}\n\n'
-                f'Transactions:\n\n{_max_str}...'
-            )
-        except Exception as e:
-            logging.debug(f'Error building description: {e}')
-            return ''
-
     # Group by category; aggregate totals & build transaction list
     if not df.empty:
         df = (
@@ -283,7 +284,7 @@ def get_data(
                 lambda _df: pd.Series({
                     'total': _df['amount'].sum(),
                     'transactions': _df[transaction_columns].to_dict(orient='records'),
-                    'description': _build_description(_df),
+                    'description': _build_description(_df, _locale),
                     'weight': 0.0,  # Will be filled by _calculate_weights
                 })
             )
@@ -310,10 +311,16 @@ def get_data(
     # Sort categories
     df = df.sort_values('category', ascending=True).reset_index(drop=True)
 
+    # Remove excluded categories
+    config = lib.settings.get_section('categories')
+    excluded = [k for k, v in config.items() if v['excluded']]
+    if excluded:
+        df = df[~df['category'].isin(excluded)]
+
     # Calculate weights
     df = _calculate_weights(df, exclude_negative, exclude_positive, min_weight=0.02)
 
-    # Optionally add total row
+    # add total row
     if add_total_row:
         overall = df['total'].sum()
         df = pd.concat(

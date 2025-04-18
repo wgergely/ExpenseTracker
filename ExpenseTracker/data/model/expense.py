@@ -101,7 +101,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                     return []
                 if not isinstance(transactions, list):
                     return []
-                return transactions.copy()
+                return transactions
         if role == AverageRole:
             return self._cache['mean']
         if role == MaximumRole:
@@ -113,12 +113,13 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         if role == WeightRole:
             return weight_value
 
-        # Tooltip and status tips
         if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.StatusTipRole):
             return description_value
 
-        # Bold/underline font for “Total” row (optional)
         if role == QtCore.Qt.FontRole:
+            if total_value == 0:
+                font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
+                return font
             if is_total_row:
                 font, _ = ui.Font.BlackFont(ui.Size.MediumText(1.0))
                 font.setBold(True)
@@ -142,6 +143,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
                 font.setWeight(QtGui.QFont.Bold)
                 return font
+            if role == QtCore.Qt.ForegroundRole:
+                if total_value == 0:
+                    return ui.Color.DisabledText()
 
         elif col == Columns.Weight:
             return None
@@ -151,7 +155,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
             if role == QtCore.Qt.DisplayRole:
                 return locale.format_currency_value(int(total_value), lib.settings['locale'])
             if role == QtCore.Qt.FontRole:
-                # Make amounts bold
+                if total_value == 0:
+                    font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
+                    return font
                 font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
                 font.setWeight(QtGui.QFont.Bold)
                 return font

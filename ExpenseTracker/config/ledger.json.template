@@ -36,7 +36,6 @@
     "exclude_positive": true,
     "yearmonth": "2024-01",
     "span": 1,
-    "show_transactions_window": false,
     "theme": "dark"
   },
   "categories": {

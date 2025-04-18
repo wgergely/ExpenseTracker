@@ -64,6 +64,11 @@ class TransactionsView(QtWidgets.QTableView):
         self.setAlternatingRowColors(False)
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
+        self.setWordWrap(True)
+
+        self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
             QtWidgets.QSizePolicy.MinimumExpanding
@@ -216,12 +221,12 @@ class TransactionsView(QtWidgets.QTableView):
         header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         header.setStretchLastSection(False)
 
-        header.setSectionResizeMode(Columns.Account.value, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(Columns.Date.value, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Account.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Date.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.Interactive)
         header.setSectionResizeMode(Columns.Description.value, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.Interactive)
 
         header.setSortIndicatorShown(True)
         header.setSortIndicator(Columns.Amount.value, QtCore.Qt.AscendingOrder)
@@ -236,3 +241,4 @@ class TransactionsView(QtWidgets.QTableView):
     def _connect_signals(self):
         self.model().sourceModel().modelReset.connect(
             lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))
+        self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)

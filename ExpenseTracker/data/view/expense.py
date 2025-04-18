@@ -3,7 +3,6 @@ from copy import deepcopy
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
-from .transaction import TransactionsWidget
 from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole, \
     TransactionsRole
 from ...settings import lib
@@ -120,6 +119,9 @@ class ExpenseView(QtWidgets.QTableView):
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
+        self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+
         self._init_delegates()
         self._init_model()
         self._init_actions()
@@ -140,6 +142,66 @@ class ExpenseView(QtWidgets.QTableView):
         self.setItemDelegateForColumn(Columns.Icon.value, IconColumnDelegate(self))
 
     def _init_actions(self) -> None:
+
+        # separator
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def exclude_category() -> None:
+            """
+            Exclude the selected category.
+            """
+            index = self.selectionModel().currentIndex()
+            if not index.isValid():
+                logging.debug('No valid index')
+                return
+
+            config = lib.settings.get_section('categories')
+            if not config:
+                raise RuntimeError('Invalid configuration')
+
+            category = index.data(CategoryRole)
+            if not category:
+                logging.debug('No category selected')
+                return
+
+            config[category]['excluded'] = True
+            lib.settings.set_section('categories', config)
+
+        action = QtGui.QAction('Exclude Category', self)
+        action.setShortcuts(['Ctrl+E', 'delete'])
+        action.setIcon(ui.get_icon('btn_exclude'))
+        action.triggered.connect(exclude_category)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def show_all_categories() -> None:
+            """
+            Show all categories.
+            """
+            config = lib.settings.get_section('categories')
+            if not config:
+                raise RuntimeError('Invalid configuration')
+
+            for category in config.keys():
+                config[category]['excluded'] = False
+            lib.settings.set_section('categories', config)
+
+        action = QtGui.QAction('Show All Categories', self)
+        action.setShortcuts(['Ctrl+Shift+E'])
+        action.setIcon(ui.get_icon('btn_show_all'))
+        action.triggered.connect(show_all_categories)
+        self.addAction(action)
+
+        # separator
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
         action_group = QtGui.QActionGroup(self)
         action_group.setExclusive(False)
 
@@ -227,7 +289,8 @@ class ExpenseView(QtWidgets.QTableView):
         self.addAction(action)
 
     def _connect_signals(self) -> None:
-        self.doubleClicked.connect(self.activate_action)
+        self.activated.connect(signals.openTransactions)
+        self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
 
         @QtCore.Slot()
         def emit_category_selection_changed() -> None:
@@ -258,56 +321,11 @@ class ExpenseView(QtWidgets.QTableView):
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
-        header.setSectionResizeMode(Columns.Icon.value, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Icon.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Category.value, QtWidgets.QHeaderView.Interactive)
         header.setSectionResizeMode(Columns.Weight.value, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(Columns.Amount.value, QtWidgets.QHeaderView.Interactive)
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.4))
 
-    def sizeHint(self) -> QtCore.QSize:
-        return QtCore.QSize(480, 120)
-
-    @QtCore.Slot(QtCore.QModelIndex)
-    def activate_action(self, index: QtCore.QModelIndex) -> None:
-        """
-        Slot called on double-clicking or pressing Enter on a row.
-        Opens a dockable TransactionsWidget on the right side.
-        """
-        if not index.isValid():
-            return
-
-        main = self.window()
-        if main is None or not hasattr(main, 'addDockWidget'):
-            return
-
-        if not hasattr(main, 'transactions_view') or main.transactions_view is None:
-            main.transactions_view = TransactionsWidget(parent=main)
-            main.addDockWidget(QtCore.Qt.RightDockWidgetArea, main.transactions_view)
-        elif main.transactions_view.isVisible():
-            main.transactions_view.raise_()
-            return
-
-        main.transactions_view.show()
-
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        key = event.key()
-        if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-            index = self.currentIndex()
-            if index.isValid():
-                self.activate_action(index)
-            return
-        if key == QtCore.Qt.Key_Tab:
-            current = self.currentIndex()
-            if event.modifiers() & QtCore.Qt.ShiftModifier:
-                if current.isValid() and current.row() > 0:
-                    new_index = self.model().index(current.row() - 1, current.column())
-                    self.setCurrentIndex(new_index)
-                    return
-            else:
-                if current.isValid() and current.row() < self.model().rowCount() - 1:
-                    new_index = self.model().index(current.row() + 1, current.column())
-                    self.setCurrentIndex(new_index)
-                    return
-        super().keyPressEvent(event)

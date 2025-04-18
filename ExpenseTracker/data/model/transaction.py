@@ -88,6 +88,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         value = self._data[row][col_key]
 
         if role == QtCore.Qt.EditRole:
+            if col_idx == Columns.Date.value:
+                if isinstance(value, pd.Timestamp):
+                    return value.strftime('%Y-%m-%d')
+                return f'{value}'
             return value
 
         if col_idx == Columns.Date.value:
@@ -147,7 +151,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             if role == QtCore.Qt.DisplayRole:
                 categories = lib.settings.get_section('categories') or {}
                 if value in categories:
-                    return categories[value].get('display_name', value)
+                    display_name = categories[value].get('display_name', value)
+                    if display_name:
+                        return display_name
                 return f'{value}'
             elif role == QtCore.Qt.DecorationRole:
                 return ui.get_icon(value)

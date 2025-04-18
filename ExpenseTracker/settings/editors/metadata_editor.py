@@ -197,7 +197,6 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.addRow('Exclude Negative Values', BooleanEditor('exclude_negative', parent=self))
         layout.addRow('Exclude Zero Values', BooleanEditor('exclude_zero', parent=self))
         layout.addRow('Exclude Positive Values', BooleanEditor('exclude_positive', parent=self))
-        layout.addRow('Show Transactions Window', BooleanEditor('show_transactions_window', parent=self))
         layout.addRow('Theme', ThemeEditor(self))
 
     def _init_actions(self):

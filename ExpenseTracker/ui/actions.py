@@ -58,6 +58,7 @@ class Signals(QtCore.QObject):
 
     openSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
+    openTransactions = QtCore.Signal()
 
     themeChanged = QtCore.Signal(str)
     calculationChanged = QtCore.Signal()

@@ -3,8 +3,8 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from . import ui
 from .yearmonth import RangeSelectorBar
 from ..core import database
-from ..data import model
 from ..data.view.expense import ExpenseView
+from ..data.view.transaction import TransactionsWidget
 from ..ui.actions import signals
 
 main_window = None
@@ -199,7 +199,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._create_ui()
         self._init_actions()
-        self._init_model()
         self._connect_signals()
 
     def _create_ui(self):
@@ -230,71 +229,42 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.status_indicator = StatusIndicator(parent=self)
 
+        self.transactions_view = TransactionsWidget(parent=self)
+        self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
+        self.transactions_view.hide()
+
     def _connect_signals(self):
-        pass
+        signals.openTransactions.connect(
+            lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
 
     def _init_actions(self):
         pass
-        #
-        # # Stretchable spacer
-        # w = QtWidgets.QWidget(self)
-        # w.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Preferred)
-        # w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        # w.setStyleSheet('background: transparent;')
-        # self.toolbar.addWidget(w)
-        #
-        # action = QtGui.QAction(self)
-        # action.setSeparator(True)
-        # action.setEnabled(False)
-        # self.addAction(action)
-        #
-        # action = QtGui.QAction('Open Spreadsheet...', self)
-        # action.setIcon(ui.get_icon('btn_ledger'))
-        # action.setShortcut('Ctrl+O')
-        # action.setStatusTip('Open the spreadsheet in the browser')
-        # action.triggered.connect(actions.open_spreadsheet)
-        # self.addAction(action)
-        # self.toolbar.addAction(action)
-        #
-        # action = QtGui.QAction('Fetch Remote Data', self)
-        # action.setIcon(ui.get_icon('btn_sync'))
-        # action.setShortcut('Ctrl+R')
-        # action.setStatusTip('Fetch the data from the remote spreadsheet')
-        # action.triggered.connect(actions.fetch_data)
-        # self.addAction(action)
-        # self.toolbar.addAction(action)
-        #
-        # action = QtGui.QAction(self)
-        # action.setSeparator(True)
-        # action.setEnabled(False)
-        # self.addAction(action)
-        # self.toolbar.addAction(action)
-        #
-        # action = QtGui.QAction('Open Settings...', self)
-        # action.setIcon(ui.get_icon('btn_settings'))
-        # action.setShortcuts(['Ctrl+P', 'Ctrl+.'])
-        # action.setStatusTip('Open Settings')
-        # action.triggered.connect(open_settings)
-        # self.addAction(action)
-        # self.toolbar.addAction(action)
-        #
-        # action = QtGui.QAction('Quit', self)
-        # action.setIcon(ui.get_icon('btn_quit', color=ui.Color.Red()))
-        # action.setShortcut('Ctrl+Q')
-        # action.setStatusTip('Quit the application')
-        # action.triggered.connect(QtWidgets.QApplication.instance().quit)
-        # self.addAction(action)
-        #
-        # self.toolbar.addSeparator()
-        #
-        # self.toolbar.addWidget(self.status_indicator)
-
-    def _init_model(self):
-        self.model = model.ExpenseModel(parent=self.expense_view)
-        self.expense_view.setModel(self.model)
 
     def sizeHint(self):
         return QtCore.QSize(
             ui.Size.DefaultWidth(1.6),
             ui.Size.DefaultHeight(1.6)
         )
+
+    @QtCore.Slot(QtCore.QModelIndex)
+    def activate_action(self, index: QtCore.QModelIndex) -> None:
+        """
+        Slot called on double-clicking or pressing Enter on a row.
+        Opens a dockable TransactionsWidget on the right side.
+        """
+        if not index.isValid():
+            return
+
+        main = self.window()
+        if main is None or not hasattr(main, 'addDockWidget'):
+            return
+
+        if not hasattr(main, 'transactions_view') or main.transactions_view is None:
+            main.transactions_view = TransactionsWidget(parent=main)
+            main.addDockWidget(QtCore.Qt.RightDockWidgetArea, main.transactions_view)
+        elif main.transactions_view.isVisible():
+            main.transactions_view.raise_()
+            return
+
+        main.transactions_view.show()
