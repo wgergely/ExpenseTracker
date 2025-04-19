@@ -8,47 +8,53 @@ from typing import Any
 from PySide6 import QtCore
 
 from .lib import presets
+from ...ui import ui
 
 
-class PresetsModel(QtCore.QAbstractListModel):
+class PresetsModel(QtCore.QAbstractItemModel):
     """List‑model view of project presets."""
 
-    NameRole = QtCore.Qt.UserRole + 1
-    DescriptionRole = QtCore.Qt.UserRole + 2
+    def index(self, row: int, column: int = 0, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> QtCore.QModelIndex:
+        if parent.isValid() or row < 0 or column != 0:
+            return QtCore.QModelIndex()
+        preset = presets.get_preset_by_index(row)
+        if not preset:
+            return QtCore.QModelIndex()
+        return self.createIndex(row, 0, preset)
 
-    def rowCount(
-            self,
-            parent: QtCore.QModelIndex = QtCore.QModelIndex(),
-    ) -> int:
+    def parent(self, index: QtCore.QModelIndex = QtCore.QModelIndex()) -> QtCore.QModelIndex:
+        return QtCore.QModelIndex()
+
+    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 1
+
+    def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
             return 0
-        return len(presets.presets)
+        return presets.count()
 
-    def data(
-            self,
-            index: QtCore.QModelIndex,
-            role: int = QtCore.Qt.DisplayRole,
-    ) -> Any:
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
             return None
+        preset = index.internalPointer()
+        if not preset:
+            return None
 
-        item = presets.presets[index.row()]
+        if role == QtCore.Qt.DisplayRole:
+            return preset.name
+        if role == QtCore.Qt.DecorationRole:
+            return ui.get_icon('btn_preset')
+        if role == QtCore.Qt.ToolTipRole:
+            return preset.description
+        if role == QtCore.Qt.EditRole:
+            return preset.name
+        if role == QtCore.Qt.UserRole:
+            return preset.path
 
-        if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole, self.NameRole):
-            return item.name
-        if role == self.DescriptionRole:
-            return item.description
         return None
 
-    def roleNames(self) -> dict[int, bytes]:
-        return {
-            self.NameRole: b'name',
-            self.DescriptionRole: b'description',
-        }
-
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
-        default = super().flags(index)
-        return default | QtCore.Qt.ItemIsEditable if index.isValid() else default
+        return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable
 
     def setData(
             self,
@@ -120,49 +126,16 @@ class PresetsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
         super().__init__(parent)
         self._filter_string = ''
 
+        self.setDynamicSortFilter(True)
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        self.setFilterRole(PresetsModel.NameRole)
-        self.setSortRole(PresetsModel.NameRole)
+        self.setSortRole(QtCore.Qt.DisplayRole)
+        self.setFilterRole(QtCore.Qt.DisplayRole)
         self.sort(0, QtCore.Qt.AscendingOrder)
 
     def filter_string(self):
-        """Get the current filter string."""
         return self._filter_string
 
     def set_filter_string(self, filter_string: str) -> None:
-        """Set the filter string for filtering the model data."""
         self._filter_string = filter_string
         self.setFilterWildcard(filter_string)
         self.invalidateFilter()
-
-    def filterAcceptsRow(
-            self,
-            source_row: int,
-            source_parent: QtCore.QModelIndex,
-    ) -> bool:
-        source = self.sourceModel()
-
-        idx = source.index(source_row, 0, source_parent)
-        name = source.data(idx, PresetsModel.NameRole) or ''
-        description = source.data(idx, PresetsModel.DescriptionRole) or ''
-        regexp = self.filterRegExp()
-
-        if not regexp.pattern():
-            return True
-
-        match = bool(regexp.indexIn(name) != -1 or regexp.indexIn(description) != -1)
-        return match
-
-    def lessThan(
-            self,
-            left: QtCore.QModelIndex,
-            right: QtCore.QModelIndex,
-    ) -> bool:
-        left_data = self.sourceModel().data(left, self.sortRole())
-        right_data = self.sourceModel().data(right, self.sortRole())
-
-        left_str = str(left_data).lower()
-        right_str = str(right_data).lower()
-
-        result = left_str < right_str
-        return result

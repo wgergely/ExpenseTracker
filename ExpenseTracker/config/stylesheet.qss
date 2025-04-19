@@ -361,6 +361,31 @@ QTableView::item:hover {
     color: <SelectedText>;
 }
 
+QListView {
+    border-radius: <Indicator@2.0>px;
+    padding: <Margin@0.5>px;
+    margin: 0px;
+    background: <DarkBackground>;
+    alternate-background-color: <VeryDarkBackground>;
+}
+QListView::item {
+    padding: <Indicator@2.0>px;
+    margin: 0;
+    background: <DarkBackground>;
+    outline: none;
+}
+QListView::item:selected {
+    color: <SelectedText>;
+    background: <LightBackground>;
+}
+QListView::item:disabled {
+    color: <DisabledText>;
+    background: <DarkBackground>;
+}
+QListView::item:hover {
+    color: <SelectedText>;
+}
+
 
 QHeaderView {
     font-size: <SmallText@1.0>px;

@@ -28,6 +28,7 @@
     "account": "Account Name"
   },
   "metadata": {
+    "name": "Default Ledger",
     "locale": "en_GB",
     "summary_mode": "total",
     "hide_empty_categories": true,

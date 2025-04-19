@@ -45,10 +45,8 @@ class Signals(QtCore.QObject):
     configSectionChanged = QtCore.Signal(str)  # Section, config
 
     dataFetchRequested = QtCore.Signal()
-
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal(pandas.DataFrame)
-    dataReady = QtCore.Signal(pandas.DataFrame)
 
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
 
@@ -62,6 +60,9 @@ class Signals(QtCore.QObject):
 
     themeChanged = QtCore.Signal(str)
     calculationChanged = QtCore.Signal()
+
+    presetsChanged = QtCore.Signal()
+    presetActivated = QtCore.Signal()
 
     def __init__(self):
         super().__init__()

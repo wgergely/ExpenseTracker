@@ -3,34 +3,19 @@ import json
 import logging
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 from .. import lib
+from ...ui.actions import signals
 
 PRESET_FORMAT = 'zip'
 
 
 class PresetItem:
-    """Represents a preset item.
-
-    Attributes:
-        name (str): The preset name.
-        path (Path): The path to the preset archive.
-        description (str): The description extracted from the preset.
-    """
-
     def __init__(self, name: str, path: Path):
-        """Initialize a PresetItem instance.
-
-        Args:
-            name (str): Preset name.
-            path (Path): Preset file path.
-        """
         self._name = name
         self._path = path
         self._description = None
-
-    def __repr__(self):
-        return f'PresetItem(name={self.name}, path={self.path})'
 
     @property
     def name(self) -> str:
@@ -79,11 +64,27 @@ class PresetsAPI(lib.ConfigPaths):
     def __init__(self):
         """Initialize the API and load presets."""
         super().__init__()
-        self.presets = []
+        self._presets = []
+
+        self._connect_signals()
+
         self.load_presets()
+
+    def _connect_signals(self):
+        signals.presetsChanged.connect(self.load_presets)
+
+    def count(self) -> int:
+        """Return the number of presets."""
+        return len(self._presets)
+
+    def presets(self) -> list[PresetItem]:
+        """Return all presets."""
+        return self._presets
 
     def load_presets(self):
         """Load all presets from the presets directory."""
+        logging.debug('Loading presets...')
+
         if not self.presets_dir.exists():
             logging.error(f'Presets directory does not exist: {self.presets_dir}')
             return
@@ -93,9 +94,11 @@ class PresetsAPI(lib.ConfigPaths):
                 continue
             if file.name.startswith('backup_'):
                 continue
-            self.presets.append(PresetItem(file.stem, file.absolute()))
 
-    def get_preset(self, name: str) -> PresetItem | None:
+            logging.debug(f'Found preset: {file}')
+            self._presets.append(PresetItem(file.stem, file.absolute()))
+
+    def get_preset(self, name: str) -> Optional[PresetItem]:
         """Retrieve a preset by its name.
 
         Args:
@@ -104,9 +107,22 @@ class PresetsAPI(lib.ConfigPaths):
         Returns:
             PresetItem or None: The matching preset if found.
         """
-        for preset in self.presets:
+        for preset in self._presets:
             if preset.name == name:
                 return preset
+        return None
+
+    def get_preset_by_index(self, index: int) -> Optional[PresetItem]:
+        """Retrieve a preset by its index.
+
+        Args:
+            index (int): The index of the preset.
+
+        Returns:
+            PresetItem or None: The matching preset if found.
+        """
+        if 0 <= index < len(self._presets):
+            return self._presets[index]
         return None
 
     def remove_preset(self, name: str):
@@ -122,8 +138,9 @@ class PresetsAPI(lib.ConfigPaths):
 
         try:
             preset.path.unlink()
-            self.presets.remove(preset)
+            self._presets.remove(preset)
             logging.info(f'Removed preset: {name}')
+            signals.presetsChanged.emit()
         except Exception as e:
             logging.error(f'Failed to remove preset {name}: {e}')
 
@@ -145,6 +162,7 @@ class PresetsAPI(lib.ConfigPaths):
             preset.name = new_name
             preset.path = new_path
             logging.info(f'Renamed preset from {old_name} to {new_name}')
+            signals.presetsChanged.emit()
         except Exception as e:
             logging.error(f'Failed to rename preset {old_name} to {new_name}: {e}')
 
@@ -181,11 +199,13 @@ class PresetsAPI(lib.ConfigPaths):
         with zipfile.ZipFile(path, 'w') as zipf:
             for file in self.config_dir.glob('*'):
                 if file.is_file():
+                    logging.debug(f'Adding file to preset: {file}')
                     zipf.write(file, arcname=file.name)
 
         if name.startswith('backup_'):
             return
-        self.presets.append(PresetItem(name, path))
+        self._presets.append(PresetItem(name, path))
+        signals.presetsChanged.emit()
 
     def backup_config(self):
         """Create a backup preset from the current configuration."""

@@ -18,60 +18,6 @@ def show_main_window():
     return main_window
 
 
-class LoadIndicator(QtWidgets.QDialog):
-
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-
-        self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint, True)
-        self.setWindowFlag(QtCore.Qt.FramelessWindowHint, True)
-        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
-        self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-
-        self.timer = QtCore.QTimer(self)
-        self.timer.setInterval(5000)
-        self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self.hide)
-
-        self._connect_signals()
-
-    def _connect_signals(self):
-        signals.dataAboutToBeFetched.connect(self.show)
-        signals.dataAboutToBeFetched.connect(self.set_size)
-        signals.dataFetched.connect(self.hide)
-        signals.dataFetched.connect(self.set_size)
-
-    @QtCore.Slot()
-    def set_size(self):
-        r = self.parent().window().geometry()
-        self.setGeometry(r)
-        QtWidgets.QApplication.instance().processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
-        self.repaint()
-        self.update()
-
-    def show(self):
-        super().show()
-        self.timer.start()
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-
-        r = self.rect()
-
-        o = ui.Size.Margin(2.0)
-        r = r.adjusted(o, o, -o, -o)
-        r.setHeight(ui.Size.Margin(1.5))
-        r.moveCenter(self.rect().center())
-
-        text = 'Fetching data...'
-        font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
-        painter.setFont(font)
-        painter.setPen(ui.Color.SecondaryText())
-        painter.drawText(r, QtCore.Qt.AlignCenter, text)
-
-        painter.end()
-
-
 class StatusIndicator(QtWidgets.QWidget):
     """Custom status indicator widget.
 
@@ -191,9 +137,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.range_selector = None
         self.expense_view = None
         self.transactions_view = None
-
-        self.load_indicator = LoadIndicator(parent=self)
-        self.load_indicator.hide()
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
