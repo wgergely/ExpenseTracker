@@ -19,7 +19,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         self.id_editor = None
         self.worksheet_editor = None
-        self.description_editor = None
 
         self.text_changed_timer = QtCore.QTimer(self)
         self.text_changed_timer.setSingleShot(True)
@@ -50,10 +49,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         self.worksheet_editor = QtWidgets.QLineEdit(self)
         self.worksheet_editor.setPlaceholderText('e.g. "Sheet1"')
         self.layout().addRow('Worksheet', self.worksheet_editor)
-
-        self.description_editor = QtWidgets.QLineEdit(self)
-        self.description_editor.setPlaceholderText('e.g. private expenses')
-        self.layout().addRow('Description', self.description_editor)
 
         self.layout().setAlignment(QtCore.Qt.AlignTop)
 
@@ -100,7 +95,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         self.id_editor.textChanged.connect(self.text_changed_timer.start)
         self.worksheet_editor.textChanged.connect(self.text_changed_timer.start)
-        self.description_editor.textChanged.connect(self.text_changed_timer.start)
 
         self.text_changed_timer.timeout.connect(self.verify_id)
         self.text_changed_timer.timeout.connect(self.save_section)
@@ -109,11 +103,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
     def save_section(self):
         data = self.get_current_section_data()
         lib.settings.set_section('spreadsheet', data)
-
-        # Save description
-        v = self.description_editor.text()
-        v = v if v else ''
-        lib.settings['description'] = v
 
     @QtCore.Slot()
     def get_current_section_data(self):
@@ -140,14 +129,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
             editor.blockSignals(True)
             editor.setText(data.get(k, ''))
             editor.blockSignals(False)
-
-        # Set description
-        description = lib.settings['description']
-        description = description if description else ''
-
-        self.description_editor.blockSignals(True)
-        self.description_editor.setText(description)
-        self.description_editor.blockSignals(False)
 
     @QtCore.Slot()
     def verify_id(self):

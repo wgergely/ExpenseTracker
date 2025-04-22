@@ -26,6 +26,7 @@ def show_settings_widget(parent=None):
     if settings_widget is None:
         settings_widget = SettingsWidget(parent=parent)
     settings_widget.open()
+    settings_widget.raise_()
     return settings_widget
 
 

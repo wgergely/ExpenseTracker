@@ -510,7 +510,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         col = index.column()
         if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
             editor.setGeometry(option.rect)
-            editor.setStyleSheet(f"height: {option.rect.height()}px;")
+            editor.setStyleSheet(f'height: {option.rect.height()}px;')
         else:
             editor.setGeometry(QtCore.QRect(0, 0, 0, 0))
 

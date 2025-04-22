@@ -651,3 +651,13 @@ QTextBrowser {
     padding: <Margin@1.0>px;
     background-color: <DarkBackground>;
 }
+
+PresetsListView {
+    background-color: <VeryDarkBackground>;
+    border: <Separator@1.0>px solid <Transparent>;
+    border-radius: <Indicator@1.5>px;
+}
+
+PresetsListView::item {
+    background-color: <Transparent>;
+}

@@ -8,6 +8,8 @@ from enum import Enum, IntFlag, auto
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from PySide6 import QtCore
+
 from .. import lib
 from ...ui.actions import signals
 
@@ -290,15 +292,23 @@ class PresetItem:
         return self.type is not PresetType.Invalid
 
 
-class PresetsAPI:
+class PresetsAPI(QtCore.QObject):
     """
     Manages presets: the live in-memory configuration plus on-disk ZIP snapshots.
     Provides methods to create, rename, duplicate, remove, activate, backup, and restore presets.
     """
 
+    # Signals to notify views of changes
+    presetsReloaded = QtCore.Signal()
+    presetAdded = QtCore.Signal(int)
+    presetRemoved = QtCore.Signal(int)
+    presetRenamed = QtCore.Signal(int)
+    presetActivated = QtCore.Signal(int)
+    presetUpdated = QtCore.Signal(int)
+
     def __init__(self) -> None:
+        super().__init__()
         self._items: List[PresetItem] = []
-        signals.presetsChanged.connect(self.load_presets)
         self.load_presets()
 
     def load_presets(self) -> None:
@@ -322,6 +332,8 @@ class PresetsAPI:
                 self._items.append(item)
             else:
                 logging.warning(f'Skipped invalid preset: {zip_path}')
+        # notify listeners that list was reloaded
+        self.presetsReloaded.emit()
 
     def __len__(self) -> int:
         return len(self._items)
@@ -425,6 +437,9 @@ class PresetsAPI:
         else:
             item.flags = PresetFlags.Unmodified
         self._items.append(item)
+        # notify listeners of new preset at end
+        idx = len(self._items) - 1
+        self.presetAdded.emit(idx)
         return item
 
     def rename(self, item: PresetItem, new_name: str) -> bool:
@@ -436,6 +451,8 @@ class PresetsAPI:
             logging.warning('Ignored empty new_name')
             return False
         try:
+            # record index before rename
+            idx = self._items.index(item)
             item.name = new_name
             if item.is_saved and item.path:
                 new_filename = f'{self._sanitize(new_name)}.{PRESET_FORMAT}'
@@ -443,7 +460,8 @@ class PresetsAPI:
                 if new_path != item.path:
                     item.path.rename(new_path)
                     item.path = new_path
-            signals.presetsChanged.emit()
+            # notify listeners of rename
+            self.presetRenamed.emit(idx)
             return True
         except Exception as ex:
             logging.error(f'Failed to rename preset: {ex}')
@@ -471,6 +489,9 @@ class PresetsAPI:
         finally:
             signals.blockSignals(False)
         self._items.append(new_item)
+        # notify listeners of new duplicate at end
+        idx = len(self._items) - 1
+        self.presetAdded.emit(idx)
         return new_item
 
     def remove(self, item: PresetItem) -> bool:
@@ -485,8 +506,15 @@ class PresetsAPI:
         except Exception as ex:
             logging.error(f'Failed to delete preset at {item.path}: {ex}')
             return False
-        # Refresh presets list after removal
-        signals.presetsChanged.emit()
+        # remove from internal list
+        try:
+            idx = self._items.index(item)
+            self._items.pop(idx)
+        except ValueError:
+            idx = None
+        # notify listeners of removal
+        if idx is not None:
+            self.presetRemoved.emit(idx)
         return True
 
     def activate(self, item: PresetItem, backup: bool = True) -> bool:
@@ -532,6 +560,16 @@ class PresetsAPI:
             for section in lib.LEDGER_SCHEMA:
                 signals.configSectionChanged.emit(section)
             logging.info(f'Activated preset: {item.name}')
+            # update flags via new active item
+            try:
+                idx = self._items.index(item)
+            except ValueError:
+                idx = None
+            # emit global signal for activation (no args)
+            signals.presetActivated.emit()
+            # notify listeners of activation event
+            if idx is not None:
+                self.presetActivated.emit(idx)
             return True
         except Exception as ex:
             logging.error(f'Failed to activate preset {item.name}: {ex}')
@@ -558,6 +596,9 @@ class PresetsAPI:
         # Return newly created preset item (uses metadata inside zip)
         item = PresetItem(path)
         self._items.append(item)
+        # notify listeners of new backup as an added preset
+        idx = len(self._items) - 1
+        self.presetAdded.emit(idx)
         return item
 
     def restore(self) -> bool:
@@ -604,7 +645,13 @@ class PresetsAPI:
                         zf.write(f, arcname=arc)
             # Replace original preset
             tmp_path.replace(item.path)
-            signals.presetsChanged.emit()
+            # notify listeners of updated snapshot
+            try:
+                idx = self._items.index(item)
+            except ValueError:
+                idx = None
+            if idx is not None:
+                self.presetUpdated.emit(idx)
             logging.info(f'Updated preset snapshot: {item.name}')
             return True
         except Exception as ex:

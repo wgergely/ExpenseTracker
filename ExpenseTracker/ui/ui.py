@@ -128,7 +128,7 @@ class Theme(enum.StrEnum):
 class Size(enum.Enum):
     """Enumeration of size values used for UI scaling."""
     SmallText = 11.0
-    MediumText = 13.0
+    MediumText = 12.0
     LargeText = 16.0
     Indicator = 4.0
     Separator = 1.0
