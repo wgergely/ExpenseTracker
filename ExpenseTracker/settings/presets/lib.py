@@ -293,11 +293,10 @@ class PresetsAPI:
         self.load_presets()
 
     def load_presets(self) -> None:
-        """
-        Reload the list of presets.
+        """Reload the list of presets.
 
-        Always includes one virtual item for the current config,
-        followed by valid saved ZIPs excluding backups.
+        Always includes one virtual item for the current configuration, followed by
+        valid saved ZIPs excluding backups.
         """
         self._items.clear()
         # Virtual live config
@@ -332,8 +331,13 @@ class PresetsAPI:
         raise TypeError('Key must be int or str')
 
     def get(self, name: str) -> Optional[PresetItem]:
-        """
-        Return the preset with the given name, or None if not found.
+        """Return the preset with the given name, or None if not found.
+
+        Args:
+            name: The name of the preset to look up.
+
+        Returns:
+            The matching PresetItem, or None if no match.
         """
         return next((item for item in self._items if item.name == name), None)
 
@@ -350,11 +354,17 @@ class PresetsAPI:
         return candidate
 
     def new(self, name: str, description: Optional[str] = None) -> PresetItem:
-        """
-        Create a new preset from the current configuration.
+        """Create a new preset from the current configuration.
 
-        Requires a valid ledger.json and client_secret.json; raises on failure.
-        Returns the created PresetItem.
+        Requires a valid ledger.json and client_secret.json; raises RuntimeError on
+        failure.
+
+        Args:
+            name: The name for the new preset.
+            description: Optional description for the new preset.
+
+        Returns:
+            The newly created PresetItem.
         """
         # Validate live config
         try:
