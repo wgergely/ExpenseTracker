@@ -1,15 +1,3 @@
-import json
-import logging
-import pathlib
-import re
-import shutil
-import tempfile
-from typing import Dict, Any, Optional, List
-
-from PySide6 import QtCore
-
-from ..status import status
-
 """
 Manages settings for ledger.json and client_secret.json files. Provides
 schema validation, unified get/set/revert/save methods, and logs important
@@ -18,7 +6,18 @@ operations and errors. Supports creating, removing, listing, and loading
 
 """
 
-organization_name: str = 'ExpenseTracker'
+import json
+import logging
+import pathlib
+import re
+import shutil
+import tempfile
+from typing import Dict, Any, Optional, List
+
+from PySide6 import QtCore, QtWidgets
+
+from ..status import status
+
 app_name: str = 'ExpenseTracker'
 
 
@@ -175,6 +174,16 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
 class ConfigPaths:
 
     def __init__(self) -> None:
+        # Set the application name and organization
+        QtWidgets.QApplication.setApplicationName(app_name)
+        QtWidgets.QApplication.setOrganizationName('')
+        logging.info(f'Setting application name: {app_name}')
+
+        # Get the app data directory
+        p = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.AppDataLocation)
+        app_data_dir = pathlib.Path(p)
+        logging.info(f'Using app data directory: {app_data_dir}')
+
         self.template_dir: pathlib.Path = pathlib.Path(__file__).parent.parent / 'config'
         self.icon_dir: pathlib.Path = self.template_dir / 'icons'
         self.client_secret_template: pathlib.Path = self.template_dir / 'client_secret.json.template'
@@ -184,9 +193,8 @@ class ConfigPaths:
         self.stylesheet_path = self.template_dir / 'stylesheet.qss'
         self.font_path = self.template_dir / 'font' / 'Inter.ttc'
 
-        # Config directories
-        self.presets_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'presets'
-        self.config_dir: pathlib.Path = pathlib.Path(tempfile.gettempdir()) / 'ExpenseTracker' / 'config'
+        self.presets_dir: pathlib.Path = app_data_dir / 'presets'
+        self.config_dir: pathlib.Path = app_data_dir / 'config'
         self.auth_dir: pathlib.Path = self.config_dir / 'auth'
         self.db_dir: pathlib.Path = self.config_dir / 'db'
 
@@ -273,17 +281,37 @@ class ConfigPaths:
         shutil.copy(self.client_secret_template, self.client_secret_path)
 
 
-class MetadataAPI:
-    """A dictionary like object for metadata getting and setting.
-
+class SettingsAPI(ConfigPaths):
     """
+    Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
+    Also supports presets for these files.
+    """
+    required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
-    def __init__(self) -> None:
+    def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
+        super().__init__()
+
+        self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.ledger_path
+
+        self.client_secret_path: pathlib.Path = (
+            pathlib.Path(client_secret_path)
+            if client_secret_path
+            else self.client_secret_path
+        )
+
         self._signals_blocked: bool = False
 
-    def block_signals(self, v: bool) -> None:
-        """Blocks signals from being emitted."""
-        self._signals_blocked = v
+        self.ledger_data: Dict[str, Any] = {}
+        for k in LEDGER_SCHEMA.keys():
+            self.ledger_data[k] = {}
+
+        self.client_secret_data: Dict[str, Any] = {}
+        self._watcher: QtCore.QFileSystemWatcher = QtCore.QFileSystemWatcher()
+
+        self._init_watcher()
+        self._connect_signals()
+
+        self.init_data()
 
     def __getitem__(self, key: str) -> Any:
         if key not in METADATA_KEYS:
@@ -358,37 +386,6 @@ class MetadataAPI:
         if key == 'span':
             signals.dataRangeChanged.emit(self.ledger_data['metadata']['yearmonth'], value)
 
-
-class SettingsAPI(ConfigPaths, MetadataAPI):
-    """
-    Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
-    Also supports presets for these files.
-    """
-    required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
-
-    def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
-        super().__init__()
-
-        self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.ledger_path
-
-        self.client_secret_path: pathlib.Path = (
-            pathlib.Path(client_secret_path)
-            if client_secret_path
-            else self.client_secret_path
-        )
-
-        self.ledger_data: Dict[str, Any] = {}
-        for k in LEDGER_SCHEMA.keys():
-            self.ledger_data[k] = {}
-
-        self.client_secret_data: Dict[str, Any] = {}
-        self._watcher: QtCore.QFileSystemWatcher = QtCore.QFileSystemWatcher()
-
-        self._init_watcher()
-        self._connect_signals()
-
-        self.init_data()
-
     def _init_watcher(self):
         self._watcher.addPath(str(self.config_dir))
         self._watcher.addPath(str(self.auth_dir))
@@ -401,6 +398,10 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         from ..ui.actions import signals
         self._watcher.directoryChanged.connect(signals.configFileChanged)
         self._watcher.fileChanged.connect(signals.configFileChanged)
+
+    def block_signals(self, v: bool) -> None:
+        """Blocks signals from being emitted."""
+        self._signals_blocked = v
 
     def init_data(self) -> None:
         self.load_ledger()
@@ -450,10 +451,11 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             RuntimeError: If neither configuration is present or required fields are missing.
 
         """
-        data = data or self.client_secret_data
+        # Use provided data if any, else use loaded client_secret_data
+        if data is None:
+            data = self.client_secret_data
 
-        if 'installed' not in data:
-            raise status.ClientSecretInvalidException(f'Missing "installed" section in client_secret.')
+        # Determine which section to use: prefer 'installed', then 'web'
 
         key = next((k for k in ('installed', 'web') if k in data), None)
         if not key:
@@ -474,7 +476,9 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
         Validates that data integrity.
 
         """
-        data = data or self.ledger_data
+        # Use provided data if any, else use loaded ledger_data
+        if data is None:
+            data = self.ledger_data
         if not data:
             raise RuntimeError('Ledger data is empty.')
 
@@ -521,6 +525,25 @@ class SettingsAPI(ConfigPaths, MetadataAPI):
             self.client_secret_data = new_data
             self.save_section('client_secret')
 
+            signals.configSectionChanged.emit(section_name)
+            return
+
+        # Special handling for metadata section
+        if section_name == 'metadata':
+            # Validate that metadata is a dict
+            if not isinstance(new_data, dict):
+                msg = 'metadata section must be a dict.'
+                logging.error(msg)
+                raise TypeError(msg)
+            # Check for missing metadata keys
+            missing_meta = [k for k in METADATA_KEYS if k not in new_data]
+            if missing_meta:
+                msg = f'Missing metadata keys: {missing_meta}'
+                logging.error(msg)
+                raise ValueError(msg)
+            # All required keys present; update and save
+            self.ledger_data['metadata'] = new_data
+            self.save_section('metadata')
             signals.configSectionChanged.emit(section_name)
             return
 

@@ -18,14 +18,14 @@ class PresetType(Enum):
     """
     Represents the type of preset.
 
-    'New' indicates the live configuration that hasn't been saved yet.
+    'Active' indicates the live configuration that hasn't been saved yet.
     'Saved' refers to a valid preset stored on disk as a ZIP file.
     'Invalid' marks a preset that couldn't be loaded or parsed correctly.
 
     Higher-level APIs should skip Invalid presets when listing and visually indicate them
     to prevent unintended activation or edits.
     """
-    New = auto()
+    Active = auto()
     Saved = auto()
     Invalid = auto()
 
@@ -35,11 +35,11 @@ class PresetFlags(IntFlag):
     Indicates additional status for a preset.
 
     'Active' means the preset's name matches the current live configuration.
-    'Modified' means its stored content differs from the live ledger sections.
+    'Out-of-date' means its stored content differs from the live ledger sections.
     """
     Unmodified = 0
     Active = auto()
-    Modified = auto()
+    OutOfDate = auto()
 
 
 class PresetItem:
@@ -48,7 +48,7 @@ class PresetItem:
     or a snapshot stored in a ZIP archive.
 
     During initialization, it attempts to load
-    ledger.json metadata, classify the item type, and determine its Active/Modified state.
+    ledger.json metadata, classify the item type, and determine its Active/Out-of-date state.
     Any errors during loading result in the item being marked as Invalid.
     """
 
@@ -63,10 +63,11 @@ class PresetItem:
             path: Path to a preset ZIP, or None/invalid for live settings.
         """
         self.path = path
-        self.type = PresetType.New
+        self.type = PresetType.Active
         self.flags = PresetFlags.Unmodified
         self._name = ''
         self._description = ''
+
         self._init_item()
 
     def __repr__(self) -> str:
@@ -139,46 +140,54 @@ class PresetItem:
         if current_name == self._name:
             self.flags |= PresetFlags.Active
         if current_name and self._differs_from_current():
-            self.flags |= PresetFlags.Modified
+            self.flags |= PresetFlags.OutOfDate
 
     def _load_current(self) -> None:
         """
         Initialize from live settings, distinguishing saved versus new unsaved configs.
         """
-        name = lib.settings['name']
-        description = lib.settings['description']
-        self._name = name or ''
+        name = lib.settings['name'] or ''
+
+        description = lib.settings['description'] or ''
         self._description = description or ''
+
+        if not name:
+            # A preset without a name is always invalid
+            self.type = PresetType.Invalid
+            self.flags = PresetFlags.Unmodified
+            return
+
+        self._name = name
+
         # Reset flags so no accumulation
         self.flags = PresetFlags.Unmodified
 
-        if name:
-            matches = []
-            for p in lib.settings.presets_dir.glob(f'*.{PRESET_FORMAT}'):
-                try:
-                    if self.open_ledger(p).get('metadata', {}).get('name') == name:
-                        matches.append(p)
-                except Exception as ex:
-                    logging.warning(f'Failed to read preset {p}: {ex}')
-            if matches:
-                if len(matches) > 1:
-                    logging.warning(f'Multiple presets named \'{name}\' found: '
-                                    f'{[p.name for p in matches]}. '
-                                    'Using the most recently modified.')
-                matches.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-                self.path = matches[0]
-                self.type = PresetType.Saved
-                self.flags = PresetFlags.Active
-                if self._differs_from_current():
-                    self.flags |= PresetFlags.Modified
-                return
-            # no saved preset found -> new config
-            self.type = PresetType.New
-            self.flags = PresetFlags.Active | PresetFlags.Modified
-        else:
-            # untitled fresh config is always active and modified
-            self.type = PresetType.New
-            self.flags = PresetFlags.Active | PresetFlags.Modified
+        matches = []
+        # look for saved presets matching current name (skip backups)
+        for p in lib.settings.presets_dir.glob(f'*.{PRESET_FORMAT}'):
+            if p.name.startswith(f'backup_'):
+                continue
+            try:
+                if self.open_ledger(p).get('metadata', {}).get('name') == name:
+                    matches.append(p)
+            except Exception as ex:
+                logging.warning(f'Failed to read preset {p}: {ex}')
+        if matches:
+            if len(matches) > 1:
+                logging.warning(f'Multiple presets named \'{name}\' found: '
+                                f'{[p.name for p in matches]}. '
+                                'Using the most recently modified.')
+            matches.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+            self.path = matches[0]
+            self.type = PresetType.Saved
+            self.flags = PresetFlags.Active
+            if self._differs_from_current():
+                self.flags |= PresetFlags.OutOfDate
+            return
+        # no saved preset found -> active (live) config
+        self.type = PresetType.Active
+        # Active config is always unmodified and active
+        self.flags = PresetFlags.Active
 
     def _differs_from_current(self) -> bool:
         """
@@ -213,7 +222,7 @@ class PresetItem:
         if not value:
             logging.warning('Ignored empty name')
             return
-        if self.type is PresetType.New:
+        if self.type is PresetType.Active:
             lib.settings['name'] = value
             self._name = value
             return
@@ -239,7 +248,7 @@ class PresetItem:
         Update the description in live settings or rewrite the ZIP,
         then emit presetsChanged.
         """
-        if self.type is PresetType.New:
+        if self.type is PresetType.Active:
             lib.settings['description'] = value
             self._description = value
             return
@@ -260,11 +269,11 @@ class PresetItem:
         return bool(self.flags & PresetFlags.Active)
 
     @property
-    def is_modified(self) -> bool:
+    def is_out_of_date(self) -> bool:
         """
         True when the preset's content doesn't match the live ledger.
         """
-        return bool(self.flags & PresetFlags.Modified)
+        return bool(self.flags & PresetFlags.OutOfDate)
 
     @property
     def is_saved(self) -> bool:
@@ -348,8 +357,9 @@ class PresetsAPI:
         """
         base = re.sub(r'[\\/*?":<>|]', '_', name).strip().strip('.') or 'preset'
         candidate = base
+        # Append timestamp with microseconds to avoid collisions
         while (lib.settings.presets_dir / f'{candidate}.{PRESET_FORMAT}').exists():
-            ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+            ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
             candidate = f'{base}_{ts}'
         return candidate
 
@@ -380,7 +390,9 @@ class PresetsAPI:
         lib.settings.presets_dir.mkdir(parents=True, exist_ok=True)
         lib.settings.config_dir.mkdir(parents=True, exist_ok=True)
 
-        if self.get(name):
+        # Prevent duplicate saved presets; ignore the virtual live config
+        if any(it.is_saved and it.name == name for it in self._items):
+            logging.error(f"Cannot create preset: '{name}' already exists on disk")
             raise RuntimeError(f'Preset already exists: {name}')
 
         filename = f'{self._sanitize(name)}.{PRESET_FORMAT}'
@@ -393,14 +405,26 @@ class PresetsAPI:
                     arc = f.relative_to(lib.settings.config_dir).as_posix()
                     zf.write(f, arcname=arc)
 
-        # Instantiate and set metadata via item setters
+        # Instantiate and set metadata via item setters without triggering reloads
         item = PresetItem(path)
-        item.name = name
-        if description is not None:
-            item.description = description
-
+        try:
+            signals.blockSignals(True)
+            item.name = name
+            if description is not None:
+                item.description = description
+        finally:
+            signals.blockSignals(False)
+        # Determine initial flags: active if name matches live config, otherwise unmodified
+        try:
+            current_name = lib.settings['name'] or ''
+        except Exception:
+            current_name = ''
+        if name == current_name:
+            logging.info(f"New preset '{name}' matches active configuration name; marking as active")
+            item.flags = PresetFlags.Active
+        else:
+            item.flags = PresetFlags.Unmodified
         self._items.append(item)
-        signals.presetsChanged.emit()
         return item
 
     def rename(self, item: PresetItem, new_name: str) -> bool:
@@ -440,11 +464,13 @@ class PresetsAPI:
         shutil.copy2(item.path, new_path)
 
         new_item = PresetItem(new_path)
-        new_item.name = new_name
-        new_item.description = item.description
-
+        try:
+            signals.blockSignals(True)
+            new_item.name = new_name
+            new_item.description = item.description
+        finally:
+            signals.blockSignals(False)
         self._items.append(new_item)
-        signals.presetsChanged.emit()
         return new_item
 
     def remove(self, item: PresetItem) -> bool:
@@ -459,7 +485,7 @@ class PresetsAPI:
         except Exception as ex:
             logging.error(f'Failed to delete preset at {item.path}: {ex}')
             return False
-        self._items.remove(item)
+        # Refresh presets list after removal
         signals.presetsChanged.emit()
         return True
 
@@ -513,28 +539,77 @@ class PresetsAPI:
 
     def backup(self) -> PresetItem:
         """
-        Create a timestamped backup of the current configuration.
+        Create a timestamped backup of the current configuration without altering metadata.
         Returns the created backup PresetItem.
         """
+        # Prepare backup filename
         stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        name = f'backup_{stamp}'
-        existing = self.get(name)
-        if existing:
-            self.remove(existing)
-        return self.new(name)
+        filename = f'backup_{stamp}.{PRESET_FORMAT}'
+        path = lib.settings.presets_dir / filename
+        # Remove any existing file with the same name
+        if path.exists():
+            path.unlink()
+        # Archive current config directory directly, preserving in-file metadata
+        with zipfile.ZipFile(path, 'w') as zf:
+            for f in lib.settings.config_dir.rglob('*'):
+                if f.is_file():
+                    arc = f.relative_to(lib.settings.config_dir).as_posix()
+                    zf.write(f, arcname=arc)
+        # Return newly created preset item (uses metadata inside zip)
+        item = PresetItem(path)
+        self._items.append(item)
+        return item
 
     def restore(self) -> bool:
         """
         Restore the most recent backup preset without creating another backup.
         Returns True on success, False otherwise.
         """
-        backups = [itm for itm in self._items if itm.name.startswith('backup_') and itm.is_saved]
-        if not backups:
+        # Locate backup files on disk by prefix
+        presets_dir = lib.settings.presets_dir
+        pattern = f'backup_*.{PRESET_FORMAT}'
+        backup_paths = list(presets_dir.glob(pattern))
+        if not backup_paths:
             logging.error('No backup available to restore')
             return False
-        backups.sort(key=lambda x: x.path.stat().st_mtime, reverse=True)
-        backup_item = backups[0]
+        # Use the most recent backup by modification time
+        backup_paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        backup_path = backup_paths[0]
+        backup_item = PresetItem(backup_path)
         return self.activate(backup_item, backup=False)
+
+    def update(self, item: PresetItem) -> bool:
+        """
+        Update an existing saved preset archive with the current configuration.
+
+        Args:
+            item: The PresetItem to update.
+
+        Returns:
+            bool: True if the update was successful, False otherwise.
+        """
+        if not item.is_saved or not item.path:
+            logging.error('Cannot update non-saved preset')
+            return False
+        if not item.is_active:
+            logging.error(f'Cannot update preset \'{item.name}\' because it is not active')
+            return False
+        try:
+            # Create temporary archive
+            tmp_path = item.path.with_name(item.path.name + '.tmp')
+            with zipfile.ZipFile(tmp_path, 'w') as zf:
+                for f in lib.settings.config_dir.rglob('*'):
+                    if f.is_file():
+                        arc = f.relative_to(lib.settings.config_dir).as_posix()
+                        zf.write(f, arcname=arc)
+            # Replace original preset
+            tmp_path.replace(item.path)
+            signals.presetsChanged.emit()
+            logging.info(f'Updated preset snapshot: {item.name}')
+            return True
+        except Exception as ex:
+            logging.error(f'Failed to update preset {item.name}: {ex}')
+            return False
 
     def items(self) -> List[PresetItem]:
         """
