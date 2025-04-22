@@ -195,8 +195,14 @@ class PresetsPopup(QtWidgets.QDialog):
     def show_at(self, widget: QtWidgets.QWidget) -> None:
         """Display the popup beneath *anchor*."""
         global_pos = widget.mapToGlobal(QtCore.QPoint(0, widget.height()))
+        self.setWindowFlags(QtCore.Qt.Tool | QtCore.Qt.FramelessWindowHint)
         self.move(global_pos)
-        self.show()
+        self.open()
+
+    def focusOutEvent(self, event):
+        """Close the popup when focus is lost."""
+        super().focusOutEvent(event)
+        self.hide()
 
     def _init_actions(self) -> None:
         """Initialize toolbar actions for managing presets."""

@@ -12,7 +12,6 @@ from ...ui import ui
 from ...ui.actions import signals
 
 
-# Column definitions for PresetModel
 class Columns(enum.IntEnum):
     Status = 0
     Name = 1

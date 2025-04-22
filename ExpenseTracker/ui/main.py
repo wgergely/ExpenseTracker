@@ -5,8 +5,8 @@ from .yearmonth import RangeSelectorBar
 from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
-from ..ui.actions import signals
 from ..settings.presets.view import PresetsPopup
+from ..ui.actions import signals
 
 main_window = None
 
@@ -83,12 +83,13 @@ class StatusIndicator(QtWidgets.QWidget):
             color = color.lighter(150)
 
         rect = self.rect()
-        if hover or pressed:
-            o = ui.Size.Indicator(0.8)
-        else:
-            o = ui.Size.Indicator(1.0)
+        center = self.rect().center()
 
-        rect = rect.adjusted(o, o, -o, -o)
+        rect = QtCore.QRect(
+            0, 0,
+            ui.Size.Margin(1.2), ui.Size.Margin(1.2)
+        )
+        rect.moveCenter(center)
 
         if hover or pressed:
             painter.setOpacity(0.4)
@@ -109,7 +110,7 @@ class StatusIndicator(QtWidgets.QWidget):
             0, 0,
             ui.Size.Margin(1.0), ui.Size.Margin(1.0)
         )
-        rect.moveCenter(self.rect().center())
+        rect.moveCenter(center)
 
         painter.setOpacity(1.0)
         icon.paint(painter, rect, QtCore.Qt.AlignCenter)
@@ -140,6 +141,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.range_selector = None
         self.expense_view = None
         self.transactions_view = None
+        self.presets_popup = None
+        self.status_indicator = None
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
@@ -177,6 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.transactions_view = TransactionsWidget(parent=self)
         self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
+
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
         self.transactions_view.hide()
 
@@ -185,19 +189,33 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
 
     def _init_actions(self):
-        # Presets popup button
-        # Create the Presets popup dialog
-        self._presets_popup = PresetsPopup(self)
-        # Create a tool button to trigger the popup
+        # stretch
+        stretch = QtWidgets.QWidget(self)
+        stretch.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        stretch.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        stretch.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        stretch.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.toolbar.addWidget(stretch)
+
+        self.presets_popup = PresetsPopup(self)
         presets_btn = QtWidgets.QToolButton(self)
         presets_btn.setText('Presets')
-        # Place text beside icon when an icon is set later
-        presets_btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
-        # Show the popup positioned under the button on click
-        presets_btn.clicked.connect(lambda: self._presets_popup.show_at(presets_btn))
-        # Add button to the main toolbar
-        if hasattr(self, 'toolbar') and self.toolbar is not None:
-            self.toolbar.addWidget(presets_btn)
+        presets_btn.setIcon(ui.get_icon('btn_presets'))
+        presets_btn.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        presets_btn.clicked.connect(lambda: self.presets_popup.show_at(presets_btn))
+        self.toolbar.addWidget(presets_btn)
+
+        action = QtGui.QAction(self)
+        action.setText('Settings')
+        action.setIcon(ui.get_icon('btn_settings'))
+        action.setToolTip('Show settings...')
+        action.setShortcut(QtGui.QKeySequence('Ctrl+.'))
+        action.triggered.connect(signals.openSettings)
+        self.toolbar.addAction(action)
+
+        self.toolbar.addWidget(self.status_indicator)
+
+
 
     def sizeHint(self):
         return QtCore.QSize(
