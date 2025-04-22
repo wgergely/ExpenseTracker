@@ -313,7 +313,7 @@ class PresetsAPI:
             if item.is_valid:
                 self._items.append(item)
             else:
-                logging.warning(f"Skipped invalid preset: {zip_path}")
+                logging.warning(f'Skipped invalid preset: {zip_path}')
 
     def __len__(self) -> int:
         return len(self._items)
@@ -346,14 +346,15 @@ class PresetsAPI:
         candidate = base
         while (lib.settings.presets_dir / f'{candidate}.{PRESET_FORMAT}').exists():
             ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-            candidate = f"{base}_{ts}"
+            candidate = f'{base}_{ts}'
         return candidate
 
     def new(self, name: str, description: Optional[str] = None) -> PresetItem:
         """
         Create a new preset from the current configuration.
 
-        Requires a valid ledger.json and client_secret.json; rises on failure.
+        Requires a valid ledger.json and client_secret.json; raises on failure.
+        Returns the created PresetItem.
         """
         # Validate live config
         try:
@@ -395,6 +396,7 @@ class PresetsAPI:
     def rename(self, item: PresetItem, new_name: str) -> bool:
         """
         Rename a preset. Updates metadata and renames the ZIP file.
+        Returns True on success, False otherwise.
         """
         if not new_name:
             logging.warning('Ignored empty new_name')
@@ -416,6 +418,7 @@ class PresetsAPI:
     def duplicate(self, item: PresetItem, new_name: str) -> PresetItem:
         """
         Duplicate a saved preset under a new name. Preserves all files and updates metadata.
+        Returns the newly duplicated PresetItem.
         """
         if not item.is_saved or not item.path:
             raise RuntimeError('Only saved presets can be duplicated')
@@ -437,6 +440,7 @@ class PresetsAPI:
     def remove(self, item: PresetItem) -> bool:
         """
         Remove a saved preset from the disk and the internal list.
+        Returns True on success, False otherwise.
         """
         if not item.is_saved or not item.path:
             return False
@@ -480,6 +484,12 @@ class PresetsAPI:
         # Extract preset
         try:
             with zipfile.ZipFile(item.path, 'r') as zf:
+                # prevent path traversal: ensure all members extract inside config_dir
+                root = lib.settings.config_dir.resolve()
+                for member in zf.namelist():
+                    dest = (lib.settings.config_dir / member).resolve()
+                    if not dest.is_relative_to(root):
+                        raise RuntimeError(f'Unsafe entry in preset: {member}')
                 zf.extractall(lib.settings.config_dir)
             signals.dataAboutToBeFetched.emit()
             signals.configSectionChanged.emit('client_secret')
@@ -494,6 +504,7 @@ class PresetsAPI:
     def backup(self) -> PresetItem:
         """
         Create a timestamped backup of the current configuration.
+        Returns the created backup PresetItem.
         """
         stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         name = f'backup_{stamp}'
@@ -505,6 +516,7 @@ class PresetsAPI:
     def restore(self) -> bool:
         """
         Restore the most recent backup preset without creating another backup.
+        Returns True on success, False otherwise.
         """
         backups = [itm for itm in self._items if itm.name.startswith('backup_') and itm.is_saved]
         if not backups:
