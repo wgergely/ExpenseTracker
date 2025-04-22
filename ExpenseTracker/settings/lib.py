@@ -38,6 +38,8 @@ DATA_MAPPING_SEPARATOR_CHARS: List[str] = ['|', '+']
 HEADER_TYPES: List[str] = ['string', 'int', 'float', 'date']
 
 METADATA_KEYS: List[str] = [
+    'name',
+    'description',
     'locale',
     'summary_mode',
     'hide_empty_categories',
@@ -55,7 +57,6 @@ LEDGER_SCHEMA: Dict[str, Any] = {
         'required': True,
         'item_schema': {
             'id': {'type': str, 'required': True},
-            'description': {'type': str, 'required': True},
             'sheet': {'type': str, 'required': True}
         }
     },

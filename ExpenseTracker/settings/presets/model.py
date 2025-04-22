@@ -2,118 +2,162 @@
 
 """
 
-import logging
-from typing import Any
+from typing import Any, Optional
 
 from PySide6 import QtCore
 
-from .lib import presets
+from .lib import PresetsAPI
 from ...ui import ui
+from ...ui.actions import signals
 
 
-class PresetsModel(QtCore.QAbstractItemModel):
-    """List‑model view of project presets."""
+class PresetModel(QtCore.QAbstractItemModel):
+    """QAbstractItemModel for listing and managing PresetItem instances."""
 
-    def index(self, row: int, column: int = 0, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> QtCore.QModelIndex:
-        if parent.isValid() or row < 0 or column != 0:
-            return QtCore.QModelIndex()
-        preset = presets.get_preset_by_index(row)
-        if not preset:
-            return QtCore.QModelIndex()
-        return self.createIndex(row, 0, preset)
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+        """Initialize the preset model."""
+        super().__init__(parent=parent)
+        self._api = PresetsAPI()
 
-    def parent(self, index: QtCore.QModelIndex = QtCore.QModelIndex()) -> QtCore.QModelIndex:
-        return QtCore.QModelIndex()
+        self._connect_signals()
 
-    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return 1
+    def _connect_signals(self) -> None:
+        @QtCore.Slot()
+        def reload() -> None:
+            self.beginResetModel()
+            self._api.load_presets()
+            self.endResetModel()
+
+        signals.presetsChanged.connect(reload)
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
             return 0
-        return presets.count()
+        return len(self._api)
 
-    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
+    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        return 2
+
+    def index(
+            self,
+            row: int,
+            column: int = 0,
+            parent: QtCore.QModelIndex = QtCore.QModelIndex()
+    ) -> QtCore.QModelIndex:
+        """Create index for item at row/column."""
+        if (
+                parent.isValid() or
+                row < 0 or
+                row >= len(self._api) or
+                column < 0 or
+                column >= self.columnCount()
+        ):
+            return QtCore.QModelIndex()
+        item = self._api[row]
+        return self.createIndex(row, column, item)
+
+    def parent(self, index: QtCore.QModelIndex) -> QtCore.QModelIndex:
+        """Flat list has no parent."""
+        return QtCore.QModelIndex()
+
+    def data(
+            self,
+            index: QtCore.QModelIndex,
+            role: int = QtCore.Qt.DisplayRole
+    ) -> Any:
+        """Provide data for display, edit, decoration, tooltip, and user roles."""
         if not index.isValid():
             return None
-        preset = index.internalPointer()
-        if not preset:
-            return None
-
-        if role == QtCore.Qt.DisplayRole:
-            return preset.name
-        if role == QtCore.Qt.DecorationRole:
+        item = index.internalPointer()
+        col = index.column()
+        if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
+            if col == 0:
+                return item.name
+            if col == 1:
+                return item.description
+        if role == QtCore.Qt.DecorationRole and col == 0:
             return ui.get_icon('btn_preset')
         if role == QtCore.Qt.ToolTipRole:
-            return preset.description
-        if role == QtCore.Qt.EditRole:
-            return preset.name
+            return item.description
         if role == QtCore.Qt.UserRole:
-            return preset.path
-
+            return item
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
-        return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable
+        """Items are selectable, enabled, and columns editable."""
+        if not index.isValid():
+            return QtCore.Qt.NoItemFlags
+        flags = QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
+        if index.column() in (0, 1):
+            flags |= QtCore.Qt.ItemIsEditable
+        return flags
 
     def setData(
             self,
             index: QtCore.QModelIndex,
             value: Any,
-            role: int = QtCore.Qt.EditRole,
+            role: int = QtCore.Qt.EditRole
     ) -> bool:
-        """Rename a preset through inline editing."""
+        """Handle renaming and description changes via API."""
         if role != QtCore.Qt.EditRole or not index.isValid():
             return False
-
-        old_name = presets.presets[index.row()].name
-        new_name = str(value).strip()
-
-        if not new_name or new_name == old_name:
+        item = index.internalPointer()
+        text = str(value)
+        if index.column() == 0:
+            self._api.rename(item, text)
+        elif index.column() == 1:
+            item.description = text
+        else:
             return False
-
-        presets.rename_preset(old_name, new_name)
-        self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, role])
+        self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
         return True
 
-    @QtCore.Slot()
-    def add_preset(self, name: str) -> bool:
-        """Archive current configuration as *name* and insert a new row."""
-        row = self.rowCount()
-        try:
-            presets.add_preset(name)
-        except RuntimeError as err:
-            logging.error(err)
-            return False
+    def headerData(
+            self,
+            section: int,
+            orientation: QtCore.Qt.Orientation,
+            role: int = QtCore.Qt.DisplayRole
+    ) -> Any:
+        """Return headers: 'Name' for column 0, 'Description' for column 1."""
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+            if section == 0:
+                return 'Name'
+            if section == 1:
+                return 'Description'
+        return None
 
+    def insertRows(
+            self,
+            row: int,
+            count: int,
+            parent: QtCore.QModelIndex = QtCore.QModelIndex()
+    ) -> bool:
+        """Insert a new preset with a default name."""
+        if parent.isValid() or count != 1:
+            return False
         self.beginInsertRows(QtCore.QModelIndex(), row, row)
+        item = self._api.new('New Preset')
         self.endInsertRows()
         return True
 
-    @QtCore.Slot()
-    def remove_preset(self, row: int) -> bool:
-        """Remove preset at *row*."""
-        if row < 0 or row >= self.rowCount():
+    def removeRows(
+            self,
+            row: int,
+            count: int,
+            parent: QtCore.QModelIndex = QtCore.QModelIndex()
+    ) -> bool:
+        """Remove the preset at the given row and rollback if deletion fails."""
+        if parent.isValid() or count != 1:
             return False
-
-        name = presets.presets[row].name
+        item = self._api[row]
+        # Attempt deletion first
+        success = self._api.remove(item)
+        if not success:
+            return False
+        # Notify model of row removal
         self.beginRemoveRows(QtCore.QModelIndex(), row, row)
-        presets.remove_preset(name)
         self.endRemoveRows()
         return True
-
-    @QtCore.Slot()
-    def activate_preset(self, row: int) -> bool:
-        """Activate preset at *row*."""
-        if row < 0 or row >= self.rowCount():
-            return False
-        name = presets.presets[row].name
-        return presets.activate_preset(name)
-
-    def preset_path(self, row: int) -> str | None:
-        if row < 0 or row >= self.rowCount():
-            return None
-        return str(presets.presets[row].path)
 
 
 class PresetsSortFilterProxyModel(QtCore.QSortFilterProxyModel):

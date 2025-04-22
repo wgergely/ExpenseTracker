@@ -4,7 +4,7 @@ import logging
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
-from .model import PresetsModel, PresetsSortFilterProxyModel
+from .model import PresetModel, PresetsSortFilterProxyModel
 from ...ui import ui
 
 
@@ -23,7 +23,7 @@ class PresetsListView(QtWidgets.QListView):
 
     def _init_model(self) -> None:
         proxy = PresetsSortFilterProxyModel(self)
-        model = PresetsModel(self)
+        model = PresetModel(self)
         proxy.setSourceModel(model)
         self.setModel(proxy)
 

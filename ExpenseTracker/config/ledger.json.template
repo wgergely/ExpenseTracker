@@ -1,8 +1,7 @@
 {
   "spreadsheet": {
     "id": "",
-    "worksheet": "Sheet1",
-    "description": ""
+    "worksheet": "Sheet1"
   },
   "header": {
     "ID": "int",
@@ -29,6 +28,7 @@
   },
   "metadata": {
     "name": "Default Ledger",
+    "description": "Default ledger configuration",
     "locale": "en_GB",
     "summary_mode": "total",
     "hide_empty_categories": true,

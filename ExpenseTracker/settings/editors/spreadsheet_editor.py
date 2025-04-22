@@ -110,12 +110,16 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         data = self.get_current_section_data()
         lib.settings.set_section('spreadsheet', data)
 
+        # Save description
+        v = self.description_editor.text()
+        v = v if v else ''
+        lib.settings['description'] = v
+
     @QtCore.Slot()
     def get_current_section_data(self):
         return {
             'id': self.id_editor.text(),
             'worksheet': self.worksheet_editor.text(),
-            'description': self.description_editor.text(),
         }
 
     @QtCore.Slot()
@@ -136,6 +140,14 @@ class SpreadsheetEditor(QtWidgets.QWidget):
             editor.blockSignals(True)
             editor.setText(data.get(k, ''))
             editor.blockSignals(False)
+
+        # Set description
+        description = lib.settings['description']
+        description = description if description else ''
+
+        self.description_editor.blockSignals(True)
+        self.description_editor.setText(description)
+        self.description_editor.blockSignals(False)
 
     @QtCore.Slot()
     def verify_id(self):
