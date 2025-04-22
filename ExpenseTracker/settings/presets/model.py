@@ -9,6 +9,7 @@ from PySide6 import QtCore
 
 from .lib import PresetsAPI, PresetType
 from ...ui import ui
+from ...ui.actions import signals
 
 
 # Column definitions for PresetModel
@@ -26,6 +27,10 @@ class PresetModel(QtCore.QAbstractItemModel):
         super().__init__(parent=parent)
         self._api = PresetsAPI()
         self._connect_signals()
+
+    def api(self) -> PresetsAPI:
+        """Return the PresetsAPI instance."""
+        return self._api
 
     def _connect_signals(self) -> None:
         """Connect model updates to PresetsAPI signals for dynamic view updates."""
@@ -46,6 +51,22 @@ class PresetModel(QtCore.QAbstractItemModel):
 
         self._api.presetActivated.connect(self.beginResetModel)
         self._api.presetActivated.connect(self.endResetModel)
+        # Reload flags and metadata when underlying config or presets metadata changes
+        signals.configSectionChanged.connect(self._reset_model)
+        signals.presetsChanged.connect(self._reset_model)
+
+    def _reset_model(self, *args) -> None:
+        """Reset the model to refresh all item flags and metadata."""
+        # Refresh item status flags (active/out-of-date) before resetting
+        try:
+            for item in self._api._items:
+                # Reinitialize each item to recompute flags based on current settings
+                item._init_item()
+        except Exception:
+            # Ignore errors during status refresh
+            pass
+        self.beginResetModel()
+        self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         if parent.isValid():
@@ -89,22 +110,22 @@ class PresetModel(QtCore.QAbstractItemModel):
 
         item = index.internalPointer()
         col = index.column()
-        # DisplayRole: status, name, description
+
         if role == QtCore.Qt.DecorationRole:
             if col == Columns.Status:
                 if item.type is PresetType.Active:
-                    return ui.get_icon('btn_active', color=ui.Color.Green())
-                if item.is_out_of_date:
-                    return ui.get_icon('btn_alert', color=ui.Color.Yellow())
+                    return ui.get_icon('btn_active', color=ui.Color.Yellow())
                 if item.is_active:
                     return ui.get_icon('btn_ok', color=ui.Color.Green())
+
         if role == QtCore.Qt.DisplayRole:
             if col == Columns.Name:
                 if item.type is PresetType.Active:
-                    return f'Current Ledger ({item.name})'
-
+                    return f'{item.name} (Current Ledger)'
                 # Show name, suffix '*' if modified
                 text = item.name
+                if item.is_active:
+                    text += ' (Active)'
                 if item.is_out_of_date:
                     text += '*'
                 return text
@@ -125,32 +146,37 @@ class PresetModel(QtCore.QAbstractItemModel):
             if col == Columns.Name:
                 return QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft
             if col == Columns.Description:
-                return QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft
+                return QtCore.Qt.AlignVCenter | QtCore.Qt.AlignRight
 
         if role == QtCore.Qt.FontRole:
             if col == Columns.Name:
                 if item.type is PresetType.Active:
                     font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
                     return font
-
                 font, _ = ui.Font.MediumFont(ui.Size.MediumText(1.0))
-
-                if item.is_out_of_date:
-                    font.setItalic(True)
-
                 return font
-
             if col == Columns.Description:
                 font, _ = ui.Font.MediumFont(ui.Size.MediumText(1.0))
                 return font
+
+        if role == QtCore.Qt.DecorationRole:
+            if col == Columns.Name:
+                if item.is_out_of_date:
+                    return ui.get_icon('btn_alert', color=ui.Color.Yellow())
 
         if role == QtCore.Qt.ForegroundRole:
             if col == Columns.Name:
                 if item.type is PresetType.Active:
+                    return ui.Color.Yellow()
+                if item.is_active:
                     return ui.Color.Green()
                 return ui.Color.Text()
 
             if col == Columns.Description:
+                if item.type is PresetType.Active:
+                    return ui.Color.Yellow()
+                if item.is_active:
+                    return ui.Color.Green()
                 return ui.Color.SecondaryText()
 
         if role == QtCore.Qt.ToolTipRole:
@@ -189,11 +215,15 @@ class PresetModel(QtCore.QAbstractItemModel):
         item = index.internalPointer()
         text = str(value)
         if index.column() == Columns.Name:
+            # rename preset, propagating to matching items
             self._api.rename(item, text)
         elif index.column() == Columns.Description:
-            item.description = text
+            # update description, propagating to matching items
+            self._api.set_description(item, text)
         else:
             return False
+        # model will reset via presetsChanged or presetRenamed signals
+        # notify direct data change for this cell as fallback
         self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
         return True
 
@@ -274,3 +304,14 @@ class PresetsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
         self._filter_string = filter_string
         self.setFilterWildcard(filter_string)
         self.invalidateFilter()
+
+    def lessThan(self, source_left, source_right):
+        left_item = source_left.data(QtCore.Qt.UserRole + 2)
+        right_item = source_right.data(QtCore.Qt.UserRole + 2)
+
+        # ensure that the active preset is always at the top
+        if left_item.type is PresetType.Active and right_item.type is not PresetType.Active:
+            return True
+        if left_item.type is not PresetType.Active and right_item.type is PresetType.Active:
+            return False
+        return super().lessThan(source_left, source_right)

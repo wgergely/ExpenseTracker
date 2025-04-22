@@ -340,4 +340,4 @@ class ClientEditor(QtWidgets.QWidget):
         """
         Starts the authentication process.
         """
-        auth.authenticate(force=True)
+        auth.authenticate()

@@ -7,7 +7,7 @@ QWidget {
     margin: 0;
     padding: 0;
     outline: 0;
-    selection-color: white;
+    selection-color: <LightBlue>;
     selection-background-color: rgba(250,250,255,50);
     border: <Separator@2.0>px solid <Transparent>;
 }
@@ -654,8 +654,8 @@ QTextBrowser {
 
 PresetsListView {
     background-color: <VeryDarkBackground>;
-    border: <Separator@1.0>px solid <Transparent>;
-    border-radius: <Indicator@1.5>px;
+    padding: 0px;
+    margin: 0px;
 }
 
 PresetsListView::item {

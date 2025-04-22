@@ -158,8 +158,8 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         d = lib.settings.get_section('categories')
 
         self.beginResetModel()
+        self._categories.clear()
         try:
-            self._categories.clear()
             for k, v in d.items():
                 self._categories.append({
                     'name': k,

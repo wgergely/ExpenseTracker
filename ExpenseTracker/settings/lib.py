@@ -306,9 +306,7 @@ class SettingsAPI(ConfigPaths):
             self.ledger_data[k] = {}
 
         self.client_secret_data: Dict[str, Any] = {}
-        self._watcher: QtCore.QFileSystemWatcher = QtCore.QFileSystemWatcher()
 
-        self._init_watcher()
         self._connect_signals()
 
         self.init_data()
@@ -386,18 +384,12 @@ class SettingsAPI(ConfigPaths):
         if key == 'span':
             signals.dataRangeChanged.emit(self.ledger_data['metadata']['yearmonth'], value)
 
-    def _init_watcher(self):
-        self._watcher.addPath(str(self.config_dir))
-        self._watcher.addPath(str(self.auth_dir))
-
-        self._watcher.addPath(str(self.client_secret_path))
-        self._watcher.addPath(str(self.ledger_path))
-        self._watcher.addPath(str(self.creds_path))
+        signals.configSectionChanged.emit('metadata')
 
     def _connect_signals(self) -> None:
         from ..ui.actions import signals
-        self._watcher.directoryChanged.connect(signals.configFileChanged)
-        self._watcher.fileChanged.connect(signals.configFileChanged)
+        signals.presetsChanged.connect(self.init_data)
+        signals.presetActivated.connect(self.init_data)
 
     def block_signals(self, v: bool) -> None:
         """Blocks signals from being emitted."""

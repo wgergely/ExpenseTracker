@@ -15,6 +15,7 @@ from PySide6 import QtCore, QtWidgets
 
 from .. import lib
 from ...ui import ui
+from ...ui.actions import signals
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,13 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
 
     def __init__(self, property_name, default_value, options, parent=None):
         super().__init__(parent=parent)
+        self._options = options
         self.property_name = property_name
         self.default_value = default_value
-        self._options = options  # list of (display, value) tuples
         self.setView(QtWidgets.QListView(self))
+
         self._connect_signals()
+
         QtCore.QTimer.singleShot(150, self.init_data)
 
     def get_options(self):
@@ -52,22 +55,28 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
         return self._options
 
     def init_data(self):
+
         self.blockSignals(True)
-        # Populate widget from options.
-        for display, value in self.get_options():
-            self.addItem(display, userData=value)
-        self.blockSignals(False)
+        self.clear()
+
+        try:
+            for display, value in self.get_options():
+                self.addItem(display, userData=value)
+        finally:
+            self.blockSignals(False)
+
         # Validate and set the current value.
         stored = lib.settings[self.property_name]
         valid = self.validate_value(stored)
         idx = self.findData(valid)
+
         if idx != -1:
             self.blockSignals(True)
             self.setCurrentIndex(idx)
             self.blockSignals(False)
 
     def validate_value(self, value):
-        """Check if value exists in options; otherwise return the default."""
+        """Check if a value exists in options; otherwise return the default."""
         for _, option in self.get_options():
             if isinstance(option, enum.Enum):
                 if isinstance(value, str) and value == option.name:
@@ -79,7 +88,18 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
         return self.default_value
 
     def _connect_signals(self):
+        # Save changes when selection changes
         self.currentIndexChanged.connect(self.save)
+
+        # Refresh editor when metadata section is externally updated
+        @QtCore.Slot(str)
+        def _on_config_changed(section_name: str) -> None:
+            if section_name != 'metadata':
+                return
+            # Reload the combo-box data to reflect current settings
+            QtCore.QTimer.singleShot(0, self.init_data)
+
+        signals.configSectionChanged.connect(_on_config_changed)
 
     @QtCore.Slot(int)
     def save(self, index):
@@ -164,7 +184,16 @@ class BooleanEditor(QtWidgets.QCheckBox):
         self.blockSignals(False)
 
     def _connect_signals(self):
+        # Persist changes when checkbox toggles
         self.stateChanged.connect(self.save)
+
+        @QtCore.Slot(str)
+        def on_config_changed(section_name: str) -> None:
+            if section_name != 'metadata':
+                return
+            self.init_data()
+
+        signals.configSectionChanged.connect(on_config_changed)
 
     @QtCore.Slot()
     def save(self, *args, **kwargs):

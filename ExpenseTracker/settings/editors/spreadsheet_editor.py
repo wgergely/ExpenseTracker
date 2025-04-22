@@ -89,7 +89,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         def on_section_changed(section):
             if section != 'spreadsheet':
                 return
-            pass
+            self.init_data()
 
         signals.configSectionChanged.connect(on_section_changed)
 

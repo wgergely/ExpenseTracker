@@ -46,12 +46,6 @@ class SettingsScrollArea(QtWidgets.QScrollArea):
 
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
-    #
-    # def resizeEvent(self, event):
-    #     super().resizeEvent(event)
-    #     # Force container to match our viewport width after each resize
-    #     if self.widget():
-    #         self.widget().setFixedWidth(self.viewport().width())
 
 
 class SettingsWidget(QtWidgets.QDialog):

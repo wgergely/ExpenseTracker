@@ -6,6 +6,7 @@ from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
 from ..ui.actions import signals
+from ..settings.presets.view import PresetsPopup
 
 main_window = None
 
@@ -47,6 +48,8 @@ class StatusIndicator(QtWidgets.QWidget):
         signals.configSectionChanged.connect(self.update_status)
         signals.dataAboutToBeFetched.connect(self.update_status)
         signals.dataFetched.connect(self.update_status)
+        signals.presetsChanged.connect(self.update_status)
+        signals.presetActivated.connect(self.update_status)
 
     def mouseReleaseEvent(self, event):
         if not self.rect().contains(event.pos()):
@@ -182,7 +185,19 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
 
     def _init_actions(self):
-        pass
+        # Presets popup button
+        # Create the Presets popup dialog
+        self._presets_popup = PresetsPopup(self)
+        # Create a tool button to trigger the popup
+        presets_btn = QtWidgets.QToolButton(self)
+        presets_btn.setText('Presets')
+        # Place text beside icon when an icon is set later
+        presets_btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        # Show the popup positioned under the button on click
+        presets_btn.clicked.connect(lambda: self._presets_popup.show_at(presets_btn))
+        # Add button to the main toolbar
+        if hasattr(self, 'toolbar') and self.toolbar is not None:
+            self.toolbar.addWidget(presets_btn)
 
     def sizeHint(self):
         return QtCore.QSize(

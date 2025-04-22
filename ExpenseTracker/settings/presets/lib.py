@@ -14,6 +14,8 @@ from .. import lib
 from ...ui.actions import signals
 
 PRESET_FORMAT = 'zip'
+# Maximum number of backup files to retain
+MAX_BACKUPS = 5
 
 
 class PresetType(Enum):
@@ -70,7 +72,15 @@ class PresetItem:
         self._name = ''
         self._description = ''
 
+        self._connect_signals()
+
         self._init_item()
+
+    def _connect_signals(self):
+        """
+        Connect signals to update the preset item when settings change.
+        """
+        signals.configSectionChanged.connect(self._init_item)
 
     def __repr__(self) -> str:
         """
@@ -119,30 +129,40 @@ class PresetItem:
 
         Errors mark it Invalid.
         """
+        # Reset flags before (re)initializing status
+        self.flags = PresetFlags.Unmodified
         if not self.path or not self.path.exists():
+            # Live configuration item
             self._load_current()
             return
 
         try:
             data = self.open_ledger(self.path)
             md = data.get('metadata', {})
-            name = md.get('name')
+            name = md.get('name', '')
             description = md.get('description', '')
-            if not name:
-                raise ValueError('Preset missing name')
+
             self._name = name
             self._description = description
-            self.type = PresetType.Saved
+
+            if not name:
+                logging.error(f'Preset {self.path} has no name')
+                self.type = PresetType.Invalid
+            else:
+                self.type = PresetType.Saved
+
         except Exception as ex:
             logging.error(f'Failed to load preset at {self.path}: {ex}')
             self.type = PresetType.Invalid
             return
 
         current_name = lib.settings['name']
+        # Mark active if this preset name matches the live configuration
         if current_name == self._name:
             self.flags |= PresetFlags.Active
-        if current_name and self._differs_from_current():
-            self.flags |= PresetFlags.OutOfDate
+            # Only active presets track out-of-date state
+            if self._differs_from_current():
+                self.flags |= PresetFlags.OutOfDate
 
     def _load_current(self) -> None:
         """
@@ -161,34 +181,8 @@ class PresetItem:
 
         self._name = name
 
-        # Reset flags so no accumulation
-        self.flags = PresetFlags.Unmodified
-
-        matches = []
-        # look for saved presets matching current name (skip backups)
-        for p in lib.settings.presets_dir.glob(f'*.{PRESET_FORMAT}'):
-            if p.name.startswith(f'backup_'):
-                continue
-            try:
-                if self.open_ledger(p).get('metadata', {}).get('name') == name:
-                    matches.append(p)
-            except Exception as ex:
-                logging.warning(f'Failed to read preset {p}: {ex}')
-        if matches:
-            if len(matches) > 1:
-                logging.warning(f'Multiple presets named \'{name}\' found: '
-                                f'{[p.name for p in matches]}. '
-                                'Using the most recently modified.')
-            matches.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-            self.path = matches[0]
-            self.type = PresetType.Saved
-            self.flags = PresetFlags.Active
-            if self._differs_from_current():
-                self.flags |= PresetFlags.OutOfDate
-            return
-        # no saved preset found -> active (live) config
+        # Virtual live config: always active, not representing a saved preset
         self.type = PresetType.Active
-        # Active config is always unmodified and active
         self.flags = PresetFlags.Active
 
     def _differs_from_current(self) -> bool:
@@ -202,8 +196,6 @@ class PresetItem:
             return True
         live = lib.settings.ledger_data
         for sec in lib.LEDGER_SCHEMA:
-            if sec == 'metadata':
-                continue
             if preset_data.get(sec) != live.get(sec):
                 return True
         return False
@@ -451,15 +443,32 @@ class PresetsAPI(QtCore.QObject):
             logging.warning('Ignored empty new_name')
             return False
         try:
+            # capture old name for propagation
+            old_name = item.name
             # record index before rename
             idx = self._items.index(item)
+            # rename primary item
             item.name = new_name
+            # if this is a saved preset, also rename its file on disk
             if item.is_saved and item.path:
                 new_filename = f'{self._sanitize(new_name)}.{PRESET_FORMAT}'
                 new_path = lib.settings.presets_dir / new_filename
                 if new_path != item.path:
                     item.path.rename(new_path)
                     item.path = new_path
+            # propagate name change to matching presets
+            if item.type is PresetType.Active:
+                # active renamed: update saved presets that matched old name
+                for other in list(self._items):
+                    if other is item:
+                        continue
+                    if other.is_saved and other.name == old_name:
+                        other.name = new_name
+            else:
+                # a saved preset renamed: update active config if it matched old name
+                active = self._items[0]
+                if active.name == old_name:
+                    active.name = new_name
             # notify listeners of rename
             self.presetRenamed.emit(idx)
             return True
@@ -481,18 +490,64 @@ class PresetsAPI(QtCore.QObject):
         new_path = lib.settings.presets_dir / new_filename
         shutil.copy2(item.path, new_path)
 
+        # Instantiate duplicate and update metadata without triggering presetChanged
         new_item = PresetItem(new_path)
         try:
             signals.blockSignals(True)
+            # Set new name and description in the archive
             new_item.name = new_name
             new_item.description = item.description
         finally:
             signals.blockSignals(False)
+        # Recompute flags based on updated metadata (e.g., active/out-of-date)
+        try:
+            new_item._init_item()
+        except Exception:
+            pass
+        # Add to internal list and notify listeners
         self._items.append(new_item)
-        # notify listeners of new duplicate at end
         idx = len(self._items) - 1
         self.presetAdded.emit(idx)
         return new_item
+    
+    def set_description(self, item: PresetItem, new_description: str) -> bool:
+        """
+        Update the description for a preset and propagate to any matching items.
+        """
+        try:
+            old_name = item.name
+            # update primary item
+            if item.type is PresetType.Active:
+                # live config
+                lib.settings['description'] = new_description
+                item._description = new_description
+            else:
+                # saved preset: update metadata inside ZIP
+                data = PresetItem.open_ledger(item.path)
+                data.setdefault('metadata', {})['description'] = new_description
+                PresetItem.write_ledger(item.path, data)
+                item._description = new_description
+            # propagate to other items with the same preset name
+            for other in self._items:
+                if other is item:
+                    continue
+                if other.name != old_name:
+                    continue
+                # update matching items
+                if other.type is PresetType.Active:
+                    lib.settings['description'] = new_description
+                    other._description = new_description
+                else:
+                    data = PresetItem.open_ledger(other.path)
+                    data.setdefault('metadata', {})['description'] = new_description
+                    PresetItem.write_ledger(other.path, data)
+                    other._description = new_description
+            # notify views
+            signals.presetsChanged.emit()
+            return True
+        except Exception as ex:
+            logging.error(f'Failed to set description for preset: {ex}')
+            return False
 
     def remove(self, item: PresetItem) -> bool:
         """
@@ -527,6 +582,12 @@ class PresetsAPI(QtCore.QObject):
             item: the preset to activate
             backup: if True, create a backup before activation
         """
+        # Prevent activation of out-of-date presets (requires snapshot to match live config)
+        if item.is_out_of_date:
+            logging.error(f'Cannot activate out-of-date preset: {item.name}')
+            raise RuntimeError(
+                f"Cannot activate out-of-date preset '{item.name}'. Please update it before activating."
+            )
         if not item.is_saved or not item.path:
             logging.error('Cannot activate non-saved preset')
             return False
@@ -547,6 +608,7 @@ class PresetsAPI(QtCore.QObject):
             return False
         # Extract preset
         try:
+            # Extract preset into config directory
             with zipfile.ZipFile(item.path, 'r') as zf:
                 # prevent path traversal: ensure all members extract inside config_dir
                 root = lib.settings.config_dir.resolve()
@@ -555,21 +617,23 @@ class PresetsAPI(QtCore.QObject):
                     if not dest.is_relative_to(root):
                         raise RuntimeError(f'Unsafe entry in preset: {member}')
                 zf.extractall(lib.settings.config_dir)
+            # Reload settings (ledger and client_secret) from new files
+            try:
+                lib.settings.init_data()
+            except Exception as ex:
+                logging.error(f'Failed to reload settings after activation: {ex}')
+            # Notify data fetch and config editors of updated sections
             signals.dataAboutToBeFetched.emit()
+            # Client secret section may have changed
             signals.configSectionChanged.emit('client_secret')
+            # Ledger sections
             for section in lib.LEDGER_SCHEMA:
                 signals.configSectionChanged.emit(section)
             logging.info(f'Activated preset: {item.name}')
-            # update flags via new active item
-            try:
-                idx = self._items.index(item)
-            except ValueError:
-                idx = None
-            # emit global signal for activation (no args)
+            # Reload presets list to update model items (flags, names, active state)
+            self.load_presets()
+            # Emit global activation signal for UI components
             signals.presetActivated.emit()
-            # notify listeners of activation event
-            if idx is not None:
-                self.presetActivated.emit(idx)
             return True
         except Exception as ex:
             logging.error(f'Failed to activate preset {item.name}: {ex}')
@@ -593,13 +657,24 @@ class PresetsAPI(QtCore.QObject):
                 if f.is_file():
                     arc = f.relative_to(lib.settings.config_dir).as_posix()
                     zf.write(f, arcname=arc)
-        # Return newly created preset item (uses metadata inside zip)
-        item = PresetItem(path)
-        self._items.append(item)
-        # notify listeners of new backup as an added preset
-        idx = len(self._items) - 1
-        self.presetAdded.emit(idx)
-        return item
+        # Cleanup old backups beyond limit
+        try:
+            # List backup files sorted by modification time (oldest first)
+            backups = sorted(
+                lib.settings.presets_dir.glob(f'backup_*.{PRESET_FORMAT}'),
+                key=lambda p: p.stat().st_mtime
+            )
+            # Remove oldest if exceeding MAX_BACKUPS
+            if len(backups) > MAX_BACKUPS:
+                for old in backups[:-MAX_BACKUPS]:
+                    try:
+                        old.unlink()
+                    except Exception as ex:
+                        logging.warning(f'Failed to remove old backup {old}: {ex}')
+        except Exception as ex:
+            logging.warning(f'Error cleaning up backups: {ex}')
+        # Return newly created backup PresetItem (not added to preset list)
+        return PresetItem(path)
 
     def restore(self) -> bool:
         """
@@ -643,8 +718,13 @@ class PresetsAPI(QtCore.QObject):
                     if f.is_file():
                         arc = f.relative_to(lib.settings.config_dir).as_posix()
                         zf.write(f, arcname=arc)
-            # Replace original preset
+            # Replace original preset with updated archive
             tmp_path.replace(item.path)
+            # Reinitialize item flags based on new content
+            try:
+                item._init_item()
+            except Exception:
+                pass
             # notify listeners of updated snapshot
             try:
                 idx = self._items.index(item)

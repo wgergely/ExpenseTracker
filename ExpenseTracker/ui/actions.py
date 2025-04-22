@@ -78,6 +78,16 @@ class Signals(QtCore.QObject):
         from . import ui
         self.themeChanged.connect(ui.apply_theme)
 
+        @QtCore.Slot()
+        def on_preset_changed():
+            from ..settings import lib
+            for section in lib.LEDGER_SCHEMA.keys():
+                self.configSectionChanged.emit(section)
+            self.themeChanged.emit(lib.settings['theme'])
+
+        self.presetsChanged.connect(on_preset_changed)
+        self.presetActivated.connect(on_preset_changed)
+
 
 # Create a singleton instance of Signals
 signals = Signals()
