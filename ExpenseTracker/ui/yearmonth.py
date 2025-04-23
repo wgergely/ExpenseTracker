@@ -98,7 +98,17 @@ class YearMonthPopup(QtWidgets.QFrame):
         pass
 
     def update_month_buttons(self):
-        """Enable or disable month buttons based on current_year limits."""
+        """Enable or disable month buttons and highlight those in the active range."""
+        # Determine current active range if available
+        parent = self.parent()
+        grandparent = parent.parent() if parent else None
+        try:
+            start_str, end_str = grandparent.get_range()
+            start_int = date_str_to_int(start_str)
+            end_int = date_str_to_int(end_str)
+        except Exception:
+            start_int = end_int = None
+
         for i, btn in enumerate(self.month_buttons):
             month = i + 1
             button_val = self.current_year * 12 + month
@@ -108,6 +118,29 @@ class YearMonthPopup(QtWidgets.QFrame):
             if self.max_val is not None and button_val > self.max_val:
                 disable = True
             btn.setEnabled(not disable)
+            # Highlight month button if within active range
+            in_range = False
+            if start_int is not None and end_int is not None and start_int <= button_val <= end_int:
+                in_range = True
+            btn.setProperty('inRange', in_range)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+
+        # Highlight year label if current year is within active range
+        in_range_year = False
+        if start_int is not None and end_int is not None:
+            try:
+                start_year = int(start_str.split('-')[0])
+                end_year = int(end_str.split('-')[0])
+                if start_year <= self.current_year <= end_year:
+                    in_range_year = True
+            except Exception:
+                pass
+        self.year_label.setProperty('inRange', in_range_year)
+        self.year_label.style().unpolish(self.year_label)
+        self.year_label.style().polish(self.year_label)
+        self.year_label.update()
 
     @QtCore.Slot()
     def decrement_year(self):

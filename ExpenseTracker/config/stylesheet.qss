@@ -661,3 +661,11 @@ PresetsListView {
 PresetsListView::item {
     background-color: <Transparent>;
 }
+/* Highlight months and year in active range within YearMonthPopup */
+QPushButton[inRange="true"] {
+    border: <Separator@2.0>px solid <Green>;
+}
+QLabel[inRange="true"] {
+    border: <Separator@2.0>px solid <Green>;
+    border-radius: <Indicator@1.5>px;
+}
