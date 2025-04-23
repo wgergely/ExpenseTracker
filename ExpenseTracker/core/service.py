@@ -40,7 +40,7 @@ class AsyncWorker(QtCore.QThread):
         super().__init__()
         self.func = func
         self.args = args
-        # Retry parameters centralized here.
+
         self.max_attempts = kwargs.pop('max_attempts', MAX_RETRIES)
         self.wait_seconds = kwargs.pop('wait_seconds', 2.0)
         self.kwargs = kwargs

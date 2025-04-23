@@ -9,7 +9,8 @@ from pathlib import Path
 from PySide6 import QtWidgets
 
 from .lib import (
-    PresetItem, PresetsAPI, PresetType
+    PresetItem, PresetsAPI, PresetType,
+    MAX_BACKUPS, PRESET_FORMAT
 )
 from ...settings import lib
 
@@ -170,6 +171,9 @@ class TestPresetAPI(unittest.TestCase):
         self.assertTrue(dup.is_saved)
         self.assertEqual(dup.name, 'copy')
         self.assertEqual(dup.description, item.description)
+        # Duplicate should not be active or marked out-of-date by default
+        self.assertFalse(dup.is_active)
+        self.assertFalse(dup.is_out_of_date)
         # Remove duplicate
         self.assertTrue(self.api.remove(dup))
         self.assertIsNone(self.api.get('copy'))
@@ -183,14 +187,17 @@ class TestPresetAPI(unittest.TestCase):
         # Record initial metadata name
         initial = lib.settings['name']
         item = self.api.new('activate_test', 'desc')
-        # Activate preset
+        # Activate preset (should not change preset list)
+        before_count = len(self.api)
         self.assertTrue(self.api.activate(item))
+        self.assertEqual(len(self.api), before_count)
         # Check ledger.json in config_dir
         # Read live config ledger.json after activation
         data = json.loads(lib.settings.ledger_path.read_text(encoding='utf-8'))
         self.assertEqual(data['metadata']['name'], 'activate_test')
-        # Restore backup
+        # Restore backup (should not change preset list)
         self.assertTrue(self.api.restore())
+        self.assertEqual(len(self.api), before_count)
         # Read live config ledger.json after restore
         data2 = json.loads(lib.settings.ledger_path.read_text(encoding='utf-8'))
         self.assertEqual(data2['metadata']['name'], initial)
@@ -228,7 +235,32 @@ class TestPresetAPI(unittest.TestCase):
         # New PresetItem should detect modification
         modified = PresetItem(path)
         self.assertFalse(modified.is_active)
-        self.assertTrue(modified.is_out_of_date)
+        # Inactive presets should not be marked out-of-date
+        self.assertFalse(modified.is_out_of_date)
+
+    def test_activate_restore_stress(self):
+        # Ensure repeated activate/restore does not alter preset count
+        # Create one preset
+        item = self.api.new('stress_test', None)
+        initial_count = len(self.api)
+        # Stress loop
+        for _ in range(10):
+            self.assertTrue(self.api.activate(item), f'Activate failed on iteration {_}')
+            self.assertTrue(self.api.restore(), f'Restore failed on iteration {_}')
+            # Count should remain constant
+            self.assertEqual(len(self.api), initial_count)
+
+    def test_backup_cleanup(self):
+        # Multiple backups should be pruned to MAX_BACKUPS
+        # Perform backups via API.backup()
+        # Use SettingsAPI.backup directly
+        for _ in range(MAX_BACKUPS + 3):
+            _ = self.api.backup()
+        # List backup files on disk
+        files = list(lib.settings.presets_dir.glob(f'backup_*.{PRESET_FORMAT}'))
+        # There should be at most MAX_BACKUPS files
+        self.assertLessEqual(len(files), MAX_BACKUPS,
+                             f'Expected <= {MAX_BACKUPS} backups, found {len(files)}')
 
 
 if __name__ == '__main__':

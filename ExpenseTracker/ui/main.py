@@ -208,7 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         presets_btn = QtWidgets.QToolButton(self)
         presets_btn.setText('Presets')
         presets_btn.setIcon(ui.get_icon('btn_presets'))
-        # Toggle the presets dock visibility
+
         presets_btn.clicked.connect(
             lambda: self.presets_view.setHidden(not self.presets_view.isHidden())
         )
@@ -223,8 +223,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.toolbar.addAction(action)
 
         self.toolbar.addWidget(self.status_indicator)
-
-
 
     def sizeHint(self):
         return QtCore.QSize(
