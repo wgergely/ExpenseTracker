@@ -661,8 +661,3 @@ PresetsListView {
 PresetsListView::item {
     background-color: <Transparent>;
 }
-
-PresetsPopup {
-    border: <Separator@2.0>px solid <Blue>;
-    border-radius: <Indicator@2.0>px;
-}

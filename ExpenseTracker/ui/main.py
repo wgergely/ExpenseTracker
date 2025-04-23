@@ -5,7 +5,7 @@ from .yearmonth import RangeSelectorBar
 from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
-from ..settings.presets.view import PresetsPopup
+from ..settings.presets.view import PresetsDockWidget
 from ..ui.actions import signals
 
 main_window = None
@@ -181,8 +181,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.transactions_view = TransactionsWidget(parent=self)
         self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
 
+        # Add transactions dock (right side)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
         self.transactions_view.hide()
+
+        # Add presets dock (left side)
+        self.presets_view = PresetsDockWidget(parent=self)
+        self.presets_view.setObjectName('ExpenseTrackerPresetsDockWidget')
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.presets_view)
+        self.presets_view.hide()
 
     def _connect_signals(self):
         signals.openTransactions.connect(
@@ -197,12 +204,14 @@ class MainWindow(QtWidgets.QMainWindow):
         stretch.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.toolbar.addWidget(stretch)
 
-        self.presets_popup = PresetsPopup(self)
+        # Presets dock toggle button
         presets_btn = QtWidgets.QToolButton(self)
         presets_btn.setText('Presets')
         presets_btn.setIcon(ui.get_icon('btn_presets'))
-        presets_btn.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
-        presets_btn.clicked.connect(lambda: self.presets_popup.show_at(presets_btn))
+        # Toggle the presets dock visibility
+        presets_btn.clicked.connect(
+            lambda: self.presets_view.setHidden(not self.presets_view.isHidden())
+        )
         self.toolbar.addWidget(presets_btn)
 
         action = QtGui.QAction(self)
