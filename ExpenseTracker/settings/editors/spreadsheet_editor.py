@@ -145,5 +145,5 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         if not result:
             return
 
-        logging.info(f'Extracted ID: {result}')
+        logging.debug(f'Extracted ID: {result}')
         self.id_editor.setText(result)

@@ -177,12 +177,12 @@ class ConfigPaths:
         # Set the application name and organization
         QtWidgets.QApplication.setApplicationName(app_name)
         QtWidgets.QApplication.setOrganizationName('')
-        logging.info(f'Setting application name: {app_name}')
+        logging.debug(f'Setting application name: {app_name}')
 
         # Get the app data directory
         p = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.AppDataLocation)
         app_data_dir = pathlib.Path(p)
-        logging.info(f'Using app data directory: {app_data_dir}')
+        logging.debug(f'Using app data directory: {app_data_dir}')
 
         self.template_dir: pathlib.Path = pathlib.Path(__file__).parent.parent / 'config'
         self.icon_dir: pathlib.Path = self.template_dir / 'icons'
@@ -211,7 +211,7 @@ class ConfigPaths:
         self._verify_and_prepare()
 
     def _verify_and_prepare(self) -> None:
-        logging.info(f'Verifying required directories and templates in {self.template_dir}')
+        logging.debug(f'Verifying required directories and templates in {self.template_dir}')
         if not self.template_dir.exists():
             msg: str = f'Missing template directory: {self.template_dir}'
             logging.error(msg)
@@ -231,38 +231,38 @@ class ConfigPaths:
 
         # Create directories
         if not self.config_dir.exists():
-            logging.info(f'Creating config directory: {self.config_dir}')
+            logging.debug(f'Creating config directory: {self.config_dir}')
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.auth_dir.exists():
-            logging.info(f'Creating auth directory: {self.auth_dir}')
+            logging.debug(f'Creating auth directory: {self.auth_dir}')
             self.auth_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.db_dir.exists():
-            logging.info(f'Creating db directory: {self.db_dir}')
+            logging.debug(f'Creating db directory: {self.db_dir}')
             self.db_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.presets_dir.exists():
-            logging.info(f'Creating presets directory: {self.presets_dir}')
+            logging.debug(f'Creating presets directory: {self.presets_dir}')
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
         # Ensure valid configs exists even if we haven't yet set them up
         if not self.client_secret_path.exists():
-            logging.info(f'Copying default client_secret from template to {self.client_secret_path}')
+            logging.debug(f'Copying default client_secret from template to {self.client_secret_path}')
             shutil.copy(self.client_secret_template, self.client_secret_path)
         if not self.ledger_path.exists():
-            logging.info(f'Copying default ledger from template to {self.ledger_path}')
+            logging.debug(f'Copying default ledger from template to {self.ledger_path}')
             shutil.copy(self.ledger_template, self.ledger_path)
 
         if not self.presets_dir.exists():
-            logging.info(f'Creating presets directory: {self.presets_dir}')
+            logging.debug(f'Creating presets directory: {self.presets_dir}')
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
     def revert_ledger_to_template(self) -> None:
         """
         Restores ledger.json from the ledger template.
         """
-        logging.info(f'Reverting ledger to template: {self.ledger_template}')
+        logging.debug(f'Reverting ledger to template: {self.ledger_template}')
         if not self.ledger_template.exists():
             msg: str = f'Ledger template not found: {self.ledger_template}'
             logging.error(msg)
@@ -273,7 +273,7 @@ class ConfigPaths:
         """
         Restores client_secret.json from the client_secret template.
         """
-        logging.info(f'Reverting client_secret to template: {self.client_secret_template}')
+        logging.debug(f'Reverting client_secret to template: {self.client_secret_template}')
         if not self.client_secret_template.exists():
             msg: str = f'Client_secret template not found: {self.client_secret_template}'
             logging.error(msg)
@@ -366,7 +366,7 @@ class SettingsAPI(ConfigPaths):
 
         from ..ui.actions import signals
         if key == 'theme':
-            logging.info(f'Setting theme to {value}')
+            logging.debug(f'Setting theme to {value}')
             signals.themeChanged.emit(value)
         if key == 'hide_empty_categories':
             signals.calculationChanged.emit()
@@ -388,6 +388,7 @@ class SettingsAPI(ConfigPaths):
 
     def _connect_signals(self) -> None:
         from ..ui.actions import signals
+
         signals.presetsChanged.connect(self.init_data)
         signals.presetActivated.connect(self.init_data)
 
@@ -400,7 +401,7 @@ class SettingsAPI(ConfigPaths):
         self.load_client_secret()
 
     def load_ledger(self) -> Dict[str, Any]:
-        logging.info(f'Loading ledger from "{self.ledger_path}"')
+        logging.debug(f'Loading ledger from "{self.ledger_path}"')
         if not self.ledger_path.exists():
             raise status.LedgerConfigNotFoundException
 
@@ -415,7 +416,7 @@ class SettingsAPI(ConfigPaths):
             raise status.LedgerConfigInvalidException from ex
 
     def load_client_secret(self) -> Dict[str, Any]:
-        logging.info(f'Loading client_secret from "{self.client_secret_path}"')
+        logging.debug(f'Loading client_secret from "{self.client_secret_path}"')
         if not self.client_secret_path.exists():
             msg: str = f'Client secret file not found: {self.client_secret_path}'
             logging.error(msg)
@@ -453,7 +454,7 @@ class SettingsAPI(ConfigPaths):
         if not key:
             raise status.ClientSecretInvalidException('Missing "installed" or "web" section in client_secret.')
 
-        logging.info(f'Found "{key}" section in client_secret.')
+        logging.debug(f'Found "{key}" section in client_secret.')
 
         config_section: Dict[str, Any] = data[key]
         missing: List[str] = [k for k in self.required_client_secret_keys if k not in config_section]
@@ -512,7 +513,7 @@ class SettingsAPI(ConfigPaths):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logging.info('Setting entire client_secret data.')
+            logging.debug('Setting entire client_secret data.')
             self.validate_client_secret(new_data)
             self.client_secret_data = new_data
             self.save_section('client_secret')
@@ -564,7 +565,7 @@ class SettingsAPI(ConfigPaths):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logging.info('Reloading client_secret from disk.')
+            logging.debug('Reloading client_secret from disk.')
             self.load_client_secret()
             return
 
@@ -573,7 +574,7 @@ class SettingsAPI(ConfigPaths):
             logging.error(msg)
             raise ValueError(msg)
 
-        logging.info(f'Reloading section "{section_name}" from disk.')
+        logging.debug(f'Reloading section "{section_name}" from disk.')
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
@@ -593,7 +594,7 @@ class SettingsAPI(ConfigPaths):
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
-            logging.info('Reverting client_secret to template.')
+            logging.debug('Reverting client_secret to template.')
             self.revert_client_secret_to_template()
             self.load_client_secret()
             return
@@ -624,7 +625,7 @@ class SettingsAPI(ConfigPaths):
         """
 
         if section_name == 'client_secret':
-            logging.info(f'Saving client_secret to "{self.client_secret_path}"')
+            logging.debug(f'Saving client_secret to "{self.client_secret_path}"')
             self.validate_client_secret(self.client_secret_data)
             try:
                 with self.client_secret_path.open('w', encoding='utf-8') as f:
@@ -658,7 +659,7 @@ class SettingsAPI(ConfigPaths):
         """
         Saves ledger and client_secret. Rolls back ledger on validation failure.
         """
-        logging.info('Saving all settings.')
+        logging.debug('Saving all settings.')
         original_ledger_data: Dict[str, Any] = dict(self.ledger_data)
         try:
             self.validate_ledger_data()

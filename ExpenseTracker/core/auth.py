@@ -132,26 +132,26 @@ def get_creds() -> google.oauth2.credentials.Credentials:
         raise status.ClientSecretNotFoundException
 
     if not lib.settings.creds_path.exists():
-        logging.info('Credentials file not found. Attempting to authenticate...')
+        logging.debug('Credentials file not found. Attempting to authenticate...')
         creds = authenticate()
         if not creds:
             raise status.CredsNotFoundException
         return creds
 
     try:
-        logging.info(f'Loading credentials from {lib.settings.creds_path}...')
+        logging.debug(f'Loading credentials from {lib.settings.creds_path}...')
         creds = google.oauth2.credentials.Credentials.from_authorized_user_file(
             str(lib.settings.creds_path)
         )
-        logging.info(f'Credentials loaded successfully. Scopes={creds.scopes}')
+        logging.debug(f'Credentials loaded successfully. Scopes={creds.scopes}')
         return creds
     except (ValueError, json.JSONDecodeError) as ex:
         logging.error(f'Failed to load credentials, will attempt to re-authenticate: {ex}')
 
-    logging.info(f'Deleting {lib.settings.creds_path}...')
+    logging.debug(f'Deleting {lib.settings.creds_path}...')
     lib.settings.creds_path.unlink()
 
-    logging.info('Attempting to re-authenticate...')
+    logging.debug('Attempting to re-authenticate...')
     creds = authenticate()
 
     return creds
@@ -166,7 +166,7 @@ def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> Non
         data = creds.to_json()
         token_file.write(data)
 
-    logging.info(f'Credentials saved to {lib.settings.creds_path}.')
+    logging.debug(f'Credentials saved to {lib.settings.creds_path}.')
 
 
 def authenticate() -> google.oauth2.credentials.Credentials:
@@ -187,19 +187,19 @@ def authenticate() -> google.oauth2.credentials.Credentials:
     if lib.settings.creds_path.exists():
         creds = get_creds()
         if creds and not set(scopes).issubset(set(creds.scopes or [])):
-            logging.info('Cached credentials have mismatched scopes. Re-authentication required.')
+            logging.debug('Cached credentials have mismatched scopes. Re-authentication required.')
             creds = None
 
     if creds:
-        logging.info('Cached credentials are valid.')
+        logging.debug('Cached credentials are valid.')
         return creds
 
     if creds and creds.expired and creds.refresh_token:
-        logging.info('Cached credentials expired; attempting refresh.')
+        logging.debug('Cached credentials expired; attempting refresh.')
 
         try:
             creds.refresh(google.auth.transport.requests.Request())
-            logging.info('Successfully refreshed credentials.')
+            logging.debug('Successfully refreshed credentials.')
             save_creds(creds)
             return creds
         except google.auth.exceptions.RefreshError as ex:
@@ -213,7 +213,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
     lib.settings.validate_client_secret()
     data = lib.settings.get_section('client_secret')
 
-    logging.info('Starting new OAuth flow...')
+    logging.debug('Starting new OAuth flow...')
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(data, scopes=scopes)
 
     dialog = AuthProgressDialog(timeout_seconds=60)
@@ -244,7 +244,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
 
     dialog.close()
 
-    logging.info('OAuth flow completed.')
+    logging.debug('OAuth flow completed.')
     if result['error']:
         raise status.AuthenticationExceptionException(f'OAuth flow failed: {result["error"]}')
     if not result['creds']:
@@ -253,7 +253,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
     if 'creds' not in result or not result['creds']:
         raise status.CredsInvalidException('Invalid credentials returned from OAuth flow.')
 
-    logging.info('Saving credentials...')
+    logging.debug('Saving credentials...')
     creds = result['creds']
     save_creds(creds)
     return creds
@@ -265,8 +265,8 @@ def sign_out() -> None:
     """
     from ..settings import lib
     if lib.settings.creds_path.exists():
-        logging.info(f'Deleting {lib.settings.creds_path}...')
+        logging.debug(f'Deleting {lib.settings.creds_path}...')
         lib.settings.creds_path.unlink()
-        logging.info('Successfully signed out.')
+        logging.debug('Successfully signed out.')
     else:
-        logging.info('No credentials file found. No action taken.')
+        logging.debug('No credentials file found. No action taken.')

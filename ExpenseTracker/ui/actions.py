@@ -36,7 +36,7 @@ def open_spreadsheet(self) -> None:
     url: str = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
     if sheet_name:
         url += f'&sheet={sheet_name}'
-    logging.info(f'Opening spreadsheet: {url}')
+    logging.debug(f'Opening spreadsheet: {url}')
     QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
 
@@ -79,14 +79,14 @@ class Signals(QtCore.QObject):
         self.themeChanged.connect(ui.apply_theme)
 
         @QtCore.Slot()
-        def on_preset_changed():
+        def emit_changed_signals():
             from ..settings import lib
             for section in lib.LEDGER_SCHEMA.keys():
                 self.configSectionChanged.emit(section)
             self.themeChanged.emit(lib.settings['theme'])
+            QtCore.QTimer.singleShot(100, self.dataFetchRequested.emit)
 
-        self.presetsChanged.connect(on_preset_changed)
-        self.presetActivated.connect(on_preset_changed)
+        self.presetActivated.connect(emit_changed_signals)
 
 
 # Create a singleton instance of Signals

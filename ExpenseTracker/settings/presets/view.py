@@ -255,7 +255,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
             if item.is_out_of_date:
                 QtWidgets.QMessageBox.warning(
                     self, 'Activate Preset',
-                    f"Preset '{item.name}' is out of date and cannot be activated."
+                    f'Preset \'{item.name}\' is out of date and cannot be activated.'
                 )
                 return
             try:

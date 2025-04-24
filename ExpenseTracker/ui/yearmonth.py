@@ -14,7 +14,7 @@ Classes:
 import logging
 from datetime import datetime
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 from dateutil.relativedelta import relativedelta
 
 from . import ui
@@ -78,8 +78,6 @@ class YearMonthPopup(QtWidgets.QFrame):
         header_layout.addWidget(self.next_button)
 
         self.layout().addLayout(header_layout)
-
-
 
         grid_layout = QtWidgets.QGridLayout()
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -177,7 +175,6 @@ class YearMonthPopup(QtWidgets.QFrame):
         self.close()
 
 
-
 class YearMonthSelector(QtWidgets.QToolButton):
     """
     Widget for selecting a year-month combination.
@@ -199,7 +196,7 @@ class YearMonthSelector(QtWidgets.QToolButton):
         self.min_date = None
         self.max_date = None
 
-        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
 
         self._init_data()
         self._init_actions()
@@ -231,7 +228,7 @@ class YearMonthSelector(QtWidgets.QToolButton):
 
     @QtCore.Slot(str)
     def set_value(self, value):
-        """Update the current value and emit change signal."""
+        """Update the current value and emit a change signal."""
         self._value = value
         self.setText(value)
         self.yearMonthChanged.emit(value)
@@ -267,6 +264,8 @@ class RangeSelectorBar(QtWidgets.QToolBar):
             QtWidgets.QSizePolicy.Maximum
         )
 
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
         self._create_ui()
         self._init_data()
         self._connect_signals()
@@ -282,6 +281,15 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         self.end_selector.yearMonthChanged.connect(self.save_range)
 
     def _create_ui(self):
+        prev_action = QtGui.QAction(ui.get_icon('btn_left'), '', self)
+        prev_action.setToolTip('Previous month')
+        prev_action.setShortcuts([QtGui.QKeySequence('Alt+Left'), QtGui.QKeySequence('Ctrl+Left')])
+        prev_action.setShortcutContext(QtCore.Qt.WidgetShortcut)
+        prev_action.triggered.connect(self.previous_month)
+        self.addAction(prev_action)
+
+        self.addSeparator()
+
         button = QtWidgets.QToolButton(self)
         icon = ui.get_icon('btn_date')
         button.setIcon(icon)
@@ -292,11 +300,18 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         self.start_selector.setObjectName('start_selector')
         self.addWidget(self.start_selector)
 
-        self.addSeparator()
-
         self.end_selector = YearMonthSelector(self)
         self.end_selector.setObjectName('end_selector')
         self.addWidget(self.end_selector)
+
+        self.addSeparator()
+
+        next_action = QtGui.QAction(ui.get_icon('btn_right'), '', self)
+        next_action.setToolTip('Next month')
+        next_action.setShortcuts([QtGui.QKeySequence('Alt+Right'), QtGui.QKeySequence('Ctrl+Right')])
+        next_action.setShortcutContext(QtCore.Qt.WidgetShortcut)
+        next_action.triggered.connect(self.next_month)
+        self.addAction(next_action)
 
     def _init_data(self):
         now = datetime.now()
@@ -376,13 +391,57 @@ class RangeSelectorBar(QtWidgets.QToolBar):
     def _init_actions(self):
         pass
 
-
     def get_range(self) -> tuple[str, str]:
         """Return a tuple of (start_value, end_value)."""
-        return (self.start_selector.get_value(), self.end_selector.get_value())
+        return self.start_selector.get_value(), self.end_selector.get_value()
 
     def get_range_span(self) -> int:
         """Return the span of the range in months."""
         start_int = date_str_to_int(self.start_selector.get_value())
         end_int = date_str_to_int(self.end_selector.get_value())
         return (end_int - start_int) + 1
+
+    @QtCore.Slot(int)
+    def shift(self, months: int) -> None:
+        """Shift the selected start/end range by the given number of months."""
+        # Get current range and span
+        start_str, _ = self.get_range()
+        try:
+            start_dt = datetime.strptime(start_str, '%Y-%m')
+        except Exception:
+            return
+        span = self.get_range_span()
+        # Compute new start
+        new_start = start_dt + relativedelta(months=months)
+        # Clamp to global min date
+        if self.global_min_date:
+            try:
+                min_dt = datetime.strptime(self.global_min_date, '%Y-%m')
+                if new_start < min_dt:
+                    new_start = min_dt
+            except Exception:
+                pass
+        # Compute new end based on span
+        new_end = new_start + relativedelta(months=span - 1)
+        # Clamp to global max date
+        if self.global_max_date:
+            try:
+                max_dt = datetime.strptime(self.global_max_date, '%Y-%m')
+                if new_end > max_dt:
+                    new_end = max_dt
+                    new_start = new_end - relativedelta(months=span - 1)
+            except Exception:
+                pass
+        # Apply new values
+        self.start_selector.set_value(new_start.strftime('%Y-%m'))
+        self.end_selector.set_value(new_end.strftime('%Y-%m'))
+
+    @QtCore.Slot()
+    def previous_month(self) -> None:
+        """Shift the selected range one month earlier."""
+        self.shift(-1)
+
+    @QtCore.Slot()
+    def next_month(self) -> None:
+        """Shift the selected range one month later."""
+        self.shift(1)

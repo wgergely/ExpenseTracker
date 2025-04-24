@@ -67,7 +67,9 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         # Background
         category = index.data(CategoryRole)
         config = lib.settings.get_section('categories')
-        color = config.get(category, {}).get('color', None)
+        color = config.get(category, {}).get('color', ui.Color.Text().name(QtGui.QColor.NameFormat.HexRgb))
+        icon = config.get(category, {}).get('icon', None)
+
         if color:
             color = QtGui.QColor.fromString(color)
             rect = QtCore.QRectF(option.rect)
@@ -267,7 +269,7 @@ class ExpenseView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Refresh Data...', self)
         action.setShortcut('Ctrl+R')
-        action.setIcon(ui.get_icon('btn_fetch', color=ui.Color.Green()))
+        action.setIcon(ui.get_icon('btn_fetch', color=ui.Color.Green))
         action.triggered.connect(signals.dataFetchRequested)
         self.addAction(action)
 

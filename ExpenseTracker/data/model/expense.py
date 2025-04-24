@@ -5,7 +5,7 @@ from typing import Any
 import pandas as pd
 from PySide6 import QtCore, QtGui
 
-from ..data import get_data
+from ..data import get_data, SummaryMode
 from ...settings import lib
 from ...settings import locale
 from ...ui import ui
@@ -127,11 +127,31 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         if col == Columns.Icon:
             if role == QtCore.Qt.DecorationRole:
-                return ui.get_icon(category)
+                # no icon for the "Total" row
+                if index.data(QtCore.Qt.DisplayRole) == 'Total':
+                    return None
+
+                config = lib.settings.get_section('categories')
+                if not config:
+                    return None
+
+                category = self._cache['category'][row]
+                if category not in config:
+                    return None
+
+                icon_name = config[category].get('icon', 'cat_unclassified')
+                return ui.get_icon(icon_name)
 
         # Handle columns
         if col == Columns.Category:
             if role == QtCore.Qt.DisplayRole:
+                if is_total_row:
+                    if lib.settings['summary_mode'] == SummaryMode.Total.value:
+                        return 'Total'
+                    elif lib.settings['summary_mode'] == SummaryMode.Monthly.value:
+                        return 'Monthly Average'
+                    return 'Total*'
+
                 categories_cfg = lib.settings.get_section('categories')
                 if not categories_cfg:
                     return category

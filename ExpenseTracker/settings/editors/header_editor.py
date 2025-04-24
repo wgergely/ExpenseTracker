@@ -497,7 +497,7 @@ class HeaderEditor(QtWidgets.QWidget):
             try:
                 service.verify_headers()
                 msg = 'Header definitions are valid.'
-                logging.info(msg)
+                logging.debug(msg)
                 QtWidgets.QMessageBox.information(
                     self,
                     'Verify Headers',

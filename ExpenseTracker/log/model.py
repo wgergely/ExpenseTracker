@@ -22,7 +22,7 @@ class Level(enum.IntEnum):
     """Maps standard log level names to their numeric values."""
     NOTSET = logging.NOTSET  # 0
     DEBUG = logging.DEBUG  # 10
-    INFO = logging.INFO  # 20
+    INFO = logging.debug  # 20
     WARNING = logging.WARNING  # 30
     ERROR = logging.ERROR  # 40
     CRITICAL = logging.CRITICAL  # 50
@@ -234,7 +234,7 @@ class LogFilterProxyModel(QtCore.QSortFilterProxyModel):
         Sets the minimum log level for rows to be displayed.
 
         Args:
-            level (int): A logging level integer (e.g., logging.DEBUG, logging.INFO).
+            level (int): A logging level integer (e.g., logging.DEBUG, logging.debug).
         """
         self._filter_level = level
         self.invalidateFilter()

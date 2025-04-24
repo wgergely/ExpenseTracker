@@ -146,13 +146,13 @@ class PresetItem:
             self._description = description
 
             if not name:
-                logging.error(f'Preset {self.path} has no name')
+                logging.warning(f'Preset {self.path} has no name')
                 self.type = PresetType.Invalid
             else:
                 self.type = PresetType.Saved
 
         except Exception as ex:
-            logging.error(f'Failed to load preset at {self.path}: {ex}')
+            logging.warning(f'Failed to load preset at {self.path}: {ex}')
             self.type = PresetType.Invalid
             return
 
@@ -424,7 +424,7 @@ class PresetsAPI(QtCore.QObject):
         except Exception:
             current_name = ''
         if name == current_name:
-            logging.info(f"New preset '{name}' matches active configuration name; marking as active")
+            logging.debug(f"New preset '{name}' matches active configuration name; marking as active")
             item.flags = PresetFlags.Active
         else:
             item.flags = PresetFlags.Unmodified
@@ -629,7 +629,7 @@ class PresetsAPI(QtCore.QObject):
             # Ledger sections
             for section in lib.LEDGER_SCHEMA:
                 signals.configSectionChanged.emit(section)
-            logging.info(f'Activated preset: {item.name}')
+            logging.debug(f'Activated preset: {item.name}')
             # Reload presets list to update model items (flags, names, active state)
             self.load_presets()
             # Emit global activation signal for UI components
@@ -732,7 +732,7 @@ class PresetsAPI(QtCore.QObject):
                 idx = None
             if idx is not None:
                 self.presetUpdated.emit(idx)
-            logging.info(f'Updated preset snapshot: {item.name}')
+            logging.debug(f'Updated preset snapshot: {item.name}')
             return True
         except Exception as ex:
             logging.error(f'Failed to update preset {item.name}: {ex}')

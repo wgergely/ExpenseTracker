@@ -229,7 +229,8 @@ class DatabaseAPI(QtCore.QObject):
             columns = [col[0] for col in cursor.description]
             if 'local_id' in columns:
                 columns.remove('local_id')
-            logging.info(f'Cached transactions with {len(columns)} columns: {columns}')
+
+            logging.debug(f'Cached transactions with {len(columns)} columns: {columns}')
             config = lib.settings.get_section('header')
             if not config:
                 conn.commit()
@@ -240,7 +241,7 @@ class DatabaseAPI(QtCore.QObject):
 
             difference = set(columns).symmetric_difference(set(config.keys()))
             if difference:
-                logging.info(f'Columns differ between config and cache: {difference}')
+                logging.debug(f'Columns differ between config and cache: {difference}')
                 conn.commit()
                 cls.set_state(CacheState.Stale)
                 raise status.CacheInvalidException(f'Column mismatch: {difference}')
@@ -268,14 +269,14 @@ class DatabaseAPI(QtCore.QObject):
             cursor = conn.execute(f"""SELECT COUNT(*) FROM {Table.Transactions}""")
             row = cursor.fetchone()
             if row and row[0] == 0:
-                logging.info('Cache is empty. No transactions found.')
+                logging.debug('Cache is empty. No transactions found.')
                 conn.commit()
                 cls.set_state(CacheState.Empty)
                 return
 
             conn.commit()
             cls.set_state(CacheState.Valid)
-            logging.info(
+            logging.debug(
                 f'Cache is valid. Last sync={last_sync}, Rows={row[0]}, Columns={len(columns)}'
             )
         finally:
@@ -315,7 +316,7 @@ class DatabaseAPI(QtCore.QObject):
         """Delete the local cache database ensuring the connection is properly closed."""
 
         if not lib.settings.db_path.exists():
-            logging.info('No cache database found to delete.')
+            logging.debug('No cache database found to delete.')
             return
 
         max_attempts = 5
@@ -325,16 +326,16 @@ class DatabaseAPI(QtCore.QObject):
         while attempt < max_attempts:
             attempt += 1
             if not lib.settings.db_path.exists():
-                logging.info('Cache database file already removed.')
+                logging.debug('Cache database file already removed.')
                 break
             try:
                 lib.settings.db_path.unlink()
-                logging.info(f'Cache database removed: {lib.settings.db_path}')
+                logging.debug(f'Cache database removed: {lib.settings.db_path}')
                 break
             except Exception as ex:
                 logging.error(f'Error removing cache database (attempt {attempt}): {ex}')
                 if attempt < max_attempts:
-                    logging.info(f'Retrying in {wait_seconds} seconds...')
+                    logging.debug(f'Retrying in {wait_seconds} seconds...')
                     time.sleep(wait_seconds)
         else:
             raise status.CacheInvalidException(
@@ -385,7 +386,7 @@ class DatabaseAPI(QtCore.QObject):
         try:
             if cls.table_exists(Table.Meta):
                 conn.execute(f"UPDATE {Table.Meta} SET state=? WHERE meta_id=1", (state.name,))
-            logging.info(f'State updated: {state}.')
+            logging.debug(f'State updated: {state}.')
         finally:
             conn.commit()
             conn.close()
@@ -440,7 +441,7 @@ class DatabaseAPI(QtCore.QObject):
         conn = cls.connection()
         try:
             df = pd.read_sql_query("""SELECT * FROM transactions""", conn)
-            logging.info(f'Loaded {len(df)} rows from the "transactions" table.')
+            logging.debug(f'Loaded {len(df)} rows from the "transactions" table.')
             return df
         except (Exception,) as e:
             logging.error(f'Error loading data from the database: {e}')
@@ -453,10 +454,10 @@ class DatabaseAPI(QtCore.QObject):
     def cache_data(cls, df: pd.DataFrame) -> None:
         conn = cls.connection()
 
-        logging.info(f'Caching data.')
+        logging.debug(f'Caching data.')
         try:
             conn.execute(f"""DROP TABLE IF EXISTS {Table.Transactions}""")
-            logging.info(f'Dropped the transactions table: {Table.Transactions}')
+            logging.debug(f'Dropped the transactions table: {Table.Transactions}')
 
             if df.empty:
                 conn.commit()
@@ -466,7 +467,7 @@ class DatabaseAPI(QtCore.QObject):
                 return
 
             # Get the column names from the DataFrame
-            logging.info(f'Checking columns...')
+            logging.debug(f'Checking columns...')
             df_columns = df.columns.tolist()
 
             config = lib.settings.get_section('header')
@@ -478,10 +479,10 @@ class DatabaseAPI(QtCore.QObject):
                 cls.stamp()
                 raise status.HeadersInvalidException(f'Columns differ between config and cache: {difference}')
             else:
-                logging.info(f'Columns match: {df_columns}')
+                logging.debug(f'Columns match: {df_columns}')
 
             # Create the table
-            logging.info(f'Creating transactions table: {Table.Transactions}')
+            logging.debug(f'Creating transactions table: {Table.Transactions}')
 
             cols_sql = [f'"{col}" {get_sql_type(col)}' for col in df_columns]
             cols_sql.insert(0, '"local_id" INTEGER PRIMARY KEY AUTOINCREMENT')
@@ -492,7 +493,7 @@ class DatabaseAPI(QtCore.QObject):
             """)
 
             # Insert the data
-            logging.info(f'Inserting data into transactions table: {Table.Transactions}')
+            logging.debug(f'Inserting data into transactions table: {Table.Transactions}')
 
             rows = list(df.itertuples(index=False, name=None))
             placeholders = ','.join(['?'] * len(df_columns))
@@ -509,7 +510,7 @@ class DatabaseAPI(QtCore.QObject):
             conn.executemany(sql, values)
             conn.commit()
 
-            logging.info(f'Cached {len(rows)} rows into the "{Table.Transactions}" table.')
+            logging.debug(f'Cached {len(rows)} rows into the "{Table.Transactions}" table.')
             cls.set_state(CacheState.Valid)
             cls.stamp()
         finally:

@@ -8,6 +8,27 @@ LOG_FORMAT = '[%(asctime)s] <%(module)s> %(levelname)s:  %(message)s'
 LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
 
 
+def set_logging_level(level):
+    """
+    Sets the logging level for the root logger.
+
+    Args:
+        level (int): The logging level to set. Should be one of the standard logging levels.
+    """
+    if not isinstance(level, int):
+        raise ValueError("Logging level must be an integer.")
+    if level not in (
+            logging.DEBUG,
+            logging.INFO,
+            logging.WARNING,
+            logging.ERROR,
+            logging.CRITICAL,
+    ):
+        raise ValueError('Invalid logging level. Use one of the standard logging levels, e.g., logging.DEBUG.')
+
+    logging.getLogger().setLevel(level)
+
+
 def qt_message_handler(mode, context, message):
     """
     Converts Qt messages to standard Python logging.

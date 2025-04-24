@@ -17,15 +17,15 @@ COL_DISPLAY_NAME = 3
 COL_DESCRIPTION = 4
 COL_EXCLUDED = 5
 
-DEFAULT_ICON = 'Miscellaneous.png'
+DEFAULT_ICON = 'cat_unclassified'
 
 
 @functools.lru_cache(maxsize=128)
 def get_all_icons():
     v = []
     if lib.settings.icon_dir.exists():
-        for p in sorted(lib.settings.icon_dir.glob('*.png')):
-            v.append(p.name)
+        for p in sorted(lib.settings.icon_dir.glob('cat_*.png')):
+            v.append(p.stem)
     return v
 
 
@@ -53,9 +53,9 @@ class IconPickerDialog(QtWidgets.QDialog):
 
     def _create_ui(self):
         QtWidgets.QVBoxLayout(self)
-
-        self.layout().setContentsMargins(0, 0, 0, 0)
-        self.layout().setSpacing(ui.Size.Margin(0.5))
+        o = ui.Size.Margin(1.0)
+        self.layout().setContentsMargins(o, o, o, o)
+        self.layout().setSpacing(o)
 
         self.view = QtWidgets.QListView(self)
         self.view.setViewMode(QtWidgets.QListView.IconMode)
@@ -91,8 +91,8 @@ class IconPickerDialog(QtWidgets.QDialog):
         current_idx = None
         for i, icon_name in enumerate(get_all_icons()):
             item = QtGui.QStandardItem()
-            icon_path = lib.settings.icon_dir / icon_name
-            item.setIcon(QtGui.QIcon(str(icon_path)))
+            icon = ui.get_icon(icon_name)
+            item.setIcon(icon)
             item.setData(icon_name, QtCore.Qt.UserRole)
             model.appendRow(item)
             if icon_name == self._current_icon:
@@ -403,7 +403,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRect(option.rect)
 
             painter.setOpacity(1.0)
-            icon = QtGui.QIcon(str(lib.settings.icon_dir / icon_name))
+            icon = ui.get_icon(icon_name)
             icon.paint(painter, rect, QtCore.Qt.AlignCenter)
         elif col == COL_COLOR:
             rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
@@ -614,7 +614,7 @@ class CategoryEditor(QtWidgets.QWidget):
                     'display_name': '',
                     'color': ui.Color.Blue().name(QtGui.QColor.HexRgb),
                     'description': '',
-                    'icon': 'Cash.png',
+                    'icon': 'cat_unclassified',
                     'excluded': False
                 }
                 for cat in categories:

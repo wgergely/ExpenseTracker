@@ -73,11 +73,11 @@ class StatusIndicator(QtWidgets.QWidget):
         pressed = option.state & QtWidgets.QStyle.State_Sunken
 
         if self._status == database.CacheState.Valid:
-            icon = ui.get_icon('btn_ok', color=ui.Color.Green())
+            icon = ui.get_icon('btn_ok', color=ui.Color.Green)
             color = ui.Color.Transparent()
         else:
             color = ui.Color.Yellow()
-            icon = ui.get_icon('btn_alert', color=color)
+            icon = ui.get_icon('btn_alert', color=ui.Color.Yellow)
 
         if hover or pressed:
             color = color.lighter(150)
@@ -221,6 +221,18 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setShortcut(QtGui.QKeySequence('Ctrl+.'))
         action.triggered.connect(signals.openSettings)
         self.toolbar.addAction(action)
+        # Global keyboard shortcuts for shifting the date range
+        prev_short = QtGui.QAction(self)
+        prev_short.setShortcuts([QtGui.QKeySequence('Alt+Left'), QtGui.QKeySequence('Ctrl+Left')])
+        prev_short.setShortcutContext(QtCore.Qt.WindowShortcut)
+        prev_short.triggered.connect(self.range_selector.previous_month)
+        self.addAction(prev_short)
+        next_short = QtGui.QAction(self)
+        next_short.setShortcuts([QtGui.QKeySequence('Alt+Right'), QtGui.QKeySequence('Ctrl+Right')])
+        next_short.setShortcutContext(QtCore.Qt.WindowShortcut)
+        next_short.triggered.connect(self.range_selector.next_month)
+        self.addAction(next_short)
+
 
         self.toolbar.addWidget(self.status_indicator)
 

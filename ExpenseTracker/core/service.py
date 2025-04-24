@@ -144,7 +144,7 @@ def get_service() -> Any:
     creds: Any = auth.get_creds()
     try:
         service: Any = build('sheets', 'v4', credentials=creds)
-        logging.info('Google Sheets service client created successfully.')
+        logging.debug('Google Sheets service client created successfully.')
         return service
     except Exception as ex:
         raise status.ServiceUnavailableException from ex
@@ -220,13 +220,13 @@ def _verify_sheet_access() -> Any:
     if not spreadsheet_id:
         raise status.SpreadsheetIdNotConfiguredException
 
-    logging.info('Connecting to Google Sheets API...')
+    logging.debug('Connecting to Google Sheets API...')
     try:
         result: Dict[str, Any] = service.spreadsheets().get(
             spreadsheetId=spreadsheet_id,
             fields='sheets(properties(title,gridProperties(rowCount,columnCount)))'
         ).execute()
-        logging.info(f'Access confirmed for spreadsheet "{spreadsheet_id}".')
+        logging.debug(f'Access confirmed for spreadsheet "{spreadsheet_id}".')
     except HttpError as ex:
         stat: Optional[int] = ex.resp.status if ex.resp else None
         if stat == 404:
@@ -261,7 +261,7 @@ def _verify_sheet_access() -> Any:
         raise status.WorksheetNotFoundException(
             f'Worksheet "{worksheet_name}" not found in spreadsheet "{spreadsheet_id}".')
 
-    logging.info(f'Worksheet "{worksheet_name}" found in spreadsheet "{spreadsheet_id}".')
+    logging.debug(f'Worksheet "{worksheet_name}" found in spreadsheet "{spreadsheet_id}".')
     return service
 
 
@@ -297,7 +297,7 @@ def _verify_headers(remote_headers: List[str] = None) -> Set[str]:
             f'{", ".join(mismatch)} not found.'
         )
 
-    logging.info(
+    logging.debug(
         f'Found {len(expected_headers)} headers in the local configuration: '
         f'[{",".join(sorted(expected_headers))}].'
     )
@@ -330,7 +330,7 @@ def _verify_mapping(remote_headers: List[str] = None) -> None:
                 config_headers.append(_v)
 
     config_headers_set: Set[str] = set(sorted(config_headers))
-    logging.info(f'Header mapping configuration found {len(config_headers_set)} columns.')
+    logging.debug(f'Header mapping configuration found {len(config_headers_set)} columns.')
 
     remote_headers: List[str] = remote_headers or _fetch_headers()
     remote_headers_set: Set[str] = set(sorted(remote_headers))
@@ -341,7 +341,7 @@ def _verify_mapping(remote_headers: List[str] = None) -> None:
             f'{", ".join(config_headers_set.difference(remote_headers_set))}.'
         )
 
-    logging.info(
+    logging.debug(
         f'Header mapping references {len(config_headers_set)} valid columns: '
         f'[{",".join(sorted(config_headers_set))}].'
     )
@@ -353,7 +353,7 @@ def _verify_mapping(remote_headers: List[str] = None) -> None:
         raise status.HeaderMappingInvalidException(
             f'Date column source must be a date type, but column "{date_column}" is of type "{_type}".'
         )
-    logging.info(f'date="{date_column}" is of accepted type "{_type}".')
+    logging.debug(f'date="{date_column}" is of accepted type "{_type}".')
 
     amount_column: str = config.get('amount')
     _type = config_headers_full[amount_column]
@@ -361,8 +361,8 @@ def _verify_mapping(remote_headers: List[str] = None) -> None:
         raise status.HeaderMappingInvalidException(
             f'Amount column source must be a numeric type, but column "{amount_column}" is of type "{_type}".'
         )
-    logging.info(f'amount="{amount_column}" is of accepted type "{_type}".')
-    logging.info(f'Header mapping verified successfully. Found {len(config_headers_full)} columns.')
+    logging.debug(f'amount="{amount_column}" is of accepted type "{_type}".')
+    logging.debug(f'Header mapping verified successfully. Found {len(config_headers_full)} columns.')
 
 
 def verify_mapping(total_timeout: int = TOTAL_TIMEOUT) -> None:
@@ -409,7 +409,7 @@ def _fetch_data(
         data_ranges.append(f'{worksheet_name}!A{data_start}:{last_col}{data_end}')
         data_start = data_end + 1
 
-    logging.info(f'Fetching data rows 1-{row_count} in batches.')
+    logging.debug(f'Fetching data rows 1-{row_count} in batches.')
     batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
         spreadsheetId=spreadsheet_id,
         ranges=data_ranges,
@@ -422,12 +422,12 @@ def _fetch_data(
         values: List[List[Any]] = vr.get('values', [])
         if values:
             data_rows.extend(values)
-    logging.info(f'Total data rows fetched: {len(data_rows)}.')
+    logging.debug(f'Total data rows fetched: {len(data_rows)}.')
 
     header: List[Any] = data_rows.pop(0) if data_rows else []
     df: pd.DataFrame = pd.DataFrame(data_rows, columns=header)
 
-    logging.info(f'Constructed DataFrame: {df.shape[0]} rows x {df.shape[1]} columns from sheet "{worksheet_name}".')
+    logging.debug(f'Constructed DataFrame: {df.shape[0]} rows x {df.shape[1]} columns from sheet "{worksheet_name}".')
 
     _verify_mapping()
     _verify_headers(remote_headers=header)
@@ -476,7 +476,7 @@ def _fetch_headers(
     end_col: str = string.ascii_uppercase[col_count - 1]
     range_ = f'{worksheet_name}!A1:{end_col}1'
 
-    logging.info(f'Fetching headers from range "{range_}".')
+    logging.debug(f'Fetching headers from range "{range_}".')
     batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
         spreadsheetId=spreadsheet_id,
         ranges=[range_],
@@ -489,13 +489,13 @@ def _fetch_headers(
         values: List[List[Any]] = vr.get('values', [])
         if values:
             data_rows.extend(values)
-    logging.info(f'Total header rows fetched: {len(data_rows)}.')
+    logging.debug(f'Total header rows fetched: {len(data_rows)}.')
 
     if not data_rows:
         raise status.UnknownException('No data found in the remote sheet.')
     header_row: List[Any] = data_rows[0] if data_rows[0] else []
     header_row = [str(cell) for cell in header_row]
-    logging.info(f'Found {len(header_row)} headers in the remote sheet: [{",".join(sorted(header_row))}].')
+    logging.debug(f'Found {len(header_row)} headers in the remote sheet: [{",".join(sorted(header_row))}].')
     return header_row
 
 
@@ -517,7 +517,7 @@ def _fetch_categories(
     """
     from ..settings import lib
 
-    logging.info('Fetching categories from the remote sheet...')
+    logging.debug('Fetching categories from the remote sheet...')
     service: Any = _verify_sheet_access()
     _verify_mapping()
 
@@ -538,7 +538,7 @@ def _fetch_categories(
     column_letter: str = string.ascii_uppercase[idx]
     range_: str = f'{worksheet_name}!{column_letter}2:{column_letter}'
 
-    logging.info(f'Fetching categories from range "{range_}".')
+    logging.debug(f'Fetching categories from range "{range_}".')
     batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
         spreadsheetId=spreadsheet_id,
         ranges=[range_],
@@ -551,13 +551,13 @@ def _fetch_categories(
         values: List[List[Any]] = vr.get('values', [])
         if values:
             data_rows.extend(values)
-    logging.info(f'Total data rows fetched: {len(data_rows)}.')
+    logging.debug(f'Total data rows fetched: {len(data_rows)}.')
 
     if not data_rows:
         raise status.UnknownException('No data found in the remote sheet.')
 
     categories: List[str] = sorted({row[0] for row in data_rows if row and row[0]})
-    logging.info(f'Found {len(categories)} unique categories: [{",".join(categories)}].')
+    logging.debug(f'Found {len(categories)} unique categories: [{",".join(categories)}].')
     return categories
 
 
