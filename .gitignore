@@ -1,6 +1,12 @@
 # AI
 codex.md
 
+# System hidden files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
