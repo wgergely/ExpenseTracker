@@ -3,6 +3,7 @@ import logging
 import math
 import os
 import re
+from typing import Union
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
@@ -371,7 +372,7 @@ class ThemedIconEngine(QtGui.QIconEngine):
 
     """
 
-    def __init__(self, icon: str, color: Color):
+    def __init__(self, icon: str, color: Union[QtGui.QColor, Color] = Color.Text):
         super().__init__()
         self._icon = icon
         self._color = color
@@ -400,7 +401,12 @@ class ThemedIconEngine(QtGui.QIconEngine):
             logging.debug(f'Icon not found: {self._icon}')
             return icon
 
-        pixmap_normal = self.tint(pixmap, self._color())
+        if isinstance(self._color, Color):
+            color = self._color()
+        elif isinstance(self._color, QtGui.QColor):
+            color = self._color
+
+        pixmap_normal = self.tint(pixmap, color)
         icon.addPixmap(pixmap_normal, QtGui.QIcon.Normal, QtGui.QIcon.On)
         icon.addPixmap(pixmap_normal, QtGui.QIcon.Normal, QtGui.QIcon.Off)
 
@@ -408,7 +414,7 @@ class ThemedIconEngine(QtGui.QIconEngine):
         icon.addPixmap(pixmap_disabled, QtGui.QIcon.Disabled, QtGui.QIcon.On)
         icon.addPixmap(pixmap_disabled, QtGui.QIcon.Disabled, QtGui.QIcon.Off)
 
-        pixmap_active = self.tint(pixmap, self._color().lighter(125))
+        pixmap_active = self.tint(pixmap, color.lighter(125))
         icon.addPixmap(pixmap_active, QtGui.QIcon.Active, QtGui.QIcon.On)
         icon.addPixmap(pixmap_active, QtGui.QIcon.Active, QtGui.QIcon.Off)
 
@@ -440,8 +446,7 @@ class ThemedIconEngine(QtGui.QIconEngine):
         painter.setPen(QtCore.Qt.NoPen)
 
         icon = self.get_icon()
-        pixmap = icon.pixmap(rect.size(), mode, state)
-        if pixmap.isNull():
+        if icon.isNull():
             return
 
         icon.paint(
@@ -486,127 +491,23 @@ class ThemedIconEngine(QtGui.QIconEngine):
         )
 
 
-class CategoryIconEngine(QtGui.QIconEngine):
+class CategoryIconEngine(ThemedIconEngine):
     """The icon engine used to load and paint icons dynamically based on the current theme.
 
     """
 
-    def __init__(self, icon: str):
-        super().__init__()
-        self._icon = icon
-        self._color = color
-
-        self._cache = {}
-        self._scaled_pixmap_cache = {}
-
-    def theme(self):
-        from ..settings import lib
-        return lib.settings['theme']
-
-    def get_icon(self) -> QtGui.QIcon:
-        """Get the icon for the given category, tinting dynamically based on the theme.
-
-        Returns:
-            QtGui.QIcon: The icon for the given category.
-        """
-        k = f'{self._icon}:{self.theme()}'
-        if k in self._cache:
-            return self._cache[k]
-
-        icon = QtGui.QIcon()
-
-        pixmap = QtGui.QPixmap(self._icon)
-        if pixmap.isNull():
-            logging.debug(f'Icon not found: {self._icon}')
-            return icon
-
-        pixmap_normal = self.tint(pixmap, self._color())
-        icon.addPixmap(pixmap_normal, QtGui.QIcon.Normal, QtGui.QIcon.On)
-        icon.addPixmap(pixmap_normal, QtGui.QIcon.Normal, QtGui.QIcon.Off)
-
-        pixmap_disabled = self.tint(pixmap, Color.DisabledText())
-        icon.addPixmap(pixmap_disabled, QtGui.QIcon.Disabled, QtGui.QIcon.On)
-        icon.addPixmap(pixmap_disabled, QtGui.QIcon.Disabled, QtGui.QIcon.Off)
-
-        pixmap_active = self.tint(pixmap, self._color().lighter(125))
-        icon.addPixmap(pixmap_active, QtGui.QIcon.Active, QtGui.QIcon.On)
-        icon.addPixmap(pixmap_active, QtGui.QIcon.Active, QtGui.QIcon.Off)
-
-        pixmap_selected = self.tint(pixmap, Color.SelectedText())
-        icon.addPixmap(pixmap_selected, QtGui.QIcon.Selected, QtGui.QIcon.On)
-        icon.addPixmap(pixmap_selected, QtGui.QIcon.Selected, QtGui.QIcon.Off)
-
-        # Add icon to cache
-        self._cache[k] = icon
-        return self._cache[k]
-
-    def tint(self, pixmap, color):
-        """Tint the given pixmap with the given color."""
-        if color.alpha() == 0:
-            return pixmap
-
-        painter = QtGui.QPainter(pixmap)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), color)
-        painter.end()
-
-        return pixmap
-
     def paint(self, painter, rect, mode, state):
-
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-
-        painter.setBrush(QtCore.Qt.NoBrush)
-        painter.setPen(QtCore.Qt.NoPen)
-
-        icon = self.get_icon()
-        pixmap = icon.pixmap(rect.size(), mode, state)
-        if pixmap.isNull():
-            return
-
-        icon.paint(
-            painter,
-            rect,
-            alignment=QtCore.Qt.AlignCenter,
-            mode=mode,
-            state=state,
-        )
-
-    def pixmap(self, size, mode, state):
-        icon = self.get_icon()
-        return icon.pixmap(size, mode, state)
-
-    def scaledPixmap(self, size, mode, state, scale):
-        k = f'{self._icon}:{self.theme()}:{size.width()}x{size.height()}:{scale}'
-        if k in self._scaled_pixmap_cache:
-            return self._scaled_pixmap_cache[k]
-
-        icon = self.get_icon()
-        pixmap = icon.pixmap(size, mode, state)
-        pixmap = pixmap.scaled(
-            QtCore.QSize(
-                size.width() * scale,
-                size.height() * scale
-            ),
-            aspectMode=QtCore.Qt.KeepAspectRatio,
-            mode=QtCore.Qt.SmoothTransformation
-        )
-
-        self._scaled_pixmap_cache[k] = pixmap
-        return self._scaled_pixmap_cache[k]
-
-    def actualSize(self, size, mode, state):
-        icon = self.get_icon()
-        return icon.actualSize(size, mode, state)
+        super().paint(painter, rect, mode, state)
 
     def clone(self):
-        return ThemedIconEngine(
+        return CategoryIconEngine(
             self._icon,
             self._color
         )
 
 
-def get_icon(icon: str, color: QtGui.QColor = Color.Text, engine: QtGui.QIconEngine = ThemedIconEngine) -> QtGui.QIcon:
+def get_icon(icon: str, color: Union[QtGui.QColor, Color] = Color.Text,
+             engine: QtGui.QIconEngine = ThemedIconEngine) -> QtGui.QIcon:
     """Get the icon for the given category, tinting dynamically based on the theme.
 
     Args:
@@ -630,11 +531,10 @@ def get_icon(icon: str, color: QtGui.QColor = Color.Text, engine: QtGui.QIconEng
     if not isinstance(icon, str) and icon not in icons:
         raise ValueError(f'Invalid icon category: {icon}. Must be one of {icons}')
 
-    if color not in [f for f in Color]:
-        raise ValueError(
-            f'Invalid color type ({type(color)}). Must provide one of {[f"Color.{f.name}" for f in Color]}.')
-
-    k = f'{icon}:{color.name}'
+    if isinstance(color, QtGui.QColor):
+        k = f'{icon}:{color.name(QtGui.QColor.HexRgb)}:{engine.__name__}'
+    elif isinstance(color, Color):
+        k = f'{icon}:{color.name}:{engine.__name__}'
 
     if k in icon_cache:
         return icon_cache[k]

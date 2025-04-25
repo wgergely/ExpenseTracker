@@ -148,15 +148,23 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     return value
 
         elif col_idx == Columns.Category.value:
+            config = lib.settings.get_section('categories') or {}
             if role == QtCore.Qt.DisplayRole:
-                categories = lib.settings.get_section('categories') or {}
-                if value in categories:
-                    display_name = categories[value].get('display_name', value)
+                if value in config:
+                    display_name = config[value].get('display_name', value)
                     if display_name:
                         return display_name
                 return f'{value}'
             elif role == QtCore.Qt.DecorationRole:
-                return ui.get_icon(value)
+                if value not in config:
+                    return None
+
+                icon_name = config[value].get('icon', 'cat_unclassified')
+                hex_color = config[value].get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
+                color = QtGui.QColor(hex_color)
+
+                icon = ui.get_icon(icon_name, color=color, engine=ui.CategoryIconEngine)
+                return icon
             elif role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
                 categories = lib.settings.get_section('categories') or {}
                 if value in categories:

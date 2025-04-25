@@ -140,7 +140,11 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                     return None
 
                 icon_name = config[category].get('icon', 'cat_unclassified')
-                return ui.get_icon(icon_name)
+                hex_color = config[category].get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
+                color = QtGui.QColor(hex_color)
+
+                icon = ui.get_icon(icon_name, color=color, engine=ui.CategoryIconEngine)
+                return icon
 
         # Handle columns
         if col == Columns.Category:

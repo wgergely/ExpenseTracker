@@ -52,51 +52,6 @@ class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
         painter.drawRoundedRect(rect, o, o)
 
 
-class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
-    """A custom delegate to draw the icon for the icon column.
-
-    """
-
-    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
-              index: QtCore.QModelIndex) -> None:
-        super().paint(painter, option, index)
-
-        if index.column() != Columns.Icon or index.row() == index.model().rowCount() - 1:
-            return
-
-        # Background
-        category = index.data(CategoryRole)
-        config = lib.settings.get_section('categories')
-        color = config.get(category, {}).get('color', ui.Color.Text().name(QtGui.QColor.NameFormat.HexRgb))
-        icon = config.get(category, {}).get('icon', None)
-
-        if color:
-            color = QtGui.QColor.fromString(color)
-            rect = QtCore.QRectF(option.rect)
-            m = ui.Size.Margin(0.5)
-            rect = rect.adjusted(
-                m, m, -m, -m
-            )
-            o = ui.Size.Indicator(2.0)
-            painter.setBrush(color)
-            painter.setPen(QtCore.Qt.NoPen)
-            painter.drawRoundedRect(rect, o, o)
-
-        # Icon
-        center = option.rect.center()
-
-        rect = QtCore.QRect(
-            0, 0,
-            ui.Size.Margin(1.0),
-            ui.Size.Margin(1.0),
-        )
-        rect.moveCenter(center)
-
-        icon = index.data(QtCore.Qt.DecorationRole)
-        if icon is not None:
-            icon.paint(painter, rect, QtCore.Qt.AlignCenter)
-
-
 class ExpenseView(QtWidgets.QTableView):
     """
     The view to display the expense data in a table format.
@@ -141,7 +96,6 @@ class ExpenseView(QtWidgets.QTableView):
 
     def _init_delegates(self) -> None:
         self.setItemDelegateForColumn(Columns.Weight.value, WeightColumnDelegate(self))
-        self.setItemDelegateForColumn(Columns.Icon.value, IconColumnDelegate(self))
 
     def _init_actions(self) -> None:
 
@@ -330,4 +284,3 @@ class ExpenseView(QtWidgets.QTableView):
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.4))
-
