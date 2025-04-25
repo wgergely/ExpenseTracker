@@ -33,7 +33,10 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         )
         rect.moveCenter(center)
 
+        painter.setOpacity(self.parent().weight_anim_value)
+
         icon.paint(painter, rect, QtCore.Qt.AlignCenter)
+
 
 class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
     """A custom delegate to draw a simple bar chart for the chart column.
@@ -66,14 +69,19 @@ class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
         gradient.setColorAt(0.8, ui.Color.Yellow())
         gradient.setColorAt(1.0, ui.Color.Red())
 
-        width = float(rect.width()) * index.data(WeightRole)
-        width = max(width, ui.Size.Separator(1.0)) if index.data(WeightRole) > 0.0 else width
+        weight = index.data(WeightRole)
+        weight *= self.parent().weight_anim_value
+
+        width = float(rect.width()) * weight
+        width = max(width, ui.Size.Separator(1.0)) if weight > 0.0 else width
         rect.setWidth(width)
 
         painter.setBrush(gradient)
         painter.setPen(QtCore.Qt.NoPen)
 
         o = ui.Size.Separator(5.0) if (hover or selected) else ui.Size.Separator(3.0)
+
+        painter.setOpacity(self.parent().weight_anim_value)
         painter.drawRoundedRect(rect, o, o)
 
 
@@ -84,6 +92,7 @@ class ExpenseView(QtWidgets.QTableView):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
+        self.setObjectName('ExpenseTrackerExpenseView')
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
 
@@ -103,6 +112,17 @@ class ExpenseView(QtWidgets.QTableView):
 
         self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+
+        self.weight_anim_value = 0.0
+
+        self._weight_anim = QtCore.QVariantAnimation(self)
+        self._weight_anim.setDuration(400)
+        self._weight_anim.setStartValue(0.0)
+        self._weight_anim.setEndValue(1.0)
+        self._weight_anim.setEasingCurve(QtCore.QEasingCurve.OutQuad)
+        self._weight_anim.setLoopCount(1)
+        self._weight_anim.setDirection(QtCore.QAbstractAnimation.Forward)
+        self._weight_anim.finished.connect(self._weight_anim.stop)
 
         self._init_delegates()
         self._init_model()
@@ -273,6 +293,14 @@ class ExpenseView(QtWidgets.QTableView):
     def _connect_signals(self) -> None:
         self.activated.connect(signals.openTransactions)
         self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
+        self.model().sourceModel().modelReset.connect(self._weight_anim.start)
+
+        @QtCore.Slot(float)
+        def on_anim_value_chaged(value):
+            self.weight_anim_value = value
+            self.viewport().update()
+
+        self._weight_anim.valueChanged.connect(on_anim_value_chaged)
 
         @QtCore.Slot()
         def emit_category_selection_changed() -> None:
@@ -282,12 +310,14 @@ class ExpenseView(QtWidgets.QTableView):
             if not self.selectionModel().hasSelection():
                 logging.debug('No selection')
                 signals.expenseCategoryChanged.emit([])
+                signals.categoryChanged.emit('')
                 return
 
             index = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
             if not index.isValid():
                 logging.debug('No valid index')
                 signals.expenseCategoryChanged.emit([])
+                signals.categoryChanged.emit('')
                 return
 
             v = index.data(TransactionsRole)
@@ -297,6 +327,15 @@ class ExpenseView(QtWidgets.QTableView):
                 v = deepcopy(v)
             logging.debug('Category selection changed')
             signals.expenseCategoryChanged.emit(v)
+
+            category = index.data(CategoryRole)
+            if not category:
+                logging.debug('No category selected')
+                signals.categoryChanged.emit('')
+                return
+
+            logging.debug(f'Category selected: {category}')
+            signals.categoryChanged.emit(category)
 
         self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
         self.model().sourceModel().modelReset.connect(emit_category_selection_changed)

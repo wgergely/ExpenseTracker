@@ -45,6 +45,7 @@ class Signals(QtCore.QObject):
     dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
 
     expenseCategoryChanged = QtCore.Signal(list)
+    categoryChanged = QtCore.Signal(str)
 
     statusError = QtCore.Signal(status.Status)
 

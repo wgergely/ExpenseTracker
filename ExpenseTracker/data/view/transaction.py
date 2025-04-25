@@ -67,6 +67,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         self.setShowGrid(True)
         self.setAlternatingRowColors(False)
+
         self.setWordWrap(True)
         self.setTextElideMode(QtCore.Qt.ElideNone)
 
@@ -239,9 +240,9 @@ class TransactionsView(QtWidgets.QTableView):
 
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-        header.setDefaultSectionSize(ui.Size.RowHeight(1.5))
-        header.setMinimumSectionSize(ui.Size.RowHeight(1.5))
-        header.setMaximumSectionSize(ui.Size.RowHeight(2.0))
+        header.setDefaultSectionSize(ui.Size.RowHeight(2.0))
+        header.setMinimumSectionSize(ui.Size.RowHeight(2.0))
+        header.setMaximumSectionSize(ui.Size.RowHeight(4.0))
         header.setHidden(True)
 
     def _connect_signals(self):
