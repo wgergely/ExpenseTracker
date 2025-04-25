@@ -43,7 +43,9 @@ class FontDatabase(QtGui.QFontDatabase):
 
     def __init__(self):
         if not QtWidgets.QApplication.instance():
-            raise RuntimeError('FontDatabase must be created after a QApplication is initiated.')
+            msg = 'FontDatabase must be created after a QApplication is initiated.'
+            logging.error(msg)
+            raise RuntimeError(msg)
         super().__init__()
 
         self._family = None

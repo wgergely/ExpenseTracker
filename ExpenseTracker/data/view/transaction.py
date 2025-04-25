@@ -1,3 +1,5 @@
+from typing import Optional
+
 from PySide6 import QtWidgets, QtCore, QtGui
 
 from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
@@ -54,24 +56,26 @@ class TransactionsView(QtWidgets.QTableView):
     It configures selection, sizing, and header behavior for an optimal display of the transactions table.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent=parent)
 
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.setShowGrid(True)
-        self.setAlternatingRowColors(False)
+
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
+        self.setShowGrid(True)
+        self.setAlternatingRowColors(False)
         self.setWordWrap(True)
+        self.setTextElideMode(QtCore.Qt.ElideNone)
 
         self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
 
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Minimum
         )
 
         self._init_model()
@@ -234,8 +238,10 @@ class TransactionsView(QtWidgets.QTableView):
         header.setSectionsMovable(False)
 
         header = self.verticalHeader()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
-        header.setDefaultSectionSize(ui.Size.RowHeight(1.8))
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setDefaultSectionSize(ui.Size.RowHeight(1.5))
+        header.setMinimumSectionSize(ui.Size.RowHeight(1.5))
+        header.setMaximumSectionSize(ui.Size.RowHeight(2.0))
         header.setHidden(True)
 
     def _connect_signals(self):

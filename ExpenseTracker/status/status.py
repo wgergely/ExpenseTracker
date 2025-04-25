@@ -40,8 +40,8 @@ STATUS_MESSAGE: Dict[Status, str] = {
     Status.UnknownStatus: 'Unknown status. Please check the settings.',
     Status.Okay: 'Everything is okay.',
 
-    Status.LedgerConfigNotFound: 'Could not find the ledger config. Please check the settings.',
-    Status.LedgerConfigInvalid: 'The ledger config seems to be incomplete, or contains invalid values. Please check the settings!',
+    Status.LedgerConfigNotFound: 'Could not find the ledger config.',
+    Status.LedgerConfigInvalid: 'The ledger config seems to be incomplete, or contains invalid values.',
 
     Status.ClientSecretNotFound: 'Could not find the google client secret. Have you set up a valid Google client secret?',
     Status.ClientSecretInvalid: 'Could not verify the client secret. Have you set up a valid Google client secret?',
@@ -55,9 +55,9 @@ STATUS_MESSAGE: Dict[Status, str] = {
     Status.SpreadsheetNotFound: 'Could not find the spreadsheet. Have you set up a valid spreadsheet id in the settings?',
     Status.WorksheetNotFound: 'Could not find the worksheet. Have you set up a valid worksheet name in the settings?',
 
-    Status.HeadersInvalid: 'Is the spreadsheet\'s headers set up correctly? Please check the settings!',
-    Status.HeaderMappingInvalid: 'The header mapping seems to be incomplete, or contains invalid values. Please check the settings!',
-    Status.CategoriesInvalid: 'The categories seem to be incomplete, or contain invalid values. Please check the settings!',
+    Status.HeadersInvalid: 'Is the spreadsheet\'s headers set up correctly?',
+    Status.HeaderMappingInvalid: 'The header mapping seems to be incomplete, or contains invalid values.',
+    Status.CategoriesInvalid: 'The categories seem to be incomplete, or contain invalid values.',
 
     Status.ServiceUnavailable: 'Google Sheets service is unavailable. Please check your connection.',
     Status.CacheInvalid: 'The cache is invalid. Try fetching the data from the source again.',

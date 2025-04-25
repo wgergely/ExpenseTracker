@@ -613,5 +613,6 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int 
         raise Exception('Operation cancelled or timed out.')
     dialog.close()
     if result['error']:
-        raise Exception(result['error'])
+        from ..status import status
+        raise status.UnknownException(result['error'])
     return result['data']

@@ -1,11 +1,8 @@
-"""
-log/view.py
-"""
-
 from PySide6 import QtCore, QtWidgets
 
 from .model import LogFilterProxyModel, Columns
 from .model import LogTableModel
+from ..ui import ui
 
 
 class LogTableView(QtWidgets.QTableView):
@@ -15,6 +12,9 @@ class LogTableView(QtWidgets.QTableView):
         """Initializes the log table view."""
         super().__init__(parent=parent)
         self.setWordWrap(True)
+        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
         self._init_model()
         self._init_headers()
@@ -42,6 +42,9 @@ class LogTableView(QtWidgets.QTableView):
 
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setDefaultSectionSize(ui.Size.RowHeight(1.0))
+        header.setMinimumSectionSize(ui.Size.RowHeight(1.0))
+        header.setMaximumSectionSize(ui.Size.RowHeight(2.0))
         header.setHidden(True)
 
     def _init_actions(self):
@@ -57,3 +60,9 @@ class LogTableView(QtWidgets.QTableView):
         """Resize rows after insert to accommodate new entries."""
         self.resizeRowsToContents()
         self.scrollToBottom()
+
+    def sizeHint(self):
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(0.5)
+        )
