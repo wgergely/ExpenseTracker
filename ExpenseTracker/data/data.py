@@ -333,7 +333,17 @@ def get_data(
     return df
 
 
-def get_trends() -> pd.DataFrame:
+@metadata()
+def get_trends(
+    df: pd.DataFrame,
+    hide_empty_categories: bool = True,
+    exclude_negative: bool = False,
+    exclude_zero: bool = False,
+    exclude_positive: bool = True,
+    yearmonth: str = '',
+    span: int = 1,
+    summary_mode: str = SummaryMode.Total.value,
+) -> pd.DataFrame:
     """
     Compute monthly spending trends per category.
 
@@ -345,17 +355,59 @@ def get_trends() -> pd.DataFrame:
             ewma (float): Exponentially weighted moving average (span=6).
             loess (float): LOESS smoothed trend values.
     """
-    from ..core.database import database as db
+    """
+    Compute monthly spending trends per category, respecting metadata filters.
 
-    # Load full cached transactions
-    df_raw = db.data()
-    # Return empty DataFrame with correct columns if no data
+    Args:
+        df: Raw transaction DataFrame from cache.
+        hide_empty_categories: Ignored for trends.
+        exclude_negative: Exclude transactions with amount < 0.
+        exclude_zero: Exclude transactions with amount == 0.
+        exclude_positive: Exclude transactions with amount > 0.
+        yearmonth: Ignored for trends.
+        span: Ignored for trends.
+        summary_mode: Ignored for trends.
+
+    Returns:
+        pd.DataFrame: Trends with columns ['category', 'month', 'monthly_total', 'ewma', 'loess'].
+    """
+    # Base DataFrame passed in
+    df_raw = df.copy()
+    # Return empty if no data
     if df_raw.empty:
         return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
 
-    # Ensure date column is datetime
+    # Map raw columns to standard keys using header mapping config
+    mapping = lib.settings.get_section('mapping') or {}
+    required = ['date', 'amount', 'category']
+    # Validate mapping exists
+    if not all(k in mapping for k in required):
+        missing = [k for k in required if k not in mapping]
+        logging.error(f'Missing mapping for keys: {missing}')
+        return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
+    # Rename cols: mapping internal key -> raw column name, invert dict
+    rename_map = {mapping[k]: k for k in required if mapping.get(k) in df_raw.columns}
+    df_raw = df_raw.rename(columns=rename_map)
+    # Verify required columns
+    missing_cols = [k for k in required if k not in df_raw.columns]
+    if missing_cols:
+        logging.error(f'Required columns missing in data: {missing_cols}')
+        return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
+
+    # Apply exclusion filters from metadata
+    if exclude_zero:
+        df_raw = df_raw[df_raw['amount'] != 0]
+    if exclude_negative:
+        df_raw = df_raw[df_raw['amount'] >= 0]
+    if exclude_positive:
+        df_raw = df_raw[df_raw['amount'] <= 0]
+    # Coerce types
     df_raw['date'] = pd.to_datetime(df_raw['date'], errors='coerce')
-    # Convert dates to monthly periods
+    df_raw = df_raw.dropna(subset=['date'])
+    df_raw['amount'] = pd.to_numeric(df_raw['amount'], errors='coerce')
+    df_raw = df_raw.dropna(subset=['amount'])
+    df_raw['category'] = df_raw['category'].astype(str).fillna('')
+    # Convert to monthly periods
     df_raw['period'] = df_raw['date'].dt.to_period('M')
 
     # Aggregate monthly totals per category
