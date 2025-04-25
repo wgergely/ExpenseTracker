@@ -378,15 +378,17 @@ def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
 
 @metadata()
 def get_trends(
-    df: pd.DataFrame,
+        df: pd.DataFrame,
         hide_empty_categories: bool = True,  # unused, kept for API parity
-    exclude_negative: bool = False,
-    exclude_zero: bool = False,
-    exclude_positive: bool = True,
+        exclude_negative: bool = False,
+        exclude_zero: bool = False,
+        exclude_positive: bool = True,
         yearmonth: str = "",
-    span: int = 1,
+        span: int = 1,
         data_window: Union[DataWindow, int] = DataWindow.W3,
-        summary_mode: str = SummaryMode.Total.value,  # unused, kept for parity
+        summary_mode: str = SummaryMode.Total.value,
+        loess_span: int = 5,
+        enwa_span: int = 5
 ) -> pd.DataFrame:
     """Return per-category monthly trends (see detailed docstring earlier)."""
     if df.empty:
@@ -441,8 +443,8 @@ def get_trends(
             series = series.loc[nz.idxmax(): nz[::-1].idxmax()]
 
         months = len(series)
-        span_ewma = max(3, round(months / 5))
-        frac_loess = max(0.20, min(0.70, 5 / months))
+        span_ewma = max(3, round(months / enwa_span))
+        frac_loess = max(0.20, min(0.70, loess_span / months))
 
         ewma = series.ewm(span=span_ewma, adjust=False).mean()
         lo = (
