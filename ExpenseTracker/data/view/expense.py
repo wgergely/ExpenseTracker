@@ -10,6 +10,31 @@ from ...ui import ui
 from ...ui.actions import signals
 
 
+class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
+    """A custom delegate to draw the icon for the icon column.
+
+    """
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
+              index: QtCore.QModelIndex) -> None:
+
+        if index.column() != Columns.Icon or index.row() == index.model().rowCount() - 1:
+            return
+
+        icon = index.data(QtCore.Qt.DecorationRole)
+        if not icon:
+            return
+
+        center = option.rect.center()
+        rect = QtCore.QRect(
+            0, 0,
+            ui.Size.Margin(1.5),
+            ui.Size.Margin(1.5)
+        )
+        rect.moveCenter(center)
+
+        icon.paint(painter, rect, QtCore.Qt.AlignCenter)
+
 class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
     """A custom delegate to draw a simple bar chart for the chart column.
 
@@ -95,6 +120,7 @@ class ExpenseView(QtWidgets.QTableView):
         self._init_section_sizing()
 
     def _init_delegates(self) -> None:
+        self.setItemDelegateForColumn(Columns.Icon.value, IconColumnDelegate(self))
         self.setItemDelegateForColumn(Columns.Weight.value, WeightColumnDelegate(self))
 
     def _init_actions(self) -> None:

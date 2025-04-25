@@ -216,6 +216,16 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
 
         self._filter_string = ''
 
+        self._connect_signals()
+
+    def _connect_signals(self) -> None:
+        @QtCore.Slot()
+        def reset():
+            self.set_filter_string('')
+            self.invalidateFilter()
+
+        signals.expenseCategoryChanged.connect(reset)
+
     def filter_string(self):
         """Get the current filter string."""
         return self._filter_string

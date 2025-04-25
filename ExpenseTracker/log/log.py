@@ -3,7 +3,7 @@ import sys
 
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.WARNING
 LOG_FORMAT = '[%(asctime)s] <%(module)s> %(levelname)s:  %(message)s'
 LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
 

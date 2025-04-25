@@ -496,7 +496,47 @@ class CategoryIconEngine(ThemedIconEngine):
 
     """
 
+    def __init__(self, icon: str, color: Union[QtGui.QColor, Color] = Color.Text):
+        super().__init__(icon, color)
+
+        global icons
+        if not icons:
+            from ..settings import lib
+            if not lib.settings.icon_dir.is_dir():
+                raise FileNotFoundError(f'Icon directory not found: {lib.settings.icon_dir}')
+
+            for _icon in lib.settings.icon_dir.glob('*.png'):
+                if not _icon.is_file():
+                    continue
+                logging.debug(f'Found icon: {_icon.stem}')
+                icons.append(_icon.stem)
+
+
     def paint(self, painter, rect, mode, state):
+        painter.save()
+
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+
+        pen = QtGui.QPen(self._color)
+        pen.setWidthF(rect.height() / 10.0)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
+        painter.setPen(pen)
+
+        if mode == QtGui.QIcon.Active:
+            painter.setBrush(self._color)
+        else:
+            painter.setBrush(Color.Opaque())
+
+        o = rect.height() / 2.0
+        painter.drawRoundedRect(rect, o, o)
+
+        painter.restore()
+
+        o = rect.height() / 5.0
+        rect = rect.adjusted(o, o, -o, -o)
+
         super().paint(painter, rect, mode, state)
 
     def clone(self):
@@ -518,15 +558,6 @@ def get_icon(icon: str, color: Union[QtGui.QColor, Color] = Color.Text,
     from ..settings import lib
 
     global icons
-    if not icons:
-        if not lib.settings.icon_dir.is_dir():
-            raise FileNotFoundError(f'Icon directory not found: {lib.settings.icon_dir}')
-
-        for _icon in lib.settings.icon_dir.glob('*.png'):
-            if not _icon.is_file():
-                continue
-            logging.debug(f'Found icon: {_icon.stem}')
-            icons.append(_icon.stem)
 
     if not isinstance(icon, str) and icon not in icons:
         raise ValueError(f'Invalid icon category: {icon}. Must be one of {icons}')
