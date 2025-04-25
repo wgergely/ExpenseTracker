@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 import pandas as pd
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...settings import lib
 from ...settings import locale
@@ -29,21 +29,36 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent=parent)
 
+        self._pending_data = []
         self._data = []
+
+        self._init_data_timer = QtCore.QTimer(self)
+        self._init_data_timer.setSingleShot(True)
+        self._init_data_timer.setInterval(QtWidgets.QApplication.keyboardInputInterval())
 
         self._connect_signals()
 
     def _connect_signals(self) -> None:
         signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.expenseCategoryChanged.connect(self.init_data)
+
+        signals.expenseCategoryChanged.connect(self.queue_data_init)
+        self._init_data_timer.timeout.connect(lambda: self.init_data(self._pending_data))
 
     @QtCore.Slot(list)
-    def init_data(self, data) -> None:
+    def queue_data_init(self, data: list) -> None:
+        """
+        Start the timer to initialize data.
+        """
+        self._pending_data = data
+        self._init_data_timer.start(self._init_data_timer.interval())
+
+    @QtCore.Slot(list)
+    def init_data(self, data: list) -> None:
         self.beginResetModel()
         self._data = []
+        self._pending_data = []
         try:
             if not data:
-                logging.warning('TransactionsModel: No data available.')
                 return
             self._data = data
         except Exception as ex:
@@ -59,6 +74,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         """
         self.beginResetModel()
         self._data = []
+        self._pending_data = []
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
