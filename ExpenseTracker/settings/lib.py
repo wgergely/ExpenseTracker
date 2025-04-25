@@ -30,6 +30,7 @@ def is_valid_hex_color(value: str) -> bool:
 
 EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions', 'description', 'weight']
 TRANSACTION_DATA_COLUMNS: List[str] = ['date', 'amount', 'description', 'category', 'account']
+TREND_DATA_COLUMNS: List[str] = ['category', 'month', 'monthly_total', 'ewma', 'loess']
 
 DATA_MAPPING_KEYS: List[str] = ['date', 'amount', 'description', 'category', 'account']
 DATA_MAPPING_SEPARATOR_CHARS: List[str] = ['|', '+']

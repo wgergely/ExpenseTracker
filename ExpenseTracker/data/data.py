@@ -351,7 +351,7 @@ def get_trends() -> pd.DataFrame:
     df_raw = db.data()
     # Return empty DataFrame with correct columns if no data
     if df_raw.empty:
-        return pd.DataFrame(columns=['category', 'month', 'monthly_total', 'ewma', 'loess'])
+        return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
 
     # Ensure date column is datetime
     df_raw['date'] = pd.to_datetime(df_raw['date'], errors='coerce')
@@ -391,6 +391,6 @@ def get_trends() -> pd.DataFrame:
     df_trends['month'] = df_trends['period'].dt.to_timestamp('M')
 
     # Reorder columns
-    df_trends = df_trends[['category', 'month', 'monthly_total', 'ewma', 'loess']]
+    df_trends = df_trends[lib.TREND_DATA_COLUMNS]
 
     return df_trends

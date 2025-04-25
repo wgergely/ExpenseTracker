@@ -210,36 +210,9 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
-        # Delete Preset
-        @QtCore.Slot()
-        def delete_preset() -> None:
-            sel = self.view.selectionModel()
-            if not sel.hasSelection():
-                return
-            idx = sel.selectedIndexes()[0]
-            src = proxy.mapToSource(idx)
-            item = src.data(QtCore.Qt.UserRole + 2)
-            if not item or item.type is PresetType.Active:
-                QtWidgets.QMessageBox.critical(
-                    self, 'Delete Preset', 'Cannot delete active preset.')
-                return
-            r = QtWidgets.QMessageBox.question(
-                self, 'Delete Preset',
-                f'Delete preset "{item.name}"? This cannot be undone.',
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
-            )
-            if r != QtWidgets.QMessageBox.Yes:
-                return
-            try:
-                model.api().remove(item)
-            except Exception as ex:
-                QtWidgets.QMessageBox.critical(
-                    self, 'Delete Preset', f'Failed to delete preset: {ex}')
-
-        action = QtGui.QAction('Delete', self)
-        action.setShortcut('Delete')
-        action.setStatusTip('Delete selected preset')
-        action.triggered.connect(delete_preset)
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
@@ -274,6 +247,45 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+
+        # Delete Preset
+        @QtCore.Slot()
+        def delete_preset() -> None:
+            sel = self.view.selectionModel()
+            if not sel.hasSelection():
+                return
+            idx = sel.selectedIndexes()[0]
+            src = proxy.mapToSource(idx)
+            item = src.data(QtCore.Qt.UserRole + 2)
+            if not item or item.type is PresetType.Active:
+                QtWidgets.QMessageBox.critical(
+                    self, 'Delete Preset', 'Cannot delete active preset.')
+                return
+            r = QtWidgets.QMessageBox.question(
+                self, 'Delete Preset',
+                f'Delete preset "{item.name}"? This cannot be undone.',
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            )
+            if r != QtWidgets.QMessageBox.Yes:
+                return
+            try:
+                model.api().remove(item)
+            except Exception as ex:
+                QtWidgets.QMessageBox.critical(
+                    self, 'Delete Preset', f'Failed to delete preset: {ex}')
+
+        action = QtGui.QAction('Delete', self)
+        action.setShortcut('Delete')
+        action.setStatusTip('Delete selected preset')
+        action.triggered.connect(delete_preset)
+        self.view.addAction(action)
+
         # Rename Preset
         @QtCore.Slot()
         def rename_preset() -> None:
@@ -299,7 +311,6 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setShortcut('F2')
         action.setStatusTip('Rename selected preset')
         action.triggered.connect(rename_preset)
-        self.toolbar.addAction(action)
         self.view.addAction(action)
 
         # Duplicate Preset
@@ -330,6 +341,11 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setIcon(ui.get_icon('btn_fileadd'))
         action.setStatusTip('Duplicate selected preset')
         action.triggered.connect(duplicate_preset)
+        self.view.addAction(action)
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
@@ -357,7 +373,6 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setIcon(ui.get_icon('btn_sync'))
         action.setStatusTip('Update the selected preset with current settings')
         action.triggered.connect(save_preset)
-        self.toolbar.addAction(action)
         self.view.addAction(action)
 
 
