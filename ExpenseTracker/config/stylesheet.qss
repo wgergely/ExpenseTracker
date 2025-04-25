@@ -605,8 +605,8 @@ RangeSelectorBar {
 
 ExpenseView:focus,
 ExpenseView:focus:hover,
-TransactionListView:focus,
-TransactionListView:focus:hover {
+TransactionsView:focus,
+TransactionsView:focus:hover {
     border: <Separator@2.0>px solid <Transparent>;
 }
 

@@ -10,12 +10,6 @@ from ..status import status
 
 
 @QtCore.Slot()
-def open_settings():
-    from ..settings import settings
-    settings.show_settings_widget()
-
-
-@QtCore.Slot()
 def open_spreadsheet(self) -> None:
     """
     Opens the spreadsheet in the default browser.
@@ -54,7 +48,7 @@ class Signals(QtCore.QObject):
 
     statusError = QtCore.Signal(status.Status)
 
-    openSettings = QtCore.Signal()
+    showSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
     openTransactions = QtCore.Signal()
 
@@ -69,7 +63,6 @@ class Signals(QtCore.QObject):
         self._connect_signals()
 
     def _connect_signals(self):
-        self.openSettings.connect(open_settings)
         self.openSpreadsheet.connect(open_spreadsheet)
 
         from ..core import service

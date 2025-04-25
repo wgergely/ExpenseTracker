@@ -468,6 +468,10 @@ class ThemedIconEngine(QtGui.QIconEngine):
 
         icon = self.get_icon()
         pixmap = icon.pixmap(size, mode, state)
+
+        if pixmap.isNull():
+            return pixmap
+
         pixmap = pixmap.scaled(
             QtCore.QSize(
                 size.width() * scale,

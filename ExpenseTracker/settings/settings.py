@@ -1,6 +1,7 @@
 """The main settings widget for the app.
 
 """
+from typing import Optional
 
 from PySide6 import QtWidgets, QtCore
 
@@ -11,23 +12,6 @@ from .editors import header_editor
 from .editors import metadata_editor
 from .editors import spreadsheet_editor
 from ..ui import ui
-
-settings_widget = None
-
-
-def show_settings_widget(parent=None):
-    """
-    Show the settings widget.
-
-    Args:
-        parent (QWidget, optional): Parent widget.
-    """
-    global settings_widget
-    if settings_widget is None:
-        settings_widget = SettingsWidget(parent=parent)
-    settings_widget.open()
-    settings_widget.raise_()
-    return settings_widget
 
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
@@ -48,19 +32,13 @@ class SettingsScrollArea(QtWidgets.QScrollArea):
         self.setFocusPolicy(QtCore.Qt.NoFocus)
 
 
-class SettingsWidget(QtWidgets.QDialog):
+class SettingsWidget(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setObjectName('SettingsWidget')
         self.setWindowTitle('Settings')
-
-        self.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.WindowCloseButtonHint |
-            QtCore.Qt.WindowMinMaxButtonsHint
-        )
 
         self._sections = []
 
@@ -183,3 +161,27 @@ class SettingsWidget(QtWidgets.QDialog):
             ui.Size.DefaultWidth(1.6),
             ui.Size.DefaultHeight(1.6)
         )
+
+
+class SettingsDockWidget(QtWidgets.QDockWidget):
+    """Dockable widget for editing app settings."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__('Settings', parent=parent)
+        self.setObjectName('ExpenseTrackerSettingsWidget')
+        self.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFloatable
+        )
+
+        content = QtWidgets.QWidget(self)
+        layout = QtWidgets.QVBoxLayout(content)
+
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        settings_widget = SettingsWidget(parent=content)
+        settings_widget.setWindowFlags(QtCore.Qt.Widget)
+        layout.addWidget(settings_widget, 1)
+
+        self.setWidget(content)

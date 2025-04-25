@@ -6,6 +6,7 @@ from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
 from ..settings.presets.view import PresetsDockWidget
+from ..settings.settings import SettingsDockWidget
 from ..ui.actions import signals
 
 main_window = None
@@ -82,7 +83,6 @@ class StatusIndicator(QtWidgets.QWidget):
         if hover or pressed:
             color = color.lighter(150)
 
-        rect = self.rect()
         center = self.rect().center()
 
         rect = QtCore.QRect(
@@ -125,7 +125,7 @@ class StatusIndicator(QtWidgets.QWidget):
     @QtCore.Slot()
     def action(self):
         self.update_status()
-        QtWidgets.QMessageBox.critical(self, 'Error', self._status.value)
+        QtWidgets.QMessageBox.information(self, 'Status', self._status.value.capitalize())
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -191,6 +191,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.presets_view)
         self.presets_view.hide()
 
+        # Add settings dock (bottom)
+        self.settings_view = SettingsDockWidget(parent=self)
+        self.settings_view.setObjectName('ExpenseTrackerSettingsDockWidget')
+        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.settings_view)
+        self.settings_view.hide()
+
     def _connect_signals(self):
         signals.openTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
@@ -219,7 +225,9 @@ class MainWindow(QtWidgets.QMainWindow):
         action.setIcon(ui.get_icon('btn_settings'))
         action.setToolTip('Show settings...')
         action.setShortcut(QtGui.QKeySequence('Ctrl+.'))
-        action.triggered.connect(signals.openSettings)
+        action.triggered.connect(
+            lambda: self.settings_view.setHidden(not self.settings_view.isHidden())
+        )
         self.toolbar.addAction(action)
         # Global keyboard shortcuts for shifting the date range
         prev_short = QtGui.QAction(self)
@@ -232,7 +240,6 @@ class MainWindow(QtWidgets.QMainWindow):
         next_short.setShortcutContext(QtCore.Qt.WindowShortcut)
         next_short.triggered.connect(self.range_selector.next_month)
         self.addAction(next_short)
-
 
         self.toolbar.addWidget(self.status_indicator)
 

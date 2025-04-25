@@ -113,8 +113,8 @@ class PresetsListView(QtWidgets.QTableView):
                 return
 
             if item.type is PresetType.Active:
-                from .. import settings
-                settings.show_settings_widget()
+                from ...ui.actions import signals
+                signals.showSettings.emit()
             else:
                 # Disallow activating out-of-date presets
                 if item.is_out_of_date:

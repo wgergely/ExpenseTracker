@@ -17,11 +17,12 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
+        super().paint(painter, option, index)
 
         if index.column() != Columns.Icon or index.row() == index.model().rowCount() - 1:
             return
 
-        icon = index.data(QtCore.Qt.DecorationRole)
+        icon = index.data(QtCore.Qt.UserRole)
         if not icon:
             return
 
@@ -88,8 +89,8 @@ class ExpenseView(QtWidgets.QTableView):
         self.verticalHeader().hide()
 
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Minimum
         )
 
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
@@ -267,7 +268,7 @@ class ExpenseView(QtWidgets.QTableView):
         action = QtGui.QAction('Open Settings...', self)
         action.setShortcuts(['Ctrl+,', 'Ctrl+.', 'Ctrl+P'])
         action.setIcon(ui.get_icon('btn_settings'))
-        action.triggered.connect(signals.openSettings)
+        action.triggered.connect(signals.showSettings)
         self.addAction(action)
 
     def _connect_signals(self) -> None:
@@ -310,3 +311,9 @@ class ExpenseView(QtWidgets.QTableView):
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.4))
+
+    def sizeHint(self):
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(1.0)
+        )
