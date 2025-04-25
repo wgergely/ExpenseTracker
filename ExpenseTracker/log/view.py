@@ -36,6 +36,7 @@ class LogTableView(QtWidgets.QTableView):
         header.setSectionResizeMode(Columns.Module.value, QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(Columns.Level, QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(Columns.Message.value, QtWidgets.QHeaderView.Stretch)
+        header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
         self.setSortingEnabled(True)
         self.sortByColumn(Columns.Date, QtCore.Qt.DescendingOrder)
