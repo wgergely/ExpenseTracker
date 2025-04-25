@@ -127,10 +127,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         if col == Columns.Icon:
             if role == QtCore.Qt.DecorationRole:
-                # We'll use the delegate to draw the icon
-                return None
-
-            if role == QtCore.Qt.UserRole:
                 # no icon for the "Total" row
                 if index.data(QtCore.Qt.DisplayRole) == 'Total':
                     return None

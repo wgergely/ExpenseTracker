@@ -12,7 +12,9 @@ import functools
 import logging
 import re
 
+import numpy as np
 import pandas as pd
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from ..core import database
 from ..settings import lib
@@ -124,6 +126,131 @@ def _conform_amount_column(df: pd.DataFrame) -> pd.DataFrame:
     df['amount'] = df['amount'].fillna(0)
 
     return df
+
+
+def get_trends() -> pd.DataFrame:
+    """
+    Compute monthly spending trends per category.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns:
+            category (str): Category name.
+            month (Timestamp): Month start date for the period.
+            monthly_total (float): Total spend for that category in the month.
+            ewma (float): Exponentially weighted moving average (span=6).
+            loess (float): LOESS smoothed trend values.
+    """
+    from ..core.database import database as db
+
+    # Load full cached transactions
+    df_raw = db.data()
+    # Return empty DataFrame if no data
+    if df_raw.empty:
+        return pd.DataFrame(columns=['category', 'month', 'monthly_total', 'ewma', 'loess'])
+
+    # Convert date to datetime, then to monthly periods
+    df_raw['date'] = pd.to_datetime(df_raw['date'], errors='coerce')
+    df_raw['period'] = df_raw['date'].dt.to_period('M')
+
+    # Aggregate monthly totals per category
+    df_monthly = (
+        df_raw.groupby(['category', 'period'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'monthly_total'})
+    )
+
+    span = 6
+
+    def _compute_group_trends(group: pd.DataFrame) -> pd.DataFrame:
+        series = group['monthly_total']
+        ewma = series.ewm(span=span, adjust=False).mean()
+        x_vals = np.arange(len(series))
+        loess_vals = lowess(series.values, x_vals, frac=0.3, return_sorted=False)
+        return pd.DataFrame({
+            'category': group['category'].values,
+            'period': group['period'].values,
+            'monthly_total': series.values,
+            'ewma': ewma.values,
+            'loess': loess_vals,
+        })
+
+    # Compute trends per category
+    df_trends = (
+        df_monthly.groupby('category', group_keys=False)
+        .apply(_compute_group_trends)
+        .reset_index(drop=True)
+    )
+
+    # Convert period back to timestamp for month start
+    df_trends['month'] = df_trends['period'].dt.to_timestamp('M')
+
+    # Reorder columns
+    df_trends = df_trends[['category', 'month', 'monthly_total', 'ewma', 'loess']]
+
+    return df_trends
+
+
+def get_trends() -> pd.DataFrame:
+    """
+    Compute monthly spending trends per category.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns:
+            category (str): Category name.
+            month (Timestamp): Month start date for the period.
+            monthly_total (float): Total spend for that category in the month.
+            ewma (float): Exponentially weighted moving average (span=6).
+            loess (float): LOESS smoothed trend values.
+    """
+    from ..core.database import database as db
+
+    # Load full cached transactions
+    df_raw = db.data()
+    # Return empty DataFrame with correct columns if no data
+    if df_raw.empty:
+        return pd.DataFrame(columns=['category', 'month', 'monthly_total', 'ewma', 'loess'])
+
+    # Ensure date column is datetime
+    df_raw['date'] = pd.to_datetime(df_raw['date'], errors='coerce')
+    # Convert dates to monthly periods
+    df_raw['period'] = df_raw['date'].dt.to_period('M')
+
+    # Aggregate monthly totals per category
+    df_monthly = (
+        df_raw.groupby(['category', 'period'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'monthly_total'})
+    )
+
+    span = 6
+
+    def _compute_group_trends(group: pd.DataFrame) -> pd.DataFrame:
+        series = group['monthly_total']
+        ewma = series.ewm(span=span, adjust=False).mean()
+        x_vals = np.arange(len(series))
+        loess_vals = lowess(series.values, x_vals, frac=0.3, return_sorted=False)
+        return pd.DataFrame({
+            'category': group['category'].values,
+            'period': group['period'].values,
+            'monthly_total': series.values,
+            'ewma': ewma.values,
+            'loess': loess_vals,
+        })
+
+    # Compute trends per category
+    df_trends = (
+        df_monthly.groupby('category', group_keys=False)
+        .apply(_compute_group_trends)
+        .reset_index(drop=True)
+    )
+
+    # Convert period back to timestamp for month start
+    df_trends['month'] = df_trends['period'].dt.to_timestamp('M')
+
+    # Reorder columns
+    df_trends = df_trends[['category', 'month', 'monthly_total', 'ewma', 'loess']]
+
+    return df_trends
 
 
 def _conform_string_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -327,5 +454,67 @@ def get_data(
             [df, pd.DataFrame({'category': ['Total'], 'total': [overall]})],
             ignore_index=True
         )
+
+
+def get_trends() -> pd.DataFrame:
+    """
+    Compute monthly spending trends per category.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns:
+            category (str): Category name.
+            month (Timestamp): Month start date for the period.
+            monthly_total (float): Total spend for that category in the month.
+            ewma (float): Exponentially weighted moving average (span=6).
+            loess (float): LOESS smoothed trend values.
+    """
+    from ..core.database import database as db
+
+    # Load full cached transactions
+    df_raw = db.data()
+    # Return empty DataFrame if no data
+    if df_raw.empty:
+        return pd.DataFrame(columns=['category', 'month', 'monthly_total', 'ewma', 'loess'])
+
+    # Convert date to datetime and to monthly period
+    df_raw['date'] = pd.to_datetime(df_raw['date'], errors='coerce')
+    df_raw['period'] = df_raw['date'].dt.to_period('M')
+
+    # Aggregate monthly totals per category
+    df_monthly = (
+        df_raw.groupby(['category', 'period'], as_index=False)['amount']
+        .sum()
+        .rename(columns={'amount': 'monthly_total'})
+    )
+
+    span = 6
+
+    def _compute_group_trends(group: pd.DataFrame) -> pd.DataFrame:
+        series = group['monthly_total']
+        ewma = series.ewm(span=span, adjust=False).mean()
+        x_vals = np.arange(len(series))
+        loess_vals = lowess(series.values, x_vals, frac=0.3, return_sorted=False)
+        return pd.DataFrame({
+            'category': group['category'].values,
+            'period': group['period'].values,
+            'monthly_total': series.values,
+            'ewma': ewma.values,
+            'loess': loess_vals,
+        })
+
+    # Compute trends per category
+    df_trends = (
+        df_monthly.groupby('category', group_keys=False)
+        .apply(_compute_group_trends)
+        .reset_index(drop=True)
+    )
+
+    # Convert period back to timestamp for month start
+    df_trends['month'] = df_trends['period'].dt.to_timestamp('M')
+
+    # Reorder columns
+    df_trends = df_trends[['category', 'month', 'monthly_total', 'ewma', 'loess']]
+
+    return df_trends
 
     return df

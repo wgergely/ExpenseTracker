@@ -120,20 +120,30 @@ class LogTableModel(QtCore.QAbstractTableModel):
                 return log_data['message']
 
         if role == QtCore.Qt.FontRole:
-            # Make the font bold if the level is ERROR or above
-            if log_data['level_enum'] >= Level.ERROR:
+            # Make warning and error messages bold
+            if log_data['level_enum'] >= Level.WARNING:
                 font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
                 font.setWeight(QtGui.QFont.Bold)
                 return font
 
         if role == QtCore.Qt.ForegroundRole:
-            # Color code certain levels
-            if log_data['level_enum'] == Level.DEBUG:
-                return ui.Color.Blue()
-            elif log_data['level_enum'] >= Level.ERROR:
+            # Color code warning and error levels
+            lvl = log_data['level_enum']
+            if lvl == Level.WARNING:
+                return ui.Color.Yellow()
+            if lvl >= Level.ERROR:
                 return ui.Color.Red()
+            if lvl == Level.DEBUG:
+                return ui.Color.Blue()
 
-        # Provide numeric log level for filtering/sorting
+        # Provide decoration for Level column and numeric log level for filtering/sorting
+        if role == QtCore.Qt.DecorationRole and index.column() == Columns.Level:
+            lvl = log_data['level_enum']
+            if lvl >= Level.ERROR:
+                return ui.get_icon('btn_error', color=ui.Color.Red)
+            if lvl == Level.WARNING:
+                return ui.get_icon('btn_warning', color=ui.Color.Yellow)
+            return None
         if role == Roles.LOG_LEVEL:
             return log_data['level_enum'].value
 
@@ -211,6 +221,15 @@ class LogTableModel(QtCore.QAbstractTableModel):
             })
 
         return result
+
+    @QtCore.Slot()
+    def clear_logs(self) -> None:
+        """
+        Clear all log entries from the model.
+        """
+        self.beginResetModel()
+        self._logs.clear()
+        self.endResetModel()
 
 
 class LogFilterProxyModel(QtCore.QSortFilterProxyModel):

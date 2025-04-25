@@ -290,12 +290,6 @@ class RangeSelectorBar(QtWidgets.QToolBar):
 
         self.addSeparator()
 
-        button = QtWidgets.QToolButton(self)
-        icon = ui.get_icon('btn_date')
-        button.setIcon(icon)
-        button.setDisabled(True)
-        self.addWidget(button)
-
         self.start_selector = YearMonthSelector(self)
         self.start_selector.setObjectName('start_selector')
         self.addWidget(self.start_selector)
@@ -354,10 +348,15 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         end_datetime = start_datetime + relativedelta(months=span - 1)
         end_date = end_datetime.strftime('%Y-%m')
 
+        # Temporarily block UI signals to prevent save_range during initialization
+        self.start_selector.blockSignals(True)
         self.end_selector.blockSignals(True)
         self.start_selector.set_value(yearmonth)
         self.end_selector.set_value(end_date)
+        self.start_selector.blockSignals(False)
         self.end_selector.blockSignals(False)
+        # Update end selector limits based on the restored start date
+        self.on_start_changed(yearmonth)
 
     @QtCore.Slot(str)
     def on_start_changed(self, start_value):

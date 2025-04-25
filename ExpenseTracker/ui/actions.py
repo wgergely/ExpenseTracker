@@ -51,6 +51,8 @@ class Signals(QtCore.QObject):
     showSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
     openTransactions = QtCore.Signal()
+    showLogs = QtCore.Signal()
+    showLogs = QtCore.Signal()
 
     themeChanged = QtCore.Signal(str)
     calculationChanged = QtCore.Signal()

@@ -3,6 +3,8 @@ import sys
 
 from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
+from ..ui.actions import signals
+
 LOG_LEVEL = logging.WARNING
 LOG_FORMAT = '[%(asctime)s] <%(module)s> %(levelname)s:  %(message)s'
 LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
@@ -106,6 +108,9 @@ class TankHandler(logging.Handler):
         try:
             message = self.format(record)
             self.tank.append((record.levelno, message))
+            # Auto-show log viewer on errors and criticals
+            if record.levelno >= logging.ERROR:
+                signals.showLogs.emit()
         except (Exception, KeyboardInterrupt):
             self.handleError(record)
 

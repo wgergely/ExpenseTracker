@@ -202,12 +202,13 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
                 QtWidgets.QMessageBox.critical(
                     self, 'Save Preset', f'Failed to save preset: {ex}')
 
-        action = QtGui.QAction('New Preset…', self)
+        action = QtGui.QAction('New Preset', self)
         action.setShortcut('Ctrl+N')
         action.setIcon(ui.get_icon('btn_add'))
         action.setStatusTip('Create a new preset from current settings')
         action.triggered.connect(new_preset)
         self.toolbar.addAction(action)
+        self.view.addAction(action)
 
         # Delete Preset
         @QtCore.Slot()
@@ -240,6 +241,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Delete selected preset')
         action.triggered.connect(delete_preset)
         self.toolbar.addAction(action)
+        self.view.addAction(action)
 
         # Activate Preset
         @QtCore.Slot()
@@ -270,6 +272,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Activate selected preset')
         action.triggered.connect(activate_preset)
         self.toolbar.addAction(action)
+        self.view.addAction(action)
 
         # Rename Preset
         @QtCore.Slot()
@@ -297,6 +300,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Rename selected preset')
         action.triggered.connect(rename_preset)
         self.toolbar.addAction(action)
+        self.view.addAction(action)
 
         # Duplicate Preset
         @QtCore.Slot()
@@ -327,6 +331,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Duplicate selected preset')
         action.triggered.connect(duplicate_preset)
         self.toolbar.addAction(action)
+        self.view.addAction(action)
 
         # Save Changes to Preset
         @QtCore.Slot()
@@ -353,8 +358,8 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Update the selected preset with current settings')
         action.triggered.connect(save_preset)
         self.toolbar.addAction(action)
-        # Install toolbar actions into the list view for context menu
-        self.view.addActions(self.toolbar.actions())
+        self.view.addAction(action)
+
 
     def _connect_signals(self) -> None:
         # No additional connections beyond view behaviors

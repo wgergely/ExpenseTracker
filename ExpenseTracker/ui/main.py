@@ -5,6 +5,7 @@ from .yearmonth import RangeSelectorBar
 from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
+from ..log.view import LogDockWidget
 from ..settings.presets.view import PresetsDockWidget
 from ..settings.settings import SettingsDockWidget
 from ..ui.actions import signals
@@ -196,10 +197,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.settings_view.setObjectName('ExpenseTrackerSettingsDockWidget')
         self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.settings_view)
         self.settings_view.hide()
+        # Add log dock (top)
+        self.log_view = LogDockWidget(parent=self)
+        self.log_view.setObjectName('ExpenseTrackerLogDockWidget')
+        self.addDockWidget(QtCore.Qt.TopDockWidgetArea, self.log_view)
+        self.log_view.hide()
 
     def _connect_signals(self):
         signals.openTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
+        # auto-show log view on error/critical
+        signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
 
     def _init_actions(self):
         # stretch
@@ -209,6 +217,16 @@ class MainWindow(QtWidgets.QMainWindow):
         stretch.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         stretch.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.toolbar.addWidget(stretch)
+
+        # Refresh Data action
+        refresh_action = QtGui.QAction('Refresh Data', self)
+        refresh_action.setIcon(ui.get_icon('btn_fetch'))
+        refresh_action.setToolTip('Fetch latest transactions')
+        refresh_action.triggered.connect(signals.dataFetchRequested)
+        self.toolbar.addAction(refresh_action)
+
+        # Separator before toggle buttons
+        self.toolbar.addSeparator()
 
         # Presets dock toggle button
         presets_btn = QtWidgets.QToolButton(self)
@@ -229,6 +247,22 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda: self.settings_view.setHidden(not self.settings_view.isHidden())
         )
         self.toolbar.addAction(action)
+        # Transactions dock toggle button
+        trans_action = QtGui.QAction('Transactions', self)
+        trans_action.setIcon(ui.get_icon('btn_transactions'))
+        trans_action.setToolTip('Show transactions...')
+        trans_action.triggered.connect(signals.openTransactions)
+        self.toolbar.addAction(trans_action)
+
+        # Separator after toggle buttons
+        self.toolbar.addSeparator()
+        # Show Logs toggle action
+        log_action = QtGui.QAction('Show Logs', self)
+        log_action.setIcon(ui.get_icon('btn_log'))
+        log_action.setToolTip('Show log viewer')
+        log_action.triggered.connect(lambda: self.log_view.setHidden(not self.log_view.isHidden()))
+        self.toolbar.addAction(log_action)
+        self.addAction(log_action)
         # Global keyboard shortcuts for shifting the date range
         prev_short = QtGui.QAction(self)
         prev_short.setShortcuts([QtGui.QKeySequence('Alt+Left'), QtGui.QKeySequence('Ctrl+Left')])

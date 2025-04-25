@@ -545,11 +545,6 @@ QToolBar QToolButton:hover {
     border : <Separator@2.0>px solid <Background>;
 }
 
-QToolBar QToolButton::menu-button,
-QToolBar QToolButton::menu-indicator
-{
-    image: none;
-}
 
 
 QSplitter::handle {

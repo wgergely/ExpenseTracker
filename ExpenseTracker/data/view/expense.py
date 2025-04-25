@@ -17,12 +17,11 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
-        super().paint(painter, option, index)
 
         if index.column() != Columns.Icon or index.row() == index.model().rowCount() - 1:
             return
 
-        icon = index.data(QtCore.Qt.UserRole)
+        icon = index.data(QtCore.Qt.DecorationRole)
         if not icon:
             return
 
