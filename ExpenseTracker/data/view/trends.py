@@ -22,6 +22,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..data import DataWindow
 from ...data.data import get_trends
 from ...settings import lib
 from ...ui import ui
@@ -51,6 +52,8 @@ class Geometry:
     trend_points: list[QtCore.QPointF] = field(default_factory=list)
     labels: list[tuple[QtGui.QStaticText, QtCore.QPointF]] = field(default_factory=list)
     baseline_y: float = 0.0
+    data_min: float = 0.0
+    data_max: float = 0.0
 
 
 class TrendGraph(QtWidgets.QWidget):
@@ -75,7 +78,7 @@ class TrendGraph(QtWidgets.QWidget):
         self._geom: Geometry = Geometry()
 
         # presentation flags
-        self._padding: float = 0.20
+        self._padding: float = 0.05
         self._trend_key: str = 'loess'
         self._show_bars: bool = True
         self._show_trend: bool = True
@@ -84,7 +87,7 @@ class TrendGraph(QtWidgets.QWidget):
         self._connect_signals()
         self._init_actions()
 
-        QtCore.QTimer.singleShot(100, self.init_data)
+        QtCore.QTimer.singleShot(50, self.init_data)
 
     def _connect_signals(self) -> None:
         signals.categoryChanged.connect(self.set_category)
@@ -161,10 +164,29 @@ class TrendGraph(QtWidgets.QWidget):
         painter.drawLine(geom.area.left(), geom.baseline_y,
                          geom.area.right(), geom.baseline_y)
 
+        # Tick marks only at first and last bar
         tick = ui.Size.Separator(1.0)
-        for rect in geom.bars:
-            x = rect.x() + rect.width() / 2
-            painter.drawLine(x, geom.baseline_y, x, geom.baseline_y + tick)
+        if geom.bars:
+            for rect in (geom.bars[0], geom.bars[-1]):
+                x = rect.x() + rect.width() / 2
+                painter.drawLine(x, geom.baseline_y, x, geom.baseline_y + tick)
+        # Y-axis legend: show data_max at top, data_min at baseline
+        metrics = painter.fontMetrics()
+        offset = ui.Size.Separator(2.0)
+        max_lbl = f"{geom.data_max:.2f}"
+        painter.drawText(
+            QtCore.QPointF(
+                geom.area.left() - metrics.horizontalAdvance(max_lbl) - offset,
+                geom.area.top() + metrics.ascent()
+            ), max_lbl
+        )
+        min_lbl = f"{geom.data_min:.2f}"
+        painter.drawText(
+            QtCore.QPointF(
+                geom.area.left() - metrics.horizontalAdvance(min_lbl) - offset,
+                geom.baseline_y
+            ), min_lbl
+        )
 
     @paintmethod
     def _draw_bars(self, painter: QtGui.QPainter) -> None:
@@ -226,6 +248,9 @@ class TrendGraph(QtWidgets.QWidget):
         data_max = max(0.0,
                        self._bar_series.max(skipna=True),
                        self._trend_series.max(skipna=True))
+        # store for axis legend
+        geom.data_min = data_min
+        geom.data_max = data_max
         rng = data_max - data_min or 1.0
         geom.baseline_y = geom.area.bottom() - (-data_min / rng) * geom.area.height()
 
@@ -262,7 +287,7 @@ class TrendGraph(QtWidgets.QWidget):
     def init_data(self) -> None:
         """Load trend table and show first category."""
         try:
-            self._df_all = get_trends().copy()
+            self._df_all = get_trends(data_window=DataWindow.W6).copy()
         except Exception as exc:
             logging.error('TrendGraph: failed to load trends: %s', exc)
             self.clear_data()
