@@ -1,261 +1,295 @@
 """
-TrendGraph widget for visualizing monthly spend trends per category.
+TrendGraph widget — now with a **single geometry cache** and no NumPy.
 
-This widget displays a bar chart of monthly_total spend and overlays a trend
-curve (LOESS or EWMA) for a selected category. Designed for future docking
-in the main UI panel. Currently supports category switching, padding control,
-and toggling of bars and trend line visibility.
+Layers
+------
+0. axes
+1. monthly_total column bars
+2. smoothed trend curve (ewma or loess)
+
+External API  (all Qt slots)
+----------------------------
+set_category(str)     -> switch category
+toggle_bars(bool)     -> show / hide bar layer
+toggle_trend(bool)    -> show / hide trend layer
+set_padding(float)    -> 0-to-1 gap ratio
 """
-import logging
-import typing
 
-import numpy as np
+import logging
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
 import pandas as pd
-from PySide6 import QtWidgets, QtGui, QtCore
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...data.data import get_trends
+from ...settings import lib
 from ...ui import ui
 from ...ui.actions import signals
 
 
-class TrendGraph(QtWidgets.QWidget):
-    """Custom widget to plot monthly spend bars with trend overlay."""
+def paintmethod(func):  # type: ignore[valid-type]
+    """Decorator to wrap paint helpers with save/restore + exception log."""
 
-    def __init__(
-            self,
-            df_trends: pd.DataFrame,
-            parent: typing.Optional[QtWidgets.QWidget] = None,
-            initial_category: typing.Optional[str] = None,
-    ):
+    def wrapper(self, painter: QtGui.QPainter) -> None:  # type: ignore[valid-type]
+        painter.save()
+        try:
+            func(self, painter)
+        except Exception:
+            logging.exception('TrendGraph: error in %s', func.__name__)
+        painter.restore()
+
+    return wrapper
+
+
+@dataclass
+class Geometry:
+    """All pixel-space objects bundled in one container."""
+    area: QtCore.QRectF = field(default_factory=QtCore.QRectF)
+    bars: list[QtCore.QRectF] = field(default_factory=list)
+    trend_path: QtGui.QPainterPath = field(default_factory=QtGui.QPainterPath)
+    trend_points: list[QtCore.QPointF] = field(default_factory=list)
+    labels: list[tuple[QtGui.QStaticText, QtCore.QPointF]] = field(default_factory=list)
+    baseline_y: float = 0.0
+
+
+class TrendGraph(QtWidgets.QWidget):
+    """Custom QWidget painting a bar-plus-trend chart."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        # Connect to global signals to refresh on data/preset changes
-        signals.categoryChanged.connect(self.set_category)
-        signals.dataFetchRequested.connect(self._refresh_data)
-        signals.dataAboutToBeFetched.connect(self._refresh_data)
-        signals.presetActivated.connect(self._refresh_data)
-        signals.dataFetched.connect(self._on_data_fetched)
-        self._df_all = df_trends.copy()
-        self._categories = self._df_all['category'].unique().tolist()
-        self._trend_key = 'loess'
-        self._show_bars = True
-        self._show_trend = True
-        self._padding = 0.2
-        self._bar_rects: typing.List[QtCore.QRectF] = []
-        self._trend_path = QtGui.QPainterPath()
-        self._trend_points: typing.List[QtCore.QPointF] = []
-        self._month_texts: typing.List[typing.Tuple[QtGui.QStaticText, QtCore.QPointF]] = []
-        if initial_category in self._categories:
-            self._current_category = initial_category
-        elif self._categories:
-            self._current_category = self._categories[0]
-        else:
-            self._current_category = None
-        if self._current_category:
-            self.set_category(self._current_category)
-        else:
-            self._df_view = pd.DataFrame()
+
+        # source data
+        self._df_all: pd.DataFrame = pd.DataFrame()
+        self._df_view: pd.DataFrame = pd.DataFrame()
+        self._categories: List[str] = []
+        self._current_category: Optional[str] = None
+
+        # convenient slices for the active category
+        self._dates: pd.Index = pd.Index([])
+        self._bar_series: pd.Series = pd.Series(dtype=float)
+        self._trend_series: pd.Series = pd.Series(dtype=float)
+
+        # pixel geometry
+        self._geom: Geometry = Geometry()
+
+        # presentation flags
+        self._padding: float = 0.20
+        self._trend_key: str = 'loess'
+        self._show_bars: bool = True
+        self._show_trend: bool = True
+
         self.setMouseTracking(True)
+        self._connect_signals()
+        self._init_actions()
+
+        QtCore.QTimer.singleShot(100, self.init_data)
+
+    def _connect_signals(self) -> None:
+        signals.categoryChanged.connect(self.set_category)
+        signals.dataAboutToBeFetched.connect(self.clear_data)
+        signals.dataFetched.connect(self.init_data)
+        signals.presetActivated.connect(self.clear_data)
+        signals.presetActivated.connect(self.init_data)
+
+    def _init_actions(self) -> None:
+        """Placeholder for future QAction or context-menu wiring."""
+        pass
 
     @QtCore.Slot(str)
     def set_category(self, category: str) -> None:
-        """Switch the active category to plot."""
-        if category not in self._categories:
-            logging.warning(f'Category \'{category}\' not in trend data')
+        if not self._categories:
+            logging.warning('TrendGraph: no data loaded yet')
             return
+        if category not in self._categories:
+            logging.warning('TrendGraph: %s not among %s', category, self._categories)
+            return
+
         self._current_category = category
         self._df_view = self._df_all[self._df_all['category'] == category]
-        self._dates = self._df_view['month'].tolist()
-        self._bar_values = self._df_view['monthly_total'].to_numpy()
-        self._trend_values = self._df_view[self._trend_key].to_numpy()
+
+        self._dates = self._df_view['month']
+        self._bar_series = self._df_view['monthly_total']
+        self._trend_series = self._df_view[self._trend_key]
+
         self._rebuild_geometry()
         self.update()
 
     @QtCore.Slot(bool)
     def toggle_bars(self, visible: bool) -> None:
-        """Show or hide the bar layer."""
-        self._show_bars = visible
+        self._show_bars = bool(visible)
         self.update()
 
     @QtCore.Slot(bool)
     def toggle_trend(self, visible: bool) -> None:
-        """Show or hide the trend curve."""
-        self._show_trend = visible
+        self._show_trend = bool(visible)
         self.update()
 
     @QtCore.Slot(float)
     def set_padding(self, ratio: float) -> None:
-        """Set the gap padding ratio between bars."""
-        self._padding = max(0.0, min(ratio, 1.0))
+        self._padding = max(0.0, min(float(ratio), 1.0))
         self._rebuild_geometry()
         self.update()
 
-    @property
-    def padding_ratio(self) -> float:
-        """Current padding ratio between bars (0..1)."""
-        return self._padding
+    def sizeHint(self) -> QtCore.QSize:  # noqa: D401
+        return QtCore.QSize(ui.Size.DefaultWidth(1.0), ui.Size.DefaultHeight(1.0))
 
-    @padding_ratio.setter
-    def padding_ratio(self, ratio: float) -> None:
-        self.set_padding(ratio)
-
-    def sizeHint(self) -> QtCore.QSize:
-        """Suggested size for the widget."""
-        return QtCore.QSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
-
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: D401
         self._rebuild_geometry()
         super().resizeEvent(event)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        """Render axes, bars, trend line, and labels in the category color."""
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: D401
         painter = QtGui.QPainter(self)
         painter.fillRect(self.rect(), self.palette().color(QtGui.QPalette.Window))
-        # Draw axes (no AA)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, False)
-        text_color = self.palette().color(QtGui.QPalette.Text)
-        pen_axis = QtGui.QPen(text_color)
-        painter.setPen(pen_axis)
-        area = getattr(self, '_area', QtCore.QRectF(self.rect()))
-        baseline = getattr(self, '_baseline_y', area.bottom())
-        painter.drawLine(area.left(), area.top(), area.left(), area.bottom())
-        painter.drawLine(area.left(), baseline, area.right(), baseline)
-        # Tick marks
-        tick_len = ui.Size.Separator(1.0)
-        for st, pos in self._month_texts:
-            w = st.size().width()
-            x_center = pos.x() + w / 2
-            painter.drawLine(x_center, baseline, x_center, baseline + tick_len)
-        # Category color
-        cfg = lib.settings.get_section('categories') or {}
-        cat_cfg = cfg.get(self._current_category, {})
-        hex_color = cat_cfg.get('color', '#000000')
-        base_color = QtGui.QColor(hex_color)
-        # Draw bars at 50% opacity
+
+        self._draw_axes(painter)
         if self._show_bars:
-            bar_color = QtGui.QColor(base_color)
-            bar_color.setAlphaF(0.5)
-            painter.setPen(QtCore.Qt.NoPen)
-            painter.setBrush(bar_color)
-            for rect in self._bar_rects:
-                painter.drawRect(rect)
-        # Draw smooth trend curve
+            self._draw_bars(painter)
         if self._show_trend:
-            painter.save()
-            painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-            trend_color = QtGui.QColor(base_color)
-            pen_trend = QtGui.QPen(trend_color)
-            pen_trend.setCosmetic(True)
-            pen_trend.setWidthF(ui.Size.Separator(3.0))
-            painter.setPen(pen_trend)
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.drawPath(self._trend_path)
-            painter.restore()
-        # Draw month labels
-        painter.setPen(text_color)
-        for st, pos in self._month_texts:
-            painter.drawStaticText(pos, st)
+            self._draw_trend(painter)
+        self._draw_labels(painter)
+
+    @paintmethod
+    def _draw_axes(self, painter: QtGui.QPainter) -> None:
+        geom = self._geom
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, False)
+        painter.setPen(QtGui.QPen(self.palette().color(QtGui.QPalette.Text)))
+
+        painter.drawLine(geom.area.left(), geom.area.top(),
+                         geom.area.left(), geom.area.bottom())
+        painter.drawLine(geom.area.left(), geom.baseline_y,
+                         geom.area.right(), geom.baseline_y)
+
+        tick = ui.Size.Separator(1.0)
+        for rect in geom.bars:
+            x = rect.x() + rect.width() / 2
+            painter.drawLine(x, geom.baseline_y, x, geom.baseline_y + tick)
+
+    @paintmethod
+    def _draw_bars(self, painter: QtGui.QPainter) -> None:
+        geom = self._geom
+        if not geom.bars:
+            return
+        cfg = lib.settings.get_section('categories') or {}
+        color = QtGui.QColor(cfg.get(self._current_category, {}).get('color', '#000000'))
+        color.setAlphaF(0.5)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        for rect in geom.bars:
+            painter.drawRect(rect)
+
+    @paintmethod
+    def _draw_trend(self, painter: QtGui.QPainter) -> None:
+        geom = self._geom
+        if geom.trend_path.isEmpty():
+            return
+        cfg = lib.settings.get_section('categories') or {}
+        color = QtGui.QColor(cfg.get(self._current_category, {}).get('color', '#000000'))
+        pen = QtGui.QPen(color)
+        pen.setCosmetic(True)
+        pen.setWidthF(ui.Size.Separator(3.0))
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.drawPath(geom.trend_path)
+
+    @paintmethod
+    def _draw_labels(self, painter: QtGui.QPainter) -> None:
+        geom = self._geom
+        if not geom.labels:
+            return
+        painter.setPen(self.palette().color(QtGui.QPalette.Text))
+        for static_text, pos in geom.labels:
+            painter.drawStaticText(pos, static_text)
 
     def _rebuild_geometry(self) -> None:
-        """Compute bar rectangles, trend path, and label positions."""
+        """Populate self._geom from current data + widget size."""
+        self._geom = Geometry()  # fresh slate
+        geom = self._geom
+
         rect = self.contentsRect()
-        margin = ui.Size.Margin(1.0)
-        area = QtCore.QRectF(rect.adjusted(margin, margin, -margin, -margin))
-        self._area = area
-        width = area.width()
-        height = area.height()
-        if not hasattr(self, '_bar_values') or len(self._bar_values) == 0:
-            self._bar_rects = []
-            self._trend_path = QtGui.QPainterPath()
-            self._trend_points = []
-            self._month_texts = []
-            self._baseline_y = area.bottom()
+        m = ui.Size.Margin(1.0)
+        geom.area = QtCore.QRectF(rect.adjusted(m, m, -m, -m))
+
+        if self._bar_series.empty:
             return
-        n = len(self._bar_values)
-        x_step = width / n
-        bar_width = x_step * (1 - self._padding)
+
+        n = len(self._bar_series)
+        x_step = geom.area.width() / n
+        bar_w = x_step * (1.0 - self._padding)
         gap = x_step * self._padding
-        data_min = min(0.0, float(np.nanmin(self._bar_values)), float(np.nanmin(self._trend_values)))
-        data_max = max(0.0, float(np.nanmax(self._bar_values)), float(np.nanmax(self._trend_values)))
-        data_range = data_max - data_min or 1.0
-        baseline_ratio = (0 - data_min) / data_range
-        baseline_y = area.bottom() - baseline_ratio * height
-        self._baseline_y = baseline_y
-        bars: typing.List[QtCore.QRectF] = []
-        for i, v in enumerate(self._bar_values):
-            x0 = area.left() + i * x_step + gap / 2
-            ratio = (v - data_min) / data_range
-            bar_h = ratio * height
-            if v >= 0:
-                y0 = baseline_y - bar_h
-                h = bar_h
+
+        data_min = min(0.0,
+                       self._bar_series.min(skipna=True),
+                       self._trend_series.min(skipna=True))
+        data_max = max(0.0,
+                       self._bar_series.max(skipna=True),
+                       self._trend_series.max(skipna=True))
+        rng = data_max - data_min or 1.0
+        geom.baseline_y = geom.area.bottom() - (-data_min / rng) * geom.area.height()
+
+        # bars
+        for i, val in enumerate(self._bar_series):
+            x0 = geom.area.left() + i * x_step + gap / 2
+            ratio = (val - data_min) / rng
+            pix_h = ratio * geom.area.height()
+            if val >= 0:
+                y0, h = geom.baseline_y - pix_h, pix_h
             else:
-                y0 = baseline_y
-                h = -bar_h
-            bars.append(QtCore.QRectF(x0, y0, bar_width, h))
-        self._bar_rects = bars
-        path = QtGui.QPainterPath()
-        pts: typing.List[QtCore.QPointF] = []
-        for i, v in enumerate(self._trend_values):
-            x = area.left() + i * x_step + x_step / 2
-            ratio = (v - data_min) / data_range
-            y = area.bottom() - ratio * height
+                y0, h = geom.baseline_y, -pix_h
+            geom.bars.append(QtCore.QRectF(x0, y0, bar_w, h))
+
+        # trend
+        for i, val in enumerate(self._trend_series):
+            x = geom.area.left() + i * x_step + x_step / 2
+            y_ratio = (val - data_min) / rng
+            y = geom.area.bottom() - y_ratio * geom.area.height()
             pt = QtCore.QPointF(x, y)
-            pts.append(pt)
-            if i == 0:
-                path.moveTo(pt)
-            else:
-                path.lineTo(pt)
-        self._trend_path = path
-        self._trend_points = pts
-        labels: typing.List[typing.Tuple[QtGui.QStaticText, QtCore.QPointF]] = []
+            geom.trend_points.append(pt)
+            geom.trend_path.moveTo(pt) if i == 0 else geom.trend_path.lineTo(pt)
+
+        # labels
         for i, ts in enumerate(self._dates):
-            x_c = area.left() + i * x_step + x_step / 2
-            st = QtGui.QStaticText(pd.to_datetime(ts).strftime('%b %Y'))
-            size = st.size()
-            x_l = x_c - size.width() / 2
-            y_l = baseline_y + size.height() + 5
-            labels.append((st, QtCore.QPointF(x_l, y_l)))
-        self._month_texts = labels
+            x_c = geom.area.left() + i * x_step + x_step / 2
+            txt = QtGui.QStaticText(pd.Timestamp(ts).strftime('%b %Y'))
+            size = txt.size()
+            pos = QtCore.QPointF(x_c - size.width() / 2,
+                                 geom.baseline_y + size.height() + 5)
+            geom.labels.append((txt, pos))
 
     @QtCore.Slot()
-    def _refresh_data(self) -> None:
-        """Reload trends data and update the view."""
+    def init_data(self) -> None:
+        """Load trend table and show first category."""
         try:
-            df = get_trends()
-        except Exception as e:
-            logging.error(f"Error refreshing trend data: {e}")
+            self._df_all = get_trends().copy()
+        except Exception as exc:
+            logging.error('TrendGraph: failed to load trends: %s', exc)
+            self.clear_data()
             return
-        self._df_all = df.copy()
-        self._categories = df['category'].unique().tolist()
-        # Determine category to display
-        if self._current_category in self._categories:
-            category = self._current_category
-        else:
-            category = self._categories[0] if self._categories else None
-        if category:
-            self.set_category(category)
-        else:
-            # Clear view
-            self._df_view = pd.DataFrame()
-            self._bar_rects = []
-            self._trend_path = QtGui.QPainterPath()
-            self._trend_points = []
-            self._month_texts = []
-            self._baseline_y = getattr(self, '_area', QtCore.QRectF(self.rect())).bottom()
-            self.update()
 
-    @QtCore.Slot(pd.DataFrame)
-    def _on_data_fetched(self, df: pd.DataFrame) -> None:
-        """Handle incoming raw data fetch by refreshing trends."""
-        self._refresh_data()
+        self._categories = sorted(self._df_all['category'].unique().tolist())
+        if not self._categories:
+            self.clear_data()
+            return
 
-    def export_paths(self) -> typing.Dict[str, typing.List]:
-        """Return geometry data for testing: bar_rects and trend_points."""
-        return {
-            'bar_rects': list(self._bar_rects),
-            'trend_points': list(self._trend_points),
-        }
+        start = self._current_category if self._current_category in self._categories else self._categories[0]
+        self.set_category(start)
+
+    @QtCore.Slot()
+    def clear_data(self) -> None:
+        self._df_all = pd.DataFrame()
+        self._df_view = pd.DataFrame()
+        self._categories.clear()
+        self._current_category = None
+
+        self._dates = pd.Index([])
+        self._bar_series = pd.Series(dtype=float)
+        self._trend_series = pd.Series(dtype=float)
+
+        self._geom = Geometry()
+        self.update()
+
+    def export_paths(self) -> Dict[str, List]:
+        """Return geom lists for headless unit tests."""
+        return {'bars': list(self._geom.bars), 'trend_points': list(self._geom.trend_points)}
