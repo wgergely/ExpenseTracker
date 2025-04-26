@@ -83,7 +83,7 @@ class TrendGraph(QtWidgets.QWidget):
         self._hover_text: Optional[str] = None
         self._hover_pos: Optional[QtCore.QPoint] = None
 
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
         self.setMouseTracking(True)
         # enable context-menu actions
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
@@ -110,36 +110,65 @@ class TrendGraph(QtWidgets.QWidget):
         bars_action = QtGui.QAction('Show Bars', self, checkable=True)
         bars_action.setChecked(self._show_bars)
         bars_action.toggled.connect(self.toggle_bars)
+        bars_action.setToolTip('Show or hide the bars')
+        bars_action.setStatusTip('Show or hide the bars')
+        bars_action.setWhatsThis('Show or hide the bars')
+        bars_action.setShortcut('alt+1')
         self.addAction(bars_action)
 
         trend_action = QtGui.QAction('Show Trend', self, checkable=True)
         trend_action.setChecked(self._show_trend)
         trend_action.toggled.connect(self.toggle_trend)
+        trend_action.setToolTip('Show or hide the trend line')
+        trend_action.setStatusTip('Show or hide the trend line')
+        trend_action.setWhatsThis('Show or hide the trend line')
+        trend_action.setShortcut('alt+2')
         self.addAction(trend_action)
 
         axes_action = QtGui.QAction('Show Axes', self, checkable=True)
         axes_action.setChecked(self._show_axes)
         axes_action.toggled.connect(self.toggle_axes)
+        axes_action.setToolTip('Show or hide the axes')
+        axes_action.setStatusTip('Show or hide the axes')
+        axes_action.setWhatsThis('Show or hide the axes')
+        axes_action.setShortcut('alt+3')
         self.addAction(axes_action)
 
         ticks_action = QtGui.QAction('Show Ticks', self, checkable=True)
         ticks_action.setChecked(self._show_ticks)
         ticks_action.toggled.connect(self.toggle_ticks)
+        ticks_action.setToolTip('Show or hide the tick marks')
+        ticks_action.setStatusTip('Show or hide the tick marks')
+        ticks_action.setWhatsThis('Show or hide the tick marks')
+        ticks_action.setShortcut('alt+4')
         self.addAction(ticks_action)
 
         labels_action = QtGui.QAction('Show Labels', self, checkable=True)
         labels_action.setChecked(self._show_labels)
         labels_action.toggled.connect(self.toggle_labels)
+        labels_action.setToolTip('Show or hide the labels')
+        labels_action.setStatusTip('Show or hide the labels')
+        labels_action.setWhatsThis('Show or hide the labels')
+        labels_action.setShortcut('alt+5')
         self.addAction(labels_action)
 
         tooltip_action = QtGui.QAction('Show Tooltip', self, checkable=True)
         tooltip_action.setChecked(self._show_tooltip)
         tooltip_action.toggled.connect(self.toggle_tooltip)
+        tooltip_action.setToolTip('Show or hide the tooltip')
+        tooltip_action.setStatusTip('Show or hide the tooltip')
+        tooltip_action.setWhatsThis('Show or hide the tooltip')
+        tooltip_action.setShortcut('alt+6')
         self.addAction(tooltip_action)
 
         @QtCore.Slot()
-        def set_negative_span(action: QtGui.QAction) -> None:
-            lib.settings['negative_span'] = action.data().months
+        def set_negative_span(a: QtGui.QAction) -> None:
+            lib.settings['negative_span'] = a.data().months
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        self.addAction(action)
 
         # Span selection submenu
         span_menu = QtWidgets.QMenu('Span', self)
@@ -153,6 +182,11 @@ class TrendGraph(QtWidgets.QWidget):
             span_menu.addAction(act)
         span_group.triggered.connect(set_negative_span)
         self.addAction(span_menu.menuAction())
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        self.addAction(action)
 
         # Loess fraction adjustment action
         smooth_action = QtGui.QAction('Adjust Smoothing...', self)
@@ -279,7 +313,14 @@ class TrendGraph(QtWidgets.QWidget):
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
 
+        # Check if the bottom axis is near the top
+        small = self._geom.baseline_y < self._geom.area.top() + ui.Size.Margin(0.5)
+
         self._draw_background(painter)
+
+        if small:
+            return
+
         if self._show_axes:
             self._draw_axes(painter)
         if self._show_bars:
@@ -302,7 +343,7 @@ class TrendGraph(QtWidgets.QWidget):
         rect = self.rect().adjusted(o, o, -o, -o)
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(ui.Color.LightBackground())
 
         o = ui.Size.Indicator(2.0)
@@ -390,13 +431,13 @@ class TrendGraph(QtWidgets.QWidget):
 
         if n > 0:
             painter.setPen(QtGui.QPen(ui.Color.Text()))
-            painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+            painter.setBrush(QtCore.Qt.NoBrush)
 
             # draw first and last labels (always)
             first_lbl, first_rect = make_label(0, metrics)
-            painter.drawText(first_rect, first_lbl, QtCore.Qt.AlignmentFlag.AlignCenter)
+            painter.drawText(first_rect, first_lbl, QtCore.Qt.AlignCenter)
             last_lbl, last_rect = make_label(n - 1, metrics)
-            painter.drawText(last_rect, last_lbl, QtCore.Qt.AlignmentFlag.AlignCenter)
+            painter.drawText(last_rect, last_lbl, QtCore.Qt.AlignCenter)
 
             # track occupied regions and draw intermediates that don't overlap
             occupied = [first_rect, last_rect]
@@ -407,7 +448,7 @@ class TrendGraph(QtWidgets.QWidget):
                     continue
 
                 if j % 2 == 1:
-                    painter.drawText(rct, lbl, QtCore.Qt.AlignmentFlag.AlignCenter)
+                    painter.drawText(rct, lbl, QtCore.Qt.AlignCenter)
                 j += 1
                 occupied.append(rct)
 
@@ -448,7 +489,6 @@ class TrendGraph(QtWidgets.QWidget):
         base_color_rgb = cfg.get(self._current_category, {}) \
             .get('color', ui.Color.SecondaryText().name(QtGui.QColor.HexRgb))
         base_color = QtGui.QColor(base_color_rgb)
-        base_alpha = 0.5
 
         # categorize bars by computed alpha
         pen = QtGui.QPen(QtCore.Qt.NoPen)
@@ -456,28 +496,20 @@ class TrendGraph(QtWidgets.QWidget):
         pen.setWidthF(ui.Size.Separator(1.0))
         painter.setPen(pen)
 
-        union_path: QtGui.QPainterPath | None = None
-        for rect in geom.bars:
-            rect_path = QtGui.QPainterPath()
-            rect_path.addRoundedRect(
-                rect,
-                ui.Size.Separator(1.0),
-                ui.Size.Separator(1.0),
-            )
-            if union_path is None:
-                union_path = rect_path
-            else:
-                union_path = union_path.united(rect_path)
+        theme_color = ui.Color.VeryDarkBackground()
+        # blend base color with theme color
+        rate = 0.5
+        blend_color = QtGui.QColor(
+            int(base_color.red() * rate + theme_color.red() * (1 - rate)),
+            int(base_color.green() * rate + theme_color.green() * (1 - rate)),
+            int(base_color.blue() * rate + theme_color.blue() * (1 - rate))
+        )
+
 
         # simplify to eliminate interior overlaps and redundant segments
-        if not union_path:
-            return
-
-        union_path = union_path.simplified()
-        full_color = QtGui.QColor(base_color)
-        full_color.setAlphaF(base_alpha)
-        painter.setBrush(QtGui.QBrush(full_color))
-        painter.drawPath(union_path)
+        painter.setBrush(blend_color)
+        for rect in geom.bars:
+            painter.drawRoundedRect(rect, ui.Size.Indicator(0.5), ui.Size.Indicator(0.5))
 
     @paint
     def _draw_trend(self, painter: QtGui.QPainter) -> None:
@@ -489,15 +521,16 @@ class TrendGraph(QtWidgets.QWidget):
         color = QtGui.QColor(
             cfg.get(self._current_category, {}).get('color', ui.Color.SecondaryText().name(QtGui.QColor.HexRgb)))
 
+        painter.setBrush(QtCore.Qt.NoBrush)
+
         pen = QtGui.QPen(color)
         pen.setCosmetic(True)
         pen.setWidthF(ui.Size.Indicator(1.0))
-        # round line caps and joins for smoother rendering
-        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
         painter.setPen(pen)
-        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
         painter.drawPath(geom.trend_path)
 
     @paint
@@ -614,7 +647,7 @@ class TrendGraph(QtWidgets.QWidget):
         if y < ax.top():
             y = my + margin
         tooltip_rect = QtCore.QRectF(x, y, w, h)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(ui.Color.DarkBackground())
         painter.drawRoundedRect(tooltip_rect, r, r)
         painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
@@ -651,13 +684,11 @@ class TrendGraph(QtWidgets.QWidget):
                 gap = default_gap
             step = bar_w + gap
 
-        # Determine original data range
+        # Determine original data range based solely on bar values to avoid sign flips
         bar_min = self._bar_series.min(skipna=True)
         bar_max = self._bar_series.max(skipna=True)
-        trend_min = self._trend_series.min(skipna=True)
-        trend_max = self._trend_series.max(skipna=True)
-        orig_min = min(bar_min, trend_min)
-        orig_max = max(bar_max, trend_max)
+        orig_min = bar_min
+        orig_max = bar_max
 
         # Decide if only positive or only negative values
         only_positive = orig_min >= 0.0
@@ -750,6 +781,7 @@ class TrendGraph(QtWidgets.QWidget):
         # record mouse position for tooltip anchoring
         self._hover_pos = pos
         hovered: Optional[int] = None
+
         # detect hover by checking proximity to each bar rectangle
         tol = ui.Size.Margin(1.0)
         ptf = QtCore.QPointF(pos.x(), pos.y())
@@ -758,6 +790,7 @@ class TrendGraph(QtWidgets.QWidget):
             if hit_rect.contains(ptf):
                 hovered = idx
                 break
+
         # update hover state
         if hovered != self._hover_index:
             self._hover_index = hovered
@@ -769,7 +802,8 @@ class TrendGraph(QtWidgets.QWidget):
                 self._hover_text = f"{date_str}: {total_str}"
             else:
                 self._hover_text = None
-            self.update()
+
+        self.update()
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event: QtCore.QEvent) -> None:
