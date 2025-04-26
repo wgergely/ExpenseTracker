@@ -56,35 +56,41 @@ def metadata():
 def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
     """
     Return a DataFrame that contains **exactly** the columns defined in the
-    '[mapping]' section of the config (**lib.DATA_MAPPING_KEYS** order).
+    '[mapping]' section of the config (**lib.TRANSACTION_DATA_COLUMNS** order).
 
     * Columns in the file but not in mapping are discarded.
     * Columns specified in mapping but missing in the file create empty Series.
     * Merge syntax supported:  description = Desc+Notes   etc.
     """
-    cfg = lib.settings.get_section("mapping")
+    cfg = lib.settings.get_section('mapping')
     if not cfg:
-        logging.error("Header mapping missing in config")
-        return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
+        logging.error('Header mapping missing in config')
+        return pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
 
-    # build merge-map → {internal_key: [raw_col1, raw_col2, ...]}
+    # build a merge-map → {internal_key: [raw_col1, raw_col2, etc.]}
     merge_map: dict[str, list[str]] = {key: [] for key in lib.DATA_MAPPING_KEYS}
     j = r"|".join(map(re.escape, lib.DATA_MAPPING_SEPARATOR_CHARS))
     for internal_key, raw_spec in cfg.items():
         for raw in re.split(j, raw_spec):
             merge_map.setdefault(internal_key, []).append(raw)
 
-    out = pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
+    # Build a DataFrame with exactly the configured mapping keys,
+    # preserving index for any additional columns like local_id
+    out = pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
     for internal_key, raw_cols in merge_map.items():
         present = [c for c in raw_cols if c in df.columns]
         if not present:
             # missing column → create empty
-            out[internal_key] = pd.Series(dtype="object")
+            out[internal_key] = pd.Series(dtype='object')
             continue
         if len(present) == 1:
             out[internal_key] = df[present[0]].copy()
         else:
             out[internal_key] = df[present].fillna("").astype(str).agg("\n".join, axis=1)
+
+    # Preserve local_id if present in the source df
+    if 'local_id' in df.columns:
+        out['local_id'] = df['local_id']
 
     return out
 
@@ -101,7 +107,7 @@ def _conform_date_column(df: pd.DataFrame) -> pd.DataFrame:
     # Check if the date column is empty after conversion
     if clean_df['date'].empty:
         logging.error('Date column is empty after conversion. No valid dates found.')
-        return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
+        return pd.DataFrame(columns=lib.TRANSACTION_DATA_COLUMNS)
 
     # Sort data by date
     clean_df = clean_df.sort_values(by='date', ascending=True).reset_index(drop=True)
@@ -280,8 +286,8 @@ def get_data(
         logging.debug('Excluding positive amounts')
         df = df[df['amount'] <= 0]
 
-    config = lib.settings.get_section('mapping')
-    transaction_columns = list(config.keys())
+    # Use fixed transaction columns (including local_id) for record payloads
+    transaction_columns = lib.TRANSACTION_DATA_COLUMNS.copy()
 
     # Fallback locale
     _locale = lib.settings['locale']
