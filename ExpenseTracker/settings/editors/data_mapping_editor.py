@@ -155,8 +155,29 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         if drop_col != 1:
             drop_col = 1
 
-        # Set the cell value
-        success = self.setData(self.index(drop_row, drop_col), header_name, QtCore.Qt.EditRole)
+        # Determine key for this row
+        key = lib.DATA_MAPPING_KEYS[drop_row]
+        existing = self._mapping.get(key, '')
+        # Parse existing components
+        from ..lib import parse_mapping_spec, DATA_MAPPING_SEPARATOR_CHARS
+        sep = DATA_MAPPING_SEPARATOR_CHARS[0] if DATA_MAPPING_SEPARATOR_CHARS else '|'
+        parts = parse_mapping_spec(existing)
+        # Determine keyboard modifiers
+        mods = QtWidgets.QApplication.keyboardModifiers()
+        if mods & QtCore.Qt.ShiftModifier:
+            # replace
+            new_parts = [header_name]
+        elif mods & QtCore.Qt.AltModifier:
+            # remove
+            new_parts = [p for p in parts if p != header_name]
+        else:
+            # append (default), avoid duplicates
+            new_parts = parts.copy()
+            if header_name not in new_parts:
+                new_parts.append(header_name)
+        new_spec = sep.join(new_parts)
+        # Update mapping
+        success = self.setData(self.index(drop_row, drop_col), new_spec, QtCore.Qt.EditRole)
         return success
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
@@ -181,22 +202,21 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         editor = QtWidgets.QLineEdit(parent)
         headers = lib.settings.get_section('header').keys()
         completer = QtWidgets.QCompleter(headers, editor)
-
         completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         completer.setCompletionMode(QtWidgets.QCompleter.UnfilteredPopupCompletion)
-
         editor.setCompleter(completer)
+        # When a completion is activated, merge/replace/remove based on modifiers
+        completer.activated[str].connect(lambda text, ed=editor: self._on_completer_activated(ed, text))
         return editor
 
     def setEditorData(self, editor, index):
         if editor is None:
             return
-
+        # store index for drop/complete handlers
+        editor._delegate_index = index
         value = index.model().data(index, QtCore.Qt.EditRole)
         editor.setText(value or '')
-
         QtCore.QTimer.singleShot(0, lambda: (editor.setFocus(), editor.selectAll()))
-
         if editor.completer():
             editor.completer().complete()
 

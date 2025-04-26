@@ -72,6 +72,14 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
             'description': row.get('description'),
         }
         orig = row.get(column)
+        # If an edit for this cell is already queued, squash it (keep orig_value, update new_value)
+        for op in self._queue:
+            if op.local_id == local_id and op.column == column:
+                op.new_value = new_value
+                # emit queue size unchanged
+                self.queueChanged.emit(len(self._queue))
+                return
+        # otherwise append a new operation
         self._queue.append(EditOperation(local_id, column, orig, new_value, stable))
         # notify UI of queue size change
         self.queueChanged.emit(len(self._queue))
