@@ -18,7 +18,11 @@ class TransactionsView(QtWidgets.QTableView):
 
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        # Allow editing of editable cells via double-click or pressing F2
+        self.setEditTriggers(
+            QtWidgets.QAbstractItemView.DoubleClicked |
+            QtWidgets.QAbstractItemView.EditKeyPressed
+        )
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
@@ -45,11 +49,20 @@ class TransactionsView(QtWidgets.QTableView):
         proxy = TransactionsSortFilterProxyModel(self)
         proxy.setSourceModel(model)
         self.setModel(proxy)
+        # use a custom delegate for category editing with icons and edit-border
+        from ...ui.delegates import CategoryDelegate
+        delegate = CategoryDelegate(self)
+        self.setItemDelegateForColumn(Columns.Category.value, delegate)
 
         self._init_section_sizing()
 
         self.setSortingEnabled(True)
         self.sortByColumn(Columns.Amount.value, QtCore.Qt.AscendingOrder)
+
+        # Hide internal local_id column (not user-facing)
+        from ...settings import lib
+        last_col = len(lib.TRANSACTION_DATA_COLUMNS) - 1
+        self.setColumnHidden(last_col, True)
 
     def _init_actions(self) -> None:
         action_group = QtGui.QActionGroup(self)
@@ -231,6 +244,18 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         self.view = None
 
         self._create_ui()
+        self._connect_signals()
+        # update status when queue size changes
+        from ...core.sync import sync_manager
+        sync_manager.queueChanged.connect(self._on_queue_changed)
+
+    def _connect_signals(self):
+        # Refresh sync button when commit finishes
+        from ...core.sync import sync_manager
+
+        sync_manager.commitFinished.connect(lambda _: self._update_sync_button())
+        self.sync_button.clicked.connect(sync_manager.commit_queue_async)
+        self.view.model().dataChanged.connect(self._update_sync_button)
 
     def _create_ui(self) -> None:
         content = QtWidgets.QWidget(self)
@@ -240,8 +265,20 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         content.layout().setContentsMargins(o, o, o, o)
         content.layout().setSpacing(o)
 
+        # Transaction table
         self.view = TransactionsView(content)
         content.layout().addWidget(self.view, 1)
+        # Pending edits status label (rich text)
+        self.status_label = QtWidgets.QLabel('', content)
+        self.status_label.setVisible(False)
+        self.status_label.setTextFormat(QtCore.Qt.RichText)
+        content.layout().addWidget(self.status_label)
+
+        # Button to push queued edits
+        self.sync_button = QtWidgets.QPushButton('Push Edits', content)
+        self.sync_button.setVisible(False)
+        self.sync_button.setEnabled(False)
+        content.layout().addWidget(self.sync_button)
 
         self.setWidget(content)
 
@@ -250,3 +287,22 @@ class TransactionsWidget(QtWidgets.QDockWidget):
             ui.Size.DefaultWidth(1.0),
             ui.Size.DefaultHeight(1.0)
         )
+
+    def _update_sync_button(self) -> None:
+        """Enable or disable the sync button based on queued edits."""
+        from ...core.sync import sync_manager
+        self.sync_button.setEnabled(bool(sync_manager.get_queued_ops()))
+
+    @QtCore.Slot(int)
+    def _on_queue_changed(self, count: int) -> None:
+        """
+        Show or hide the pending-edits status and button based on queue size.
+        """
+        if count > 0:
+            self.status_label.setText(f'<b>{count}</b> edit(s) pending')
+            self.status_label.setVisible(True)
+            self.sync_button.setVisible(True)
+            self.sync_button.setEnabled(True)
+        else:
+            self.status_label.setVisible(False)
+            self.sync_button.setVisible(False)

@@ -240,9 +240,8 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         from .views import TableView
         self.view = TableView(parent=self)
-        self.view.setItemDelegate(self.delegate)
-
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self.view.setItemDelegate(self.delegate)
 
         self.view.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked |
@@ -253,40 +252,81 @@ class DataMappingEditor(QtWidgets.QWidget):
         self.view.setDragDropMode(QtWidgets.QAbstractItemView.DropOnly)
         self.view.setDropIndicatorShown(True)
 
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
         layout.addWidget(self.view)
         self.setLayout(layout)
 
     def _init_actions(self):
-        QtCore.Slot()
-
+        @QtCore.Slot()
         def save_to_disk():
             lib.settings.set_section('mapping', self.view.modelw().get_current_section_data())
 
         action = QtGui.QAction('Save to Disk', self.view)
-
+        action.setToolTip('Save the current mapping to disk')
+        action.setStatusTip('Save the current mapping to disk')
+        action.setWhatsThis('Save the current mapping to disk')
         action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
         action.triggered.connect(save_to_disk)
-        self.view.addAction(action)
+        self.addAction(action)
+
+        # separator
+        action = QtGui.QAction(self.view)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
+
+        @QtCore.Slot()
+        def verify() -> None:
+            from ...core import service
+            try:
+                service.verify_mapping()
+                QtWidgets.QMessageBox.information(
+                    self.parent() or None,
+                    'Mapping OK',
+                    'Header mapping is valid.')
+            except Exception as ex:
+                QtWidgets.QMessageBox.critical(
+                    self.parent() or None,
+                    'Mapping Error',
+                    f'Mapping verification failed: {ex}')
+
+        action = QtGui.QAction('Verify Mapping...', self)
+        action.setShortcut('Ctrl+M')
+        action.setStatusTip('Verify header mapping against remote sheet')
+        action.setIcon(ui.get_icon('btn_ok', color=ui.Color.Green))
+        action.triggered.connect(verify)
+        self.addAction(action)
+
+        # separator
+        action = QtGui.QAction(self.view)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.addAction(action)
 
         @QtCore.Slot()
         def revert_to_defaults():
             lib.settings.revert_section('mapping')
 
         action = QtGui.QAction('Revert', self.view)
-
+        action.setToolTip('Revert to the default mapping')
+        action.setStatusTip('Revert to the default mapping')
+        action.setWhatsThis('Revert to the default mapping')
         action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
         action.triggered.connect(revert_to_defaults)
-        self.view.addAction(action)
+        self.addAction(action)
 
         @QtCore.Slot()
         def reload_from_disk():
             lib.settings.reload_section('mapping')
 
         action = QtGui.QAction('Refresh', self.view)
-
+        action.setToolTip('Reload the mapping from disk')
+        action.setStatusTip('Reload the mapping from disk')
+        action.setWhatsThis('Reload the mapping from disk')
         action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
         action.triggered.connect(reload_from_disk)
-        self.view.addAction(action)
+        self.addAction(action)
 
     def _init_model(self):
         model = DataMappingModel()

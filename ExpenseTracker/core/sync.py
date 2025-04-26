@@ -47,6 +47,7 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
     """
     commitFinished = QtCore.Signal(object)
     dataUpdated = QtCore.Signal(list)
+    queueChanged = QtCore.Signal(int)
 
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
@@ -72,6 +73,8 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
         }
         orig = row.get(column)
         self._queue.append(EditOperation(local_id, column, orig, new_value, stable))
+        # notify UI of queue size change
+        self.queueChanged.emit(len(self._queue))
 
     def get_queued_ops(self) -> List[EditOperation]:  # noqa: WPS210
         """Return the list of pending edits."""
@@ -80,6 +83,8 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
     def clear_queue(self) -> None:
         """Discard all pending edits."""
         self._queue.clear()
+        # notify UI the queue is now empty
+        self.queueChanged.emit(0)
 
     def commit_queue(self) -> Dict[int, Tuple[bool, str]]:
         """
@@ -208,8 +213,10 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
                 DatabaseAPI.update_cell(op.local_id, op.column, op.new_value)
             except Exception:
                 logging.exception(f'Failed to update local cache for id {op.local_id}')
+
         # notify listeners that local data has been updated
         self.dataUpdated.emit([op for op, _ in to_update])
+
         # clear the edit queue
         self.clear_queue()
         return results

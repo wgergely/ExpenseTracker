@@ -6,7 +6,6 @@ and retrieve the specified worksheet as a pandas DataFrame and its headers async
 """
 
 import logging
-import re
 import socket
 import ssl
 import string
@@ -322,14 +321,15 @@ def _verify_mapping(remote_headers: List[str] = None) -> None:
     if not config:
         raise status.HeaderMappingInvalidException
 
+    # Build the list of header names referenced by mapping (split merged specs)                                                                                                                               │
     config_headers: List[str] = []
-    for k, v in config.items():
-        j: str = '\\'.join(lib.DATA_MAPPING_SEPARATOR_CHARS)
-        for _v in re.split(fr'[\{j}]', v):
-            if k not in config_headers:
-                config_headers.append(_v)
+    from ..settings.lib import parse_mapping_spec
+    for raw_spec in config.values():
+        for hdr in parse_mapping_spec(raw_spec):
+            if hdr not in config_headers:
+                config_headers.append(hdr)
 
-    config_headers_set: Set[str] = set(sorted(config_headers))
+    config_headers_set: Set[str] = set(config_headers)
     logging.debug(f'Header mapping configuration found {len(config_headers_set)} columns.')
 
     remote_headers: List[str] = remote_headers or _fetch_headers()
