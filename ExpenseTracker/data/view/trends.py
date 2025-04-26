@@ -1,43 +1,29 @@
 """
-TrendGraph widget — now with a **single geometry cache** and no NumPy.
-
-Layers
-------
-0. axes
-1. monthly_total column bars
-2. smoothed trend curve (ewma or loess)
-
-External API  (all Qt slots)
-----------------------------
-set_category(str)     -> switch category
-toggle_bars(bool)     -> show / hide bar layer
-toggle_trend(bool)    -> show / hide trend layer
-set_padding(float)    -> 0-to-1 gap ratio
 """
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..data import DataWindow
 from ...data.data import get_trends
 from ...settings import lib
+from ...settings import locale as _locale
 from ...ui import ui
 from ...ui.actions import signals
 
 
-def paintmethod(func):  # type: ignore[valid-type]
+def paint(func):  # type: ignore[valid-type]
     """Decorator to wrap paint helpers with save/restore + exception log."""
 
     def wrapper(self, painter: QtGui.QPainter) -> None:  # type: ignore[valid-type]
         painter.save()
         try:
             func(self, painter)
-        except Exception:
-            logging.exception('TrendGraph: error in %s', func.__name__)
+        except (Exception, BaseException) as ex:
+            logging.error(f'TrendGraph: error in {func.__name__}', exc_info=ex)
         painter.restore()
 
     return wrapper
@@ -63,10 +49,8 @@ class TrendGraph(QtWidgets.QWidget):
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
 
-        # source data
-        self._df_all: pd.DataFrame = pd.DataFrame()
-        self._df_view: pd.DataFrame = pd.DataFrame()
-        self._categories: List[str] = []
+        # source data for current category
+        self._df: pd.DataFrame = pd.DataFrame()
         self._current_category: Optional[str] = None
 
         # convenient slices for the active category
@@ -84,38 +68,62 @@ class TrendGraph(QtWidgets.QWidget):
         self._show_trend: bool = True
 
         self.setMouseTracking(True)
+        # index, text, and position of currently hovered bar, for highlighting and custom tooltip
+        self._hover_index: Optional[int] = None
+        self._hover_text: Optional[str] = None
+        self._hover_pos: Optional[QtCore.QPoint] = None
         self._connect_signals()
         self._init_actions()
 
-        QtCore.QTimer.singleShot(50, self.init_data)
+        # Start with no data; trends load on category selection
+        QtCore.QTimer.singleShot(50, self.clear_data)
 
     def _connect_signals(self) -> None:
         signals.categoryChanged.connect(self.set_category)
-        signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.dataFetched.connect(self.init_data)
+        # reload for current category when date range changes
+        signals.dataRangeChanged.connect(self._on_data_range_changed)
+        # clear trends on preset activation; categoryChanged will reload when needed
         signals.presetActivated.connect(self.clear_data)
-        signals.presetActivated.connect(self.init_data)
 
     def _init_actions(self) -> None:
         """Placeholder for future QAction or context-menu wiring."""
         pass
 
+    @QtCore.Slot(str, int)
+    def _on_data_range_changed(self, yearmonth: str, span: int) -> None:
+        """Reload current category trends when the date range changes."""
+        logging.debug(f'TrendGraph: dataRangeChanged received yearmonth={yearmonth}, span={span}')
+        # reload for the active category
+        if self._current_category:
+            self.set_category(self._current_category)
+
     @QtCore.Slot(str)
     def set_category(self, category: str) -> None:
-        if not self._categories:
-            logging.warning('TrendGraph: no data loaded yet')
-            return
-        if category not in self._categories:
-            logging.warning('TrendGraph: %s not among %s', category, self._categories)
+        """Load and show trends for the specified category."""
+        # clear if no valid category
+        if not category:
+            self.clear_data()
             return
 
         self._current_category = category
-        self._df_view = self._df_all[self._df_all['category'] == category]
-
-        self._dates = self._df_view['month']
-        self._bar_series = self._df_view['monthly_total']
-        self._trend_series = self._df_view[self._trend_key]
-
+        # fetch category-specific trend data
+        try:
+            df = get_trends(category=category, negative_span=120)
+        except Exception as exc:
+            logging.error('TrendGraph: failed to fetch trends for %s: %s', category, exc)
+            self.clear_data()
+            return
+        # if no data, clear and return
+        if df.empty:
+            logging.debug('TrendGraph: no trend data for category %s', category)
+            self.clear_data()
+            return
+        # update series directly
+        self._df = df
+        self._dates = df['month']
+        self._bar_series = df['monthly_total']
+        self._trend_series = df[self._trend_key]
+        # rebuild geometry and repaint
         self._rebuild_geometry()
         self.update()
 
@@ -152,10 +160,29 @@ class TrendGraph(QtWidgets.QWidget):
         if self._show_trend:
             self._draw_trend(painter)
         self._draw_labels(painter)
+        # draw hover highlight and tooltip
+        self._draw_tooltip(painter)
 
-    @paintmethod
+    @paint
     def _draw_axes(self, painter: QtGui.QPainter) -> None:
+        """
+        Draws the axes for a graphical representation using the provided painter object.
+
+        This method uses the given `QtGui.QPainter` to draw the axes, including the
+        vertical and horizontal axis lines, tick marks, and axis labels. It handles
+        font settings, rendering hints, and axis legend placement appropriately
+        based on geometrical and locale-specific settings.
+
+        Args:
+            painter: The `QtGui.QPainter` instance used to perform the drawing operations.
+
+        """
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+
         geom = self._geom
+        # use thin small font for axis legends
+        font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+        painter.setFont(font)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, False)
         painter.setPen(QtGui.QPen(self.palette().color(QtGui.QPalette.Text)))
 
@@ -170,60 +197,173 @@ class TrendGraph(QtWidgets.QWidget):
             for rect in (geom.bars[0], geom.bars[-1]):
                 x = rect.x() + rect.width() / 2
                 painter.drawLine(x, geom.baseline_y, x, geom.baseline_y + tick)
-        # Y-axis legend: show data_max at top, data_min at baseline
+        # Y-axis legend: show data_max at top, data_min at baseline (inside area)
+        # use secondary text color for labels
+        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
         metrics = painter.fontMetrics()
         offset = ui.Size.Separator(2.0)
-        max_lbl = f"{geom.data_max:.2f}"
+        # format axis labels according to user locale
+        max_lbl = _locale.format_currency_value(geom.data_max, lib.settings['locale'])
+        # draw to the right of y-axis
         painter.drawText(
             QtCore.QPointF(
-                geom.area.left() - metrics.horizontalAdvance(max_lbl) - offset,
+                geom.area.left() + offset,
                 geom.area.top() + metrics.ascent()
             ), max_lbl
         )
-        min_lbl = f"{geom.data_min:.2f}"
+        min_lbl = _locale.format_currency_value(geom.data_min, lib.settings['locale'])
         painter.drawText(
             QtCore.QPointF(
-                geom.area.left() - metrics.horizontalAdvance(min_lbl) - offset,
+                geom.area.left() + offset,
                 geom.baseline_y
             ), min_lbl
         )
+        # draw X-axis date labels under each bar, avoiding overlaps
+        date_font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+        painter.setFont(date_font)
+        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
+        metrics = painter.fontMetrics()
+        pad = ui.Size.Indicator(1.0)
+        drawn: list[QtCore.QRectF] = []
+        n = len(geom.bars)
+        for i, (rect, dt) in enumerate(zip(geom.bars, self._dates)):
+            # format month label
+            try:
+                label = dt.strftime('%b %Y')
+            except Exception:
+                label = str(dt)
+            w = metrics.horizontalAdvance(label)
+            h = metrics.height()
+            cx = rect.x() + rect.width() / 2
+            x0 = cx - w / 2
+            y0 = geom.baseline_y + pad  # top of text
+            txt_rect = QtCore.QRectF(x0, y0, w, h)
+            # always draw first and last
+            if i == 0 or i == n - 1:
+                painter.drawText(QtCore.QPointF(x0, y0 + metrics.ascent()), label)
+                drawn.append(txt_rect)
+                continue
+            # skip if overlaps any previous text
+            if any(r.intersects(txt_rect) for r in drawn):
+                continue
+            painter.drawText(QtCore.QPointF(x0, y0 + metrics.ascent()), label)
+            drawn.append(txt_rect)
 
-    @paintmethod
+    @paint
     def _draw_bars(self, painter: QtGui.QPainter) -> None:
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+
         geom = self._geom
         if not geom.bars:
             return
         cfg = lib.settings.get_section('categories') or {}
-        color = QtGui.QColor(cfg.get(self._current_category, {}).get('color', '#000000'))
-        color.setAlphaF(0.5)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(color)
-        for rect in geom.bars:
-            painter.drawRect(rect)
+        base_color_rgb = cfg.get(self._current_category, {}) \
+            .get('color', ui.Color.SecondaryText().name(QtGui.QColor.HexRgb))
+        base_color = QtGui.QColor(base_color_rgb)
+        base_alpha = 0.5
 
-    @paintmethod
+        # categorize bars by computed alpha
+        pen = QtGui.QPen(QtCore.Qt.NoPen)
+        pen.setCosmetic(True)
+        pen.setWidthF(ui.Size.Separator(1.0))
+        painter.setPen(pen)
+
+        union_path: QtGui.QPainterPath | None = None
+        for rect in geom.bars:
+            rect_path = QtGui.QPainterPath()
+            rect_path.addRoundedRect(
+                rect,
+                ui.Size.Separator(1.0),
+                ui.Size.Separator(1.0),
+            )
+            if union_path is None:
+                union_path = rect_path
+            else:
+                union_path = union_path.united(rect_path)
+
+        # simplify to eliminate interior overlaps and redundant segments
+        if not union_path:
+            return
+
+        union_path = union_path.simplified()
+        full_color = QtGui.QColor(base_color)
+        full_color.setAlphaF(base_alpha)
+        painter.setBrush(QtGui.QBrush(full_color))
+        painter.drawPath(union_path)
+
+    @paint
     def _draw_trend(self, painter: QtGui.QPainter) -> None:
         geom = self._geom
         if geom.trend_path.isEmpty():
             return
+
         cfg = lib.settings.get_section('categories') or {}
-        color = QtGui.QColor(cfg.get(self._current_category, {}).get('color', '#000000'))
+        color = QtGui.QColor(
+            cfg.get(self._current_category, {}).get('color', ui.Color.SecondaryText().name(QtGui.QColor.HexRgb)))
+
         pen = QtGui.QPen(color)
         pen.setCosmetic(True)
-        pen.setWidthF(ui.Size.Separator(3.0))
+        pen.setWidthF(ui.Size.Indicator(1.0))
+        # round line caps and joins for smoother rendering
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         painter.setPen(pen)
         painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         painter.drawPath(geom.trend_path)
 
-    @paintmethod
+    @paint
     def _draw_labels(self, painter: QtGui.QPainter) -> None:
+        # draw only the label for the hovered column
         geom = self._geom
-        if not geom.labels:
+        idx = self._hover_index
+        if idx is None or not geom.labels or idx < 0 or idx >= len(geom.labels):
             return
-        painter.setPen(self.palette().color(QtGui.QPalette.Text))
-        for static_text, pos in geom.labels:
-            painter.drawStaticText(pos, static_text)
+        static_text, pos = geom.labels[idx]
+        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
+        painter.drawStaticText(pos, static_text)
+
+    @paint
+    def _draw_tooltip(self, painter: QtGui.QPainter) -> None:
+        """Draw hover highlight and tooltip."""
+        if self._hover_index is None or not self._hover_text or self._hover_pos is None:
+            return
+
+        # highlight hovered bar
+        bars = self._geom.bars
+        idx = self._hover_index
+        if 0 <= idx < len(bars):
+            pen = QtGui.QPen(self.palette().color(QtGui.QPalette.Highlight))
+            pen.setWidthF(ui.Size.Separator(1.0))
+            painter.setPen(pen)
+            painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+            painter.drawRect(bars[idx])
+        # draw tooltip
+        font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        text = self._hover_text
+        tw = metrics.horizontalAdvance(text)
+        th = metrics.height()
+        pad = ui.Size.Indicator(2.0)
+        r = pad
+        w = tw + pad * 2
+        h = th + pad * 2
+        mx = self._hover_pos.x()
+        my = self._hover_pos.y()
+        ax = self._geom.area
+        x = mx - w / 2
+        x = max(ax.left(), min(x, ax.right() - w))
+        margin = ui.Size.Separator(3.0)
+        y = my - h - margin
+        if y < ax.top():
+            y = my + margin
+        tooltip_rect = QtCore.QRectF(x, y, w, h)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(ui.Color.DarkBackground())
+        painter.drawRoundedRect(tooltip_rect, r, r)
+        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
+        painter.drawText(QtCore.QPointF(x + pad, y + pad + metrics.ascent()), text)
 
     def _rebuild_geometry(self) -> None:
         """Populate self._geom from current data + widget size."""
@@ -231,52 +371,106 @@ class TrendGraph(QtWidgets.QWidget):
         geom = self._geom
 
         rect = self.contentsRect()
-        m = ui.Size.Margin(1.0)
+        m = ui.Size.Margin(2.0)
         geom.area = QtCore.QRectF(rect.adjusted(m, m, -m, -m))
 
         if self._bar_series.empty:
             return
 
         n = len(self._bar_series)
-        x_step = geom.area.width() / n
-        bar_w = x_step * (1.0 - self._padding)
-        gap = x_step * self._padding
+        # calculate bar width and gap; enforce minimum bar width and full span (allow overlap)
+        w = geom.area.width()
+        min_w = ui.Size.Indicator(1.0)
+        if n == 1:
+            bar_w = w
+            step = bar_w
+        else:
+            default_gap = ui.Size.Separator(1.0)
+            # initial bar width with a default gap
+            bar_w = (w - default_gap * (n - 1)) / n
+            if bar_w < min_w:
+                # clamp to a minimum and compute a dynamic gap for full coverage
+                bar_w = min_w
+                gap = (w - bar_w * n) / (n - 1)
+            else:
+                gap = default_gap
+            step = bar_w + gap
 
-        data_min = min(0.0,
-                       self._bar_series.min(skipna=True),
-                       self._trend_series.min(skipna=True))
-        data_max = max(0.0,
-                       self._bar_series.max(skipna=True),
-                       self._trend_series.max(skipna=True))
-        # store for axis legend
+        # Determine original data range
+        bar_min = self._bar_series.min(skipna=True)
+        bar_max = self._bar_series.max(skipna=True)
+        trend_min = self._trend_series.min(skipna=True)
+        trend_max = self._trend_series.max(skipna=True)
+        orig_min = min(bar_min, trend_min)
+        orig_max = max(bar_max, trend_max)
+
+        # Decide if only positive or only negative values
+        only_positive = orig_min >= 0.0
+        only_negative = orig_max <= 0.0
+
+        if only_positive or only_negative:
+            # Use absolute values and baseline at bottom
+            values_for_bars = self._bar_series.abs()
+            values_for_trend = self._trend_series.abs()
+            data_min = 0.0
+            data_max = max(values_for_bars.max(skipna=True),
+                           values_for_trend.max(skipna=True))
+            geom.baseline_y = geom.area.bottom()
+        else:
+            # Mixed values: keep sign, baseline proportional
+            values_for_bars = self._bar_series
+            values_for_trend = self._trend_series
+            data_min = min(0.0, orig_min)
+            data_max = max(0.0, orig_max)
+            geom.baseline_y = geom.area.bottom() - (-data_min / (data_max - data_min or 1.0)) * geom.area.height()
+        # clamp baseline within drawing area
+        geom.baseline_y = max(min(geom.baseline_y, geom.area.bottom()), geom.area.top())
+
+        # Store range for axis legend
         geom.data_min = data_min
         geom.data_max = data_max
         rng = data_max - data_min or 1.0
-        geom.baseline_y = geom.area.bottom() - (-data_min / rng) * geom.area.height()
 
-        # bars
-        for i, val in enumerate(self._bar_series):
-            x0 = geom.area.left() + i * x_step + gap / 2
+        # Bars
+        for i in range(len(self._bar_series)):
+            orig_val = self._bar_series.iat[i]
+            val = values_for_bars.iat[i]
+            x0 = geom.area.left() + i * step
             ratio = (val - data_min) / rng
+            # clamp ratio to [0, 1]
+            ratio = max(0.0, min(ratio, 1.0))
             pix_h = ratio * geom.area.height()
-            if val >= 0:
-                y0, h = geom.baseline_y - pix_h, pix_h
+            if only_positive or only_negative:
+                y0 = geom.baseline_y - pix_h
+                h = pix_h
             else:
-                y0, h = geom.baseline_y, -pix_h
+                if orig_val >= 0:
+                    y0 = geom.baseline_y - pix_h
+                    h = pix_h
+                else:
+                    y0 = geom.baseline_y
+                    h = -pix_h
             geom.bars.append(QtCore.QRectF(x0, y0, bar_w, h))
 
-        # trend
-        for i, val in enumerate(self._trend_series):
-            x = geom.area.left() + i * x_step + x_step / 2
-            y_ratio = (val - data_min) / rng
-            y = geom.area.bottom() - y_ratio * geom.area.height()
+        # Trend
+        for i in range(len(self._trend_series)):
+            orig_val = self._trend_series.iat[i]
+            val = values_for_trend.iat[i]
+            x = geom.area.left() + i * step + bar_w / 2
+            ratio = (val - data_min) / rng
+            # clamp ratio to [0, 1]
+            ratio = max(0.0, min(ratio, 1.0))
+            y = geom.area.bottom() - ratio * geom.area.height()
             pt = QtCore.QPointF(x, y)
             geom.trend_points.append(pt)
-            geom.trend_path.moveTo(pt) if i == 0 else geom.trend_path.lineTo(pt)
+            if i == 0:
+                geom.trend_path.moveTo(pt)
+            else:
+                geom.trend_path.lineTo(pt)
 
         # labels
         for i, ts in enumerate(self._dates):
-            x_c = geom.area.left() + i * x_step + x_step / 2
+            x_c = geom.area.left() + i * step + bar_w / 2
             txt = QtGui.QStaticText(pd.Timestamp(ts).strftime('%b %Y'))
             size = txt.size()
             pos = QtCore.QPointF(x_c - size.width() / 2,
@@ -284,28 +478,9 @@ class TrendGraph(QtWidgets.QWidget):
             geom.labels.append((txt, pos))
 
     @QtCore.Slot()
-    def init_data(self) -> None:
-        """Load trend table and show first category."""
-        try:
-            self._df_all = get_trends(data_window=DataWindow.W6).copy()
-        except Exception as exc:
-            logging.error('TrendGraph: failed to load trends: %s', exc)
-            self.clear_data()
-            return
-
-        self._categories = sorted(self._df_all['category'].unique().tolist())
-        if not self._categories:
-            self.clear_data()
-            return
-
-        start = self._current_category if self._current_category in self._categories else self._categories[0]
-        self.set_category(start)
-
-    @QtCore.Slot()
     def clear_data(self) -> None:
-        self._df_all = pd.DataFrame()
-        self._df_view = pd.DataFrame()
-        self._categories.clear()
+        # clear current data
+        self._df = pd.DataFrame()
         self._current_category = None
 
         self._dates = pd.Index([])
@@ -315,6 +490,43 @@ class TrendGraph(QtWidgets.QWidget):
         self._geom = Geometry()
         self.update()
 
-    def export_paths(self) -> Dict[str, List]:
-        """Return geom lists for headless unit tests."""
-        return {'bars': list(self._geom.bars), 'trend_points': list(self._geom.trend_points)}
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        """Show tooltip and highlight label when hovering over a bar."""
+        pos = event.pos()
+        # record mouse position for tooltip anchoring
+        self._hover_pos = pos
+        hovered: Optional[int] = None
+        # detect nearest bar within a horizontal tolerance
+        tol = ui.Size.Margin(1.0)
+        best_dist = float('inf')
+        for idx, rect in enumerate(self._geom.bars):
+            cx = rect.x() + rect.width() / 2
+            dist = abs(pos.x() - cx)
+            if dist < best_dist:
+                best_dist = dist
+                hovered = idx
+        # if outside tolerance, clear hover
+        if best_dist > tol:
+            hovered = None
+        # update hover state
+        if hovered != self._hover_index:
+            self._hover_index = hovered
+            if hovered is not None:
+                # prepare custom tooltip text using locale currency formatting
+                date_str = pd.Timestamp(self._dates[hovered]).strftime('%b %Y')
+                total = self._bar_series.iat[hovered]
+                total_str = _locale.format_currency_value(total, lib.settings['locale'])
+                self._hover_text = f"{date_str}: {total_str}"
+            else:
+                self._hover_text = None
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event: QtCore.QEvent) -> None:
+        """Clear hover state when mouse leaves widget."""
+        if self._hover_index is not None or self._hover_text is not None:
+            self._hover_index = None
+            self._hover_text = None
+            self._hover_pos = None
+            self.update()
+        super().leaveEvent(event)

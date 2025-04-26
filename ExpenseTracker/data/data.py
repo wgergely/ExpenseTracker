@@ -9,7 +9,7 @@ import enum
 import functools
 import logging
 import re
-from typing import Union
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -35,14 +35,6 @@ class SummaryMode(enum.StrEnum):
     Monthly = 'monthly'
 
 
-class DataWindow(enum.IntEnum):
-    """History length (in months) that precedes the selected period."""
-    W3 = 3
-    W6 = 6
-    W12 = 12
-    W24 = 24
-
-
 def metadata():
     def decorator(func):
         @functools.wraps(func)
@@ -61,46 +53,40 @@ def metadata():
     return decorator
 
 
-def _conform_to_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
-    config = lib.settings.get_section('mapping')
-    if not config or not all(isinstance(v, str) for v in config.values()):
-        logging.error('Invalid header mapping configuration found in config')
+def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Return a DataFrame that contains **exactly** the columns defined in the
+    '[mapping]' section of the config (**lib.DATA_MAPPING_KEYS** order).
+
+    * Columns in the file but not in mapping are discarded.
+    * Columns specified in mapping but missing in the file create empty Series.
+    * Merge syntax supported:  description = Desc+Notes   etc.
+    """
+    cfg = lib.settings.get_section("mapping")
+    if not cfg:
+        logging.error("Header mapping missing in config")
         return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
 
-    difference = set(lib.DATA_MAPPING_KEYS).difference(set(config.keys()))
-    if difference:
-        logging.error(f'Header mapping is missing keys: {difference}')
-        return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
+    # build merge-map → {internal_key: [raw_col1, raw_col2, ...]}
+    merge_map: dict[str, list[str]] = {key: [] for key in lib.DATA_MAPPING_KEYS}
+    j = r"|".join(map(re.escape, lib.DATA_MAPPING_SEPARATOR_CHARS))
+    for internal_key, raw_spec in cfg.items():
+        for raw in re.split(j, raw_spec):
+            merge_map.setdefault(internal_key, []).append(raw)
 
-    # Implement the merge syntax parsing here for column mapping definitions, like
-    # description=Description+Notes+Account
-    merge_mapping = {}
-    for k, v in config.items():
-        j = '\\'.join(lib.DATA_MAPPING_SEPARATOR_CHARS)
-        for _v in re.split(fr'[{j}]', v):
-            if k not in merge_mapping:
-                merge_mapping[k] = []
-            merge_mapping[k].append(_v)
-
-    # Create empty df
-    new_df = pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
-
-    for k, v in merge_mapping.items():
-        new_df[k] = pd.Series(dtype='object')
-
-        logging.debug(f'Merging columns {v} into {k}')
-
-        if len(v) == 1:
-            new_df[k] = df[v[0]].copy()
+    out = pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
+    for internal_key, raw_cols in merge_map.items():
+        present = [c for c in raw_cols if c in df.columns]
+        if not present:
+            # missing column → create empty
+            out[internal_key] = pd.Series(dtype="object")
+            continue
+        if len(present) == 1:
+            out[internal_key] = df[present[0]].copy()
         else:
-            new_df[k] = df[v].fillna('').astype(str).agg('\n'.join, axis=1)
+            out[internal_key] = df[present].fillna("").astype(str).agg("\n".join, axis=1)
 
-    if set(new_df.columns.tolist()) != set(lib.DATA_MAPPING_KEYS):
-        logging.error(f'DataFrame columns do not match the expected header mapping keys. '
-                      f'Expected: {lib.DATA_MAPPING_KEYS}, Found: {df.columns.tolist()}')
-        return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
-
-    return new_df
+    return out
 
 
 def _conform_date_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -252,7 +238,22 @@ def get_data(
         summary_mode: str = SummaryMode.Total.value,
         add_total_row: bool = True,
 ) -> pd.DataFrame:
-    """Load and wrap data from the database.
+    """Load data from the local cache database, filter, and prepare it for analysis.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing transaction data.
+        hide_empty_categories (bool): Whether to hide empty categories.
+        exclude_negative (bool): Whether to exclude negative amounts.
+        exclude_zero (bool): Whether to exclude zero amounts.
+        exclude_positive (bool): Whether to exclude positive amounts.
+        yearmonth (str): Year and month in 'YYYY-MM' format.
+        span (int): Number of months to include in the analysis.
+        summary_mode (str): Summary mode, either 'total' or 'monthly'.
+        add_total_row (bool): Whether to add a total row to the output DataFrame.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the filtered and prepared data.
+
     """
     if df.empty:
         logging.warning('No data available in the database.')
@@ -261,11 +262,13 @@ def get_data(
     # Ensure span is at least 1
     span = max(int(span) if span else 1, 1)
 
-    df = _conform_to_header_mapping(df)
-    df = _conform_date_column(df)
-    df = _conform_amount_column(df)
-    df = _conform_string_columns(df)
-    df = _conform_period(df, yearmonth, span)
+    df = (
+        _strict_header_mapping(df)
+        .pipe(_conform_date_column)
+        .pipe(_conform_amount_column)
+        .pipe(_conform_string_columns)
+        .pipe(_conform_period, yearmonth, span)
+    )
 
     if exclude_zero:
         logging.debug('Excluding zero amounts')
@@ -340,132 +343,115 @@ def get_data(
     return df
 
 
-def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Return a DataFrame that contains **exactly** the columns defined in the
-    '[mapping]' section of the config (**lib.DATA_MAPPING_KEYS** order).
-
-    * Columns in the file but not in mapping are discarded.
-    * Columns specified in mapping but missing in the file create empty Series.
-    * Merge syntax supported:  description = Desc+Notes   etc.
-    """
-    cfg = lib.settings.get_section("mapping")
-    if not cfg:
-        logging.error("Header mapping missing in config")
-        return pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
-
-    # build merge-map → {internal_key: [raw_col1, raw_col2, ...]}
-    merge_map: dict[str, list[str]] = {key: [] for key in lib.DATA_MAPPING_KEYS}
-    j = r"|".join(map(re.escape, lib.DATA_MAPPING_SEPARATOR_CHARS))
-    for internal_key, raw_spec in cfg.items():
-        for raw in re.split(j, raw_spec):
-            merge_map.setdefault(internal_key, []).append(raw)
-
-    out = pd.DataFrame(columns=lib.DATA_MAPPING_KEYS)
-    for internal_key, raw_cols in merge_map.items():
-        present = [c for c in raw_cols if c in df.columns]
-        if not present:
-            # missing column → create empty
-            out[internal_key] = pd.Series(dtype="object")
-            continue
-        if len(present) == 1:
-            out[internal_key] = df[present[0]].copy()
-        else:
-            out[internal_key] = df[present].fillna("").astype(str).agg("\n".join, axis=1)
-
-    return out
-
-
 @metadata()
 def get_trends(
         df: pd.DataFrame,
-        hide_empty_categories: bool = True,  # unused, kept for API parity
+        category: Optional[str] = None,
+        hide_empty_categories: bool = True,  # unused
         exclude_negative: bool = False,
         exclude_zero: bool = False,
         exclude_positive: bool = True,
         yearmonth: str = "",
         span: int = 1,
-        data_window: Union[DataWindow, int] = DataWindow.W3,
+        negative_span: int = 3,
         summary_mode: str = SummaryMode.Total.value,
-        loess_span: int = 5,
-        enwa_span: int = 5
+        loess_fraction: float = 0.15,
 ) -> pd.DataFrame:
-    """Return per-category monthly trends (see detailed docstring earlier)."""
-    if df.empty:
-        return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
+    """
+    Processes transaction data to compute monthly trends for amounts within given categories, applying
+    filters, LOESS smoothing, and time span computation. The function handles the aggregation of
+    amounts into specified periods, category filtering, and ensures proper handling of edge cases, such
+    as empty data results.
 
-    df = (
+    Args:
+        df (pd.DataFrame): A DataFrame containing transaction data with columns such as 'amount',
+            'category', and 'date'.
+        category (Optional[str]): The category name to filter transactions. If None, trends for all
+            categories are computed.
+        hide_empty_categories (bool): A flag indicating whether categories with no data are hidden.
+            Currently unused in the function.
+        exclude_negative (bool): If True, filters out transactions with negative amounts.
+        exclude_zero (bool): If True, filters out transactions with zero amounts.
+        exclude_positive (bool): If True, filters out transactions with positive amounts.
+        yearmonth (str): The specific year and month to focus on for trend computation, in the format
+            'YYYY-MM'. If empty, the latest month in the data is used.
+        span (int): The forward time span (in months) for calculating trends.
+        negative_span (int): The backward time span (in months) for calculating trends.
+        summary_mode (str): A string dictating the summary mode, e.g., "Total". Determines the type
+            of summary computed for trend data.
+        loess_fraction (float): The fraction of data used for LOESS smoothing. Default is 0.15.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing trends data for the filtered transactions, including
+            columns like 'category', 'month', 'loess', 'monthly_total', etc.
+    """
+    # conform input
+    df2 = (
         _strict_header_mapping(df)
         .pipe(_conform_date_column)
         .pipe(_conform_amount_column)
         .pipe(_conform_string_columns)
     )
-    if df.empty:
+    if df2.empty:
         return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
-
+    # apply amount filters
     if exclude_zero:
-        df = df[df["amount"] != 0]
+        df2 = df2[df2['amount'] != 0]
     if exclude_negative:
-        df = df[df["amount"] >= 0]
+        df2 = df2[df2['amount'] >= 0]
     if exclude_positive:
-        df = df[df["amount"] <= 0]
-    if df.empty:
+        df2 = df2[df2['amount'] <= 0]
+    if df2.empty:
         return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
+    # restrict to category
+    if category:
+        df2 = df2[df2['category'] == category]
+    # compute period
+    df2['period'] = df2['date'].dt.to_period('M')
+    # pivot period
+    pivot = pd.Period(yearmonth) if yearmonth else df2['period'].max()
+    # compute window
+    neg = max(int(negative_span), 0)
+    start = pivot - (neg - 1) if neg > 0 else pivot
+    fwd = int(max(span, 1))
+    end = pivot + (fwd - 1)
+    periods = pd.period_range(start, end, freq='M')
+    # group and sum
+    if category:
+        # single category
+        grp = df2.groupby('period')['amount'].sum()
+        series = grp.reindex(periods, fill_value=0)
+        df_monthly = pd.DataFrame({
+            'category': category,
+            'period': series.index,
+            'monthly_total': series.values,
+        })
+    else:
+        cats = df2['category'].unique()
+        idx = pd.MultiIndex.from_product([cats, periods], names=['category', 'period'])
+        grp = df2.groupby(['category', 'period'])['amount'].sum()
+        df_monthly = grp.reindex(idx, fill_value=0).rename('monthly_total').reset_index()
+    # smoothing and build output
+    rows = []
+    for cat, sub in df_monthly.groupby('category'):
+        vals = sub['monthly_total'].values
+        m = len(vals)
 
-    df["period"] = df["date"].dt.to_period("M")
-
-    # window boundaries
-    span = max(int(span or 1), 1)
-    window_months = int(data_window)
-    start_period = pd.Period(yearmonth) if yearmonth else df["period"].max()
-    win_start = start_period - (window_months - 1)
-    win_end = start_period + (span - 1)
-
-    df = df[(df["period"] >= win_start) & (df["period"] <= win_end)]
-    if df.empty:
+        # LOESS smoothing
+        if m < 3:
+            loess_vals = vals.copy()
+        else:
+            loess_vals = lowess(vals, np.arange(m), frac=loess_fraction, return_sorted=False)
+        df_out = pd.DataFrame({
+            'category': cat,
+            'period': periods,
+            'monthly_total': vals,
+            'loess': loess_vals,
+        })
+        rows.append(df_out)
+    df_trends = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    if df_trends.empty:
         return pd.DataFrame(columns=lib.TREND_DATA_COLUMNS)
-
-    # monthly aggregation
-    df_monthly = (
-        df.groupby(["category", "period"], as_index=False)["amount"]
-        .sum()
-        .rename(columns={"amount": "monthly_total"})
-    )
-
-    # smoothing helpers
-    def _trend_for_group(g: pd.DataFrame) -> pd.DataFrame:
-        idx = pd.period_range(win_start, win_end, freq="M")
-        series = g.set_index("period")["monthly_total"].reindex(idx, fill_value=0)
-
-        # trim outer zeros
-        nz = series.ne(0)
-        if nz.any():
-            series = series.loc[nz.idxmax(): nz[::-1].idxmax()]
-
-        months = len(series)
-        span_ewma = max(3, round(months / enwa_span))
-        frac_loess = max(0.20, min(0.70, loess_span / months))
-
-        ewma = series.ewm(span=span_ewma, adjust=False).mean()
-        lo = (
-            np.full(months, np.nan)
-            if months < 3
-            else lowess(series.values, np.arange(months), frac=frac_loess, return_sorted=False)
-        )
-
-        return pd.DataFrame(
-            {
-                "category": g["category"].iloc[0],
-                "period": series.index,
-                "monthly_total": series.values,
-                "ewma": ewma.values,
-                "loess": lo,
-            }
-        )
-
-    df_trends = (
-        df_monthly.groupby("category", group_keys=False).apply(_trend_for_group).reset_index(drop=True)
-    )
-
-    df_trends["month"] = df_trends["period"].dt.to_timestamp("M")
+    # timestamp for plotting
+    df_trends['month'] = df_trends['period'].dt.to_timestamp('M')
     return df_trends[lib.TREND_DATA_COLUMNS]
