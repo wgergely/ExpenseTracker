@@ -207,6 +207,7 @@ class DatabaseAPI(QtCore.QObject):
             conn.commit()
             conn.close()
 
+
     @classmethod
     def verify(cls) -> None:
         """Verify that the local cache database exists and is valid."""
@@ -448,6 +449,54 @@ class DatabaseAPI(QtCore.QObject):
             return pd.DataFrame()
         finally:
             conn.commit()
+            conn.close()
+
+        return pd.DataFrame()
+
+    @classmethod
+    def get_row(cls, local_id: int) -> Optional[dict[str, Any]]:
+        """
+        Retrieve a single transaction row by local_id as a dict.
+        Returns None if not found.
+        """
+        logging.debug('DatabaseAPI.get_row: fetching row local_id=%d', local_id)
+        conn = cls.connection()
+        try:
+            cursor = conn.execute(
+                f"SELECT * FROM {Table.Transactions} WHERE local_id = ?", (local_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logging.warning('DatabaseAPI.get_row: no row found for local_id=%d', local_id)
+                return None
+            # map to dict: column names from PRAGMA
+            cols = [c[1] for c in conn.execute(f"PRAGMA table_info({Table.Transactions})")]
+            result = dict(zip(cols, row))
+            logging.debug('DatabaseAPI.get_row: retrieved row %s', result)
+            return result
+        finally:
+            conn.commit()
+            conn.close()
+
+    @classmethod
+    def update_cell(cls, local_id: int, column: str, new_value: Any) -> None:
+        """
+        Update a single cell in transactions by local_id.
+        """
+        logging.debug('DatabaseAPI.update_cell: local_id=%d, column=%s, new_value=%r', local_id, column, new_value)
+        conn = cls.connection()
+        try:
+            conn.execute(
+                f'UPDATE {Table.Transactions} SET "{column}" = ? WHERE local_id = ?',
+                (new_value, local_id)
+            )
+            conn.commit()
+            logging.info('DatabaseAPI.update_cell: updated local_id=%d column=%s', local_id, column)
+        except Exception:
+            logging.error('DatabaseAPI.update_cell: failed to update local_id=%d column=%s', local_id, column,
+                          exc_info=True)
+            raise
+        finally:
             conn.close()
 
     @classmethod
