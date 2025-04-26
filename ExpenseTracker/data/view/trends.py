@@ -47,36 +47,31 @@ class TrendGraph(QtWidgets.QWidget):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
-
-        # source data for current category
         self._df: pd.DataFrame = pd.DataFrame()
         self._current_category: Optional[str] = None
 
-        # convenient slices for the active category
         self._dates: pd.Index = pd.Index([])
         self._bar_series: pd.Series = pd.Series(dtype=float)
         self._trend_series: pd.Series = pd.Series(dtype=float)
 
-        # pixel geometry
         self._geom: Geometry = Geometry()
 
-        # presentation flags
-        self._padding: float = 0.05
-        self._trend_key: str = 'loess'
         self._show_bars: bool = True
         self._show_trend: bool = True
+        self._show_axes: bool = True
+        self._show_ticks: bool = True
+        self._show_labels: bool = True
+        self._show_tooltip: bool = True
 
-        self.setMouseTracking(True)
-        # index, text, and position of currently hovered bar, for highlighting and custom tooltip
         self._hover_index: Optional[int] = None
         self._hover_text: Optional[str] = None
         self._hover_pos: Optional[QtCore.QPoint] = None
+
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setMouseTracking(True)
+
         self._connect_signals()
         self._init_actions()
-
-        # Start with no data; trends load on category selection
-        QtCore.QTimer.singleShot(50, self.clear_data)
 
     def _connect_signals(self) -> None:
         signals.categoryChanged.connect(self.set_category)
@@ -122,7 +117,7 @@ class TrendGraph(QtWidgets.QWidget):
         self._df = df
         self._dates = df['month']
         self._bar_series = df['monthly_total']
-        self._trend_series = df[self._trend_key]
+        self._trend_series = df['loess']
         # rebuild geometry and repaint
         self._rebuild_geometry()
         self.update()
@@ -137,31 +132,34 @@ class TrendGraph(QtWidgets.QWidget):
         self._show_trend = bool(visible)
         self.update()
 
-    @QtCore.Slot(float)
-    def set_padding(self, ratio: float) -> None:
-        self._padding = max(0.0, min(float(ratio), 1.0))
-        self._rebuild_geometry()
-        self.update()
-
-    def sizeHint(self) -> QtCore.QSize:  # noqa: D401
+    def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(ui.Size.DefaultWidth(1.0), ui.Size.DefaultHeight(1.0))
 
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: D401
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         self._rebuild_geometry()
         super().resizeEvent(event)
 
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: D401
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
-        painter.fillRect(self.rect(), self.palette().color(QtGui.QPalette.Window))
 
-        self._draw_axes(painter)
+        self._draw_background(painter)
+        if self._show_axes:
+            self._draw_axes(painter)
+        if self._show_ticks:
+            self._draw_ticks(painter)
         if self._show_bars:
             self._draw_bars(painter)
         if self._show_trend:
             self._draw_trend(painter)
-        self._draw_labels(painter)
-        # draw hover highlight and tooltip
-        self._draw_tooltip(painter)
+        if self._show_labels:
+            self._draw_labels(painter)
+        if self._hover_index is not None and self._show_tooltip:
+            self._draw_tooltip(painter)
+
+    @paint
+    def _draw_background(self, painter: QtGui.QPainter) -> None:
+        # fill background using app-defined color
+        painter.fillRect(self.rect(), ui.Color.Background())
 
     @paint
     def _draw_axes(self, painter: QtGui.QPainter) -> None:
@@ -184,7 +182,8 @@ class TrendGraph(QtWidgets.QWidget):
         font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
         painter.setFont(font)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, False)
-        painter.setPen(QtGui.QPen(self.palette().color(QtGui.QPalette.Text)))
+        # use primary text color for axes lines and ticks
+        painter.setPen(QtGui.QPen(ui.Color.Text()))
 
         painter.drawLine(geom.area.left(), geom.area.top(),
                          geom.area.left(), geom.area.bottom())
@@ -199,7 +198,8 @@ class TrendGraph(QtWidgets.QWidget):
                 painter.drawLine(x, geom.baseline_y, x, geom.baseline_y + tick)
         # Y-axis legend: show data_max at top, data_min at baseline (inside area)
         # use secondary text color for labels
-        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
+        # draw Y-axis labels in primary text color
+        painter.setPen(QtGui.QPen(ui.Color.Text()))
         metrics = painter.fontMetrics()
         offset = ui.Size.Separator(2.0)
         # format axis labels according to user locale
@@ -219,35 +219,106 @@ class TrendGraph(QtWidgets.QWidget):
             ), min_lbl
         )
         # draw X-axis date labels under each bar, avoiding overlaps
-        date_font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+        # set up small font and primary text color for axis labels
+        date_font, metrics = ui.Font.ThinFont(ui.Size.SmallText(1.0))
         painter.setFont(date_font)
-        painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
+        painter.setPen(QtGui.QPen(ui.Color.Text()))
         metrics = painter.fontMetrics()
         pad = ui.Size.Indicator(1.0)
-        drawn: list[QtCore.QRectF] = []
-        n = len(geom.bars)
-        for i, (rect, dt) in enumerate(zip(geom.bars, self._dates)):
-            # format month label
-            try:
-                label = dt.strftime('%b %Y')
-            except Exception:
-                label = str(dt)
-            w = metrics.horizontalAdvance(label)
-            h = metrics.height()
-            cx = rect.x() + rect.width() / 2
-            x0 = cx - w / 2
-            y0 = geom.baseline_y + pad  # top of text
-            txt_rect = QtCore.QRectF(x0, y0, w, h)
-            # always draw first and last
-            if i == 0 or i == n - 1:
-                painter.drawText(QtCore.QPointF(x0, y0 + metrics.ascent()), label)
-                drawn.append(txt_rect)
-                continue
-            # skip if overlaps any previous text
-            if any(r.intersects(txt_rect) for r in drawn):
-                continue
-            painter.drawText(QtCore.QPointF(x0, y0 + metrics.ascent()), label)
-            drawn.append(txt_rect)
+        bars = geom.bars
+        dates = self._dates
+        n = len(bars)
+        if n > 0:
+            # helper to measure and position each date label
+            def make_label(i):
+                rect_i = bars[i]
+                dt = dates[i]
+                try:
+                    lbl = dt.strftime('%b %Y')
+                except Exception:
+                    lbl = str(dt)
+                w = metrics.horizontalAdvance(lbl)
+                h = metrics.height()
+                cx = rect_i.x() + rect_i.width() / 2
+                x0 = cx - w / 2
+                y0 = geom.baseline_y + pad
+                return lbl, QtCore.QRectF(x0, y0, w, h)
+
+            # draw first and last labels (always)
+            first_lbl, first_rect = make_label(0)
+            painter.setBrush(ui.Color.Background())
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawRect(first_rect)
+            painter.setPen(QtGui.QPen(ui.Color.Text()))
+            painter.drawText(QtCore.QPointF(first_rect.x(), first_rect.y() + metrics.ascent()), first_lbl)
+            last_lbl, last_rect = make_label(n - 1)
+            painter.setBrush(ui.Color.Background())
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawRect(last_rect)
+            painter.setPen(QtGui.QPen(ui.Color.Text()))
+            painter.drawText(QtCore.QPointF(last_rect.x(), last_rect.y() + metrics.ascent()), last_lbl)
+            # track occupied regions and draw intermediates that don't overlap
+            occupied = [first_rect, last_rect]
+            for i in range(1, n - 1):
+                lbl, rct = make_label(i)
+                if any(rct.intersects(o) for o in occupied):
+                    continue
+                painter.setBrush(ui.Color.Background())
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.drawRect(rct)
+                painter.setPen(QtGui.QPen(ui.Color.Text()))
+                painter.drawText(QtCore.QPointF(rct.x(), rct.y() + metrics.ascent()), lbl)
+                occupied.append(rct)
+
+    @paint
+    def _draw_ticks(self, painter: QtGui.QPainter) -> None:
+        """Draw moving tick-marks on both axes at hover position, with value labels."""
+        geom = self._geom
+        # need hover info
+        pos = self._hover_pos
+        if pos is None or not geom.bars:
+            return
+        # X-axis tick at hovered bar center
+        idx = self._hover_index
+        tick_len = ui.Size.Indicator(1.0)
+        # use primary text color for tick marks
+        painter.setPen(QtGui.QPen(ui.Color.Text()))
+        if idx is not None and 0 <= idx < len(geom.bars):
+            bar = geom.bars[idx]
+            xh = bar.x() + bar.width() / 2
+            painter.drawLine(xh, geom.baseline_y, xh, geom.baseline_y + tick_len)
+        # Y-axis tick at mouse Y, clamped to chart area
+        y = pos.y()
+        if y < geom.area.top():
+            y = geom.area.top()
+        elif y > geom.area.bottom():
+            y = geom.area.bottom()
+        painter.drawLine(geom.area.left(), y, geom.area.left() + tick_len, y)
+        # compute data value for this Y position
+        data_min = geom.data_min
+        data_max = geom.data_max
+        span = geom.area.height()
+        val = data_min
+        if span > 0 and data_max != data_min:
+            val = data_min + (geom.area.bottom() - y) / span * (data_max - data_min)
+        # format label
+        lbl = _locale.format_currency_value(val, lib.settings['locale'])
+        # draw background rectangle for readability
+        lbl_font, lbl_metrics = ui.Font.ThinFont(ui.Size.SmallText(1.0))
+        painter.setFont(lbl_font)
+        tw = lbl_metrics.horizontalAdvance(lbl)
+        th = lbl_metrics.height()
+        gap = ui.Size.Separator(1.0)
+        x0 = geom.area.left() + tick_len + gap
+        y0 = y
+        bg = QtCore.QRectF(x0, y0, tw, th)
+        # draw background for label using app color
+        painter.setBrush(ui.Color.Background())
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRect(bg)
+        # draw value text in primary color
+        painter.setPen(QtGui.QPen(ui.Color.Text()))
+        painter.drawText(QtCore.QPointF(x0, y0 + lbl_metrics.ascent()), lbl)
 
     @paint
     def _draw_bars(self, painter: QtGui.QPainter) -> None:
@@ -314,12 +385,20 @@ class TrendGraph(QtWidgets.QWidget):
 
     @paint
     def _draw_labels(self, painter: QtGui.QPainter) -> None:
-        # draw only the label for the hovered column
+        """Draw the hovered date label beneath the chart with background."""
         geom = self._geom
         idx = self._hover_index
         if idx is None or not geom.labels or idx < 0 or idx >= len(geom.labels):
             return
+
         static_text, pos = geom.labels[idx]
+        # draw background for legibility
+        size = static_text.size()
+        bg_rect = QtCore.QRectF(pos.x(), pos.y(), size.width(), size.height())
+        painter.setBrush(self.palette().color(QtGui.QPalette.Window))
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRect(bg_rect)
+        # draw the date label text
         painter.setPen(QtGui.QPen(ui.Color.SecondaryText()))
         painter.drawStaticText(pos, static_text)
 
@@ -333,7 +412,8 @@ class TrendGraph(QtWidgets.QWidget):
         bars = self._geom.bars
         idx = self._hover_index
         if 0 <= idx < len(bars):
-            pen = QtGui.QPen(self.palette().color(QtGui.QPalette.Highlight))
+            # highlight hovered bar
+            pen = QtGui.QPen(ui.Color.Blue())
             pen.setWidthF(ui.Size.Separator(1.0))
             painter.setPen(pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
@@ -474,7 +554,7 @@ class TrendGraph(QtWidgets.QWidget):
             txt = QtGui.QStaticText(pd.Timestamp(ts).strftime('%b %Y'))
             size = txt.size()
             pos = QtCore.QPointF(x_c - size.width() / 2,
-                                 geom.baseline_y + size.height() + 5)
+                                 geom.baseline_y + ui.Size.Indicator(1.0))
             geom.labels.append((txt, pos))
 
     @QtCore.Slot()
