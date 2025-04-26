@@ -44,6 +44,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         signals.expenseCategoryChanged.connect(self.queue_data_init)
         self._init_data_timer.timeout.connect(lambda: self.init_data(self._pending_data))
 
+        from ...core.sync import sync_manager
+        sync_manager.dataUpdated.connect(self.on_sync_success)
+
     @QtCore.Slot(list)
     def queue_data_init(self, data: list) -> None:
         """
@@ -211,9 +214,67 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
+        """
+        Make the Category column editable when a local_id is present.
+        """
         if not index.isValid():
             return QtCore.Qt.NoItemFlags
-        return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
+        flags = super().flags(index)
+
+        if index.column() == Columns.Category.value:
+            # allow editing if this row has a local_id
+            row = index.row()
+            try:
+                rec = self._data[row]
+            except Exception:
+                return flags
+            if rec.get('local_id', None) is not None:
+                flags |= QtCore.Qt.ItemIsEditable
+        return flags
+
+    def setData(self, index: QtCore.QModelIndex, value: Any, role: int = QtCore.Qt.EditRole) -> bool:
+        """
+        Handle edits: queue a sync operation and update local data.
+        """
+        if role == QtCore.Qt.EditRole and index.column() == Columns.Category.value:
+            row = index.row()
+            try:
+                rec = self._data[row]
+                local_id = rec.get('local_id')
+            except Exception:
+                return False
+            if local_id is None:
+                return False
+            # Queue the edit
+            from ...core.sync import sync_manager
+            # logical field name is 'category'
+            sync_manager.queue_edit(local_id, 'category', value)
+            # Update the in-memory model
+            rec['category'] = value
+            self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
+            return True
+        return False
+
+    @QtCore.Slot(list)
+    def on_sync_success(self, ops: list) -> None:
+        """
+        Reflect successfully committed edits in the in-memory model.
+        """
+        for op in ops:
+            # find matching record in _data
+            for row_idx, rec in enumerate(self._data):
+                if rec.get('local_id') == op.local_id:
+                    # update in-memory value
+                    rec[op.column] = op.new_value
+                    # emit dataChanged for the cell
+                    try:
+                        col_idx = lib.TRANSACTION_DATA_COLUMNS.index(op.column)
+                        idx = self.index(row_idx, col_idx)
+                        self.dataChanged.emit(idx, idx, [QtCore.Qt.DisplayRole])
+                    except Exception as ex:
+                        logging.error(f'Update failed: {ex}')
+                        pass
+                    break
 
 
 class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
