@@ -75,10 +75,11 @@ class TrendGraph(QtWidgets.QWidget):
 
     def _connect_signals(self) -> None:
         signals.categoryChanged.connect(self.set_category)
-        # reload for current category when date range changes
         signals.dataRangeChanged.connect(self.init_data)
-        # clear trends on preset activation; categoryChanged will reload when needed
-        signals.presetActivated.connect(self.clear_data)
+        signals.dataAboutToBeFetched.connect(self.clear_data)
+        signals.configSectionChanged.connect(self.init_data)
+
+        signals.presetActivated.connect(self.init_data)
 
     @QtCore.Slot()
     def init_data(self):
@@ -102,11 +103,12 @@ class TrendGraph(QtWidgets.QWidget):
         # fetch category-specific trend data
         try:
             logging.debug(f'TrendGraph: fetching trends for {category}', )
-            df = get_trends(category=category, negative_span=120)
+            df = get_trends(category=category, loess_fraction=0.15, negative_span=24)
         except Exception as exc:
             logging.error(f'TrendGraph: failed to fetch trends for {category}: {exc}')
             self.clear_data()
             return
+
         # if no data, clear and return
         if df.empty:
             logging.debug('TrendGraph: no trend data for category %s', category)
@@ -117,7 +119,7 @@ class TrendGraph(QtWidgets.QWidget):
         self._dates = df['month']
         self._bar_series = df['monthly_total']
         self._trend_series = df['loess']
-        # rebuild geometry and repaint
+
         self._rebuild_geometry()
         self.update()
 
@@ -613,18 +615,14 @@ class TrendGraph(QtWidgets.QWidget):
         # record mouse position for tooltip anchoring
         self._hover_pos = pos
         hovered: Optional[int] = None
-        # detect nearest bar within a horizontal tolerance
+        # detect hover by checking proximity to each bar rectangle
         tol = ui.Size.Margin(1.0)
-        best_dist = float('inf')
+        ptf = QtCore.QPointF(pos.x(), pos.y())
         for idx, rect in enumerate(self._geom.bars):
-            cx = rect.x() + rect.width() / 2
-            dist = abs(pos.x() - cx)
-            if dist < best_dist:
-                best_dist = dist
+            hit_rect = rect.adjusted(-tol, -tol, tol, tol)
+            if hit_rect.contains(ptf):
                 hovered = idx
-        # if outside tolerance, clear hover
-        if best_dist > tol:
-            hovered = None
+                break
         # update hover state
         if hovered != self._hover_index:
             self._hover_index = hovered
