@@ -1,3 +1,5 @@
+import functools
+
 from PySide6 import QtWidgets, QtCore, QtGui
 
 from . import ui
@@ -5,6 +7,7 @@ from .yearmonth import RangeSelectorBar
 from ..core import database
 from ..data.view.expense import ExpenseView
 from ..data.view.transaction import TransactionsWidget
+from ..data.view.trends import TrendDockWidget
 from ..log.view import LogDockWidget
 from ..settings.presets.view import PresetsDockWidget
 from ..settings.settings import SettingsDockWidget
@@ -195,92 +198,144 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add settings dock (bottom)
         self.settings_view = SettingsDockWidget(parent=self)
         self.settings_view.setObjectName('ExpenseTrackerSettingsDockWidget')
-        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.settings_view)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.settings_view)
         self.settings_view.hide()
+
         # Add log dock (top)
         self.log_view = LogDockWidget(parent=self)
         self.log_view.setObjectName('ExpenseTrackerLogDockWidget')
-        self.addDockWidget(QtCore.Qt.TopDockWidgetArea, self.log_view)
+        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.log_view)
         self.log_view.hide()
+
+        # Add trends dock (bottom)
+        self.trends_view = TrendDockWidget(parent=self)
+        self.trends_view.setObjectName('ExpenseTrackerTrendDockWidget')
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.trends_view)
+        self.trends_view.hide()
 
     def _connect_signals(self):
         signals.openTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
-        # auto-show log view on error/critical
         signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
 
     def _init_actions(self):
-        # stretch
-        stretch = QtWidgets.QWidget(self)
-        stretch.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        stretch.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-        stretch.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-        stretch.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.toolbar.addWidget(stretch)
+        w = QtWidgets.QWidget(self)
+        w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.toolbar.addWidget(w)
 
-        # Refresh Data action
-        refresh_action = QtGui.QAction('Refresh Data', self)
-        refresh_action.setIcon(ui.get_icon('btn_fetch'))
-        refresh_action.setToolTip('Fetch latest transactions')
-        refresh_action.triggered.connect(signals.dataFetchRequested)
-        self.toolbar.addAction(refresh_action)
-
-        # Separator before toggle buttons
-        self.toolbar.addSeparator()
-
-        # Presets dock toggle button
-        presets_btn = QtWidgets.QToolButton(self)
-        presets_btn.setText('Presets')
-        presets_btn.setIcon(ui.get_icon('btn_presets'))
-
-        presets_btn.clicked.connect(
-            lambda: self.presets_view.setHidden(not self.presets_view.isHidden())
-        )
-        self.toolbar.addWidget(presets_btn)
+        action = QtGui.QAction('Refresh Data', self)
+        action.setIcon(ui.get_icon('btn_fetch'))
+        action.setToolTip('Fetch data')
+        action.setStatusTip('Fetch data')
+        action.triggered.connect(signals.dataFetchRequested)
+        self.toolbar.addAction(action)
 
         action = QtGui.QAction(self)
-        action.setText('Settings')
-        action.setIcon(ui.get_icon('btn_settings'))
-        action.setToolTip('Show settings...')
-        action.setShortcut(QtGui.QKeySequence('Ctrl+.'))
-        action.triggered.connect(
-            lambda: self.settings_view.setHidden(not self.settings_view.isHidden())
-        )
+        action.setSeparator(True)
+        action.setEnabled(False)
         self.toolbar.addAction(action)
-        # Transactions dock toggle button
-        trans_action = QtGui.QAction('Transactions', self)
-        trans_action.setIcon(ui.get_icon('btn_transactions'))
-        trans_action.setToolTip('Show transactions...')
-        trans_action.triggered.connect(signals.openTransactions)
-        self.toolbar.addAction(trans_action)
+        self.addAction(action)
 
-        # Separator after toggle buttons
-        self.toolbar.addSeparator()
-        # Show Logs toggle action
-        log_action = QtGui.QAction('Show Logs', self)
-        log_action.setIcon(ui.get_icon('btn_log'))
-        log_action.setToolTip('Show log viewer')
-        log_action.triggered.connect(lambda: self.log_view.setHidden(not self.log_view.isHidden()))
-        self.toolbar.addAction(log_action)
-        self.addAction(log_action)
-        # Global keyboard shortcuts for shifting the date range
-        prev_short = QtGui.QAction(self)
-        prev_short.setShortcuts([QtGui.QKeySequence('Alt+Left'), QtGui.QKeySequence('Ctrl+Left')])
-        prev_short.setShortcutContext(QtCore.Qt.WindowShortcut)
-        prev_short.triggered.connect(self.range_selector.previous_month)
-        self.addAction(prev_short)
-        next_short = QtGui.QAction(self)
-        next_short.setShortcuts([QtGui.QKeySequence('Alt+Right'), QtGui.QKeySequence('Ctrl+Right')])
-        next_short.setShortcutContext(QtCore.Qt.WindowShortcut)
-        next_short.triggered.connect(self.range_selector.next_month)
-        self.addAction(next_short)
+        toggle_func = lambda a, s: a.setIcon(
+            ui.get_icon(s, color=ui.Color.SelectedText)) if a.isChecked() else a.setIcon(
+            ui.get_icon(s, color=ui.Color.DisabledText))
+        toggle_vis = lambda e: e.setHidden(not e.isHidden())
+
+        action = QtGui.QAction('Presets', self)
+        action.setCheckable(True)
+        action.setChecked(self.presets_view.isVisible())
+        action.setIcon(ui.get_icon('btn_presets', color=ui.Color.DisabledText))
+        action.setToolTip('Show presets...')
+        action.setStatusTip('Show presets...')
+        action.setShortcut('Ctrl+Shift+P')
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_presets'))
+        action.triggered.connect(functools.partial(toggle_vis, self.presets_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Transactions', self)
+        action.setCheckable(True)
+        action.setChecked(self.transactions_view.isVisible())
+        action.setIcon(ui.get_icon('btn_transactions', color=ui.Color.DisabledText))
+        action.setToolTip('Show transactions...')
+        action.setStatusTip('Show transactions...')
+        action.setShortcut('Ctrl+Shift+T')
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactions'))
+        action.triggered.connect(signals.openTransactions)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Trends', self)
+        action.setCheckable(True)
+        action.setChecked(self.trends_view.isVisible())
+        action.setIcon(ui.get_icon('btn_trend', color=ui.Color.DisabledText))
+        action.setToolTip('Show trends chart...')
+        action.setStatusTip('Show trends chart...')
+        action.setShortcut('Ctrl+Shift+T')
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_trend'))
+        action.triggered.connect(functools.partial(toggle_vis, self.trends_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Logs', self)
+        action.setCheckable(True)
+        action.setChecked(self.log_view.isVisible())
+        action.setIcon(ui.get_icon('btn_log', color=ui.Color.DisabledText))
+        action.setToolTip('Show logs...')
+        action.setStatusTip('Show logs...')
+        action.setShortcut('Ctrl+Shift+L')
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_log'))
+        action.triggered.connect(functools.partial(toggle_vis, self.log_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Settings', self)
+        action.setIcon(ui.get_icon('btn_settings', color=ui.Color.DisabledText))
+        action.setToolTip('Show settings...')
+        action.setStatusTip('Show settings...')
+        action.setCheckable(True)
+        action.setChecked(self.settings_view.isVisible())
+        action.setShortcuts(['Ctrl+,', 'Ctrl+Shift+,', 'Ctrl+.', 'Ctrl+Shift+.', 'Ctrl+Shift+S'])
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_settings'))
+        action.triggered.connect(functools.partial(toggle_vis, self.settings_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.toolbar.addAction(action)
+        self.addAction(action)
+
+        action = QtGui.QAction('Previous Month', self)
+        action.setShortcuts(['Alt+Left', 'Ctrl+Left'])
+        action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        action.triggered.connect(self.range_selector.previous_month)
+        self.addAction(action)
+
+        action = QtGui.QAction('Next Month', self)
+        action.setShortcuts(['Alt+Right', 'Ctrl+Right'])
+        action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        action.triggered.connect(self.range_selector.next_month)
+        self.addAction(action)
 
         self.toolbar.addWidget(self.status_indicator)
 
     def sizeHint(self):
         return QtCore.QSize(
-            ui.Size.DefaultWidth(1.6),
-            ui.Size.DefaultHeight(1.6)
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(1.5)
         )
 
     @QtCore.Slot(QtCore.QModelIndex)

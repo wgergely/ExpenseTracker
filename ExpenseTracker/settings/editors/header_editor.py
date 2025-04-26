@@ -593,7 +593,7 @@ class HeaderEditor(QtWidgets.QWidget):
 
         action.setShortcut('Ctrl+Up')
         action.setStatusTip('Move selected header up')
-        action.setIcon(ui.get_icon('arrow_up'))
+        action.setIcon(ui.get_icon('btn_arrow_up'))
         action.triggered.connect(move_up)
         self.toolbar.addAction(action)
         self.addAction(action)
@@ -623,7 +623,7 @@ class HeaderEditor(QtWidgets.QWidget):
 
         action.setShortcut('Ctrl+Down')
         action.setStatusTip('Move selected header down')
-        action.setIcon(ui.get_icon('arrow_down'))
+        action.setIcon(ui.get_icon('btn_arrow_down'))
         action.triggered.connect(move_down)
         self.toolbar.addAction(action)
         self.addAction(action)

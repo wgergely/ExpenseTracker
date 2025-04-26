@@ -241,7 +241,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Activate', self)
         action.setShortcut('Ctrl+A')
-        action.setIcon(ui.get_icon('btn_active'))
+        action.setIcon(ui.get_icon('btn_ok'))
         action.setStatusTip('Activate selected preset')
         action.triggered.connect(activate_preset)
         self.toolbar.addAction(action)

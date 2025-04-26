@@ -97,7 +97,7 @@ class ExpenseView(QtWidgets.QTableView):
         self.verticalHeader().hide()
 
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Minimum,
             QtWidgets.QSizePolicy.Minimum
         )
 

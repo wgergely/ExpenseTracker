@@ -113,7 +113,7 @@ class PresetModel(QtCore.QAbstractItemModel):
         if role == QtCore.Qt.DecorationRole:
             if col == Columns.Status:
                 if item.type is PresetType.Active:
-                    return ui.get_icon('btn_active', color=ui.Color.Yellow)
+                    return ui.get_icon('btn_ok', color=ui.Color.Yellow)
                 if item.is_active:
                     return ui.get_icon('btn_ok', color=ui.Color.Green)
 

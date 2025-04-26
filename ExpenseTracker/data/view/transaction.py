@@ -6,49 +6,6 @@ from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyMo
 from ...ui import ui
 
 
-class TransactionsWidget(QtWidgets.QDockWidget):
-    """
-    TransactionsWidget is a custom dockable widget for displaying transaction data.
-
-    It initializes the view and sets up the layout for displaying transactions.
-    """
-
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__('Transactions', parent=parent)
-        self.setObjectName('ExpenseTrackerTransactionsWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
-        )
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
-        self.view = None
-
-        self._create_ui()
-
-    def _create_ui(self) -> None:
-        content = QtWidgets.QWidget(self)
-        QtWidgets.QVBoxLayout(content)
-
-        o = ui.Size.Margin(1.0)
-        content.layout().setContentsMargins(o, o, o, o)
-        content.layout().setSpacing(o)
-
-        self.view = TransactionsView(content)
-        self.view.setObjectName('ExpenseTrackerTransactionsView')
-        content.layout().addWidget(self.view, 1)
-
-        self.setWidget(content)
-
-    def sizeHint(self) -> QtCore.QSize:
-        return QtCore.QSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
-
-
 class TransactionsView(QtWidgets.QTableView):
     """
     TransactionsView is a custom QTableView for displaying transaction data.
@@ -249,3 +206,47 @@ class TransactionsView(QtWidgets.QTableView):
         self.model().sourceModel().modelReset.connect(
             lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))
         self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
+
+
+class TransactionsWidget(QtWidgets.QDockWidget):
+    """
+    TransactionsWidget is a custom dockable widget for displaying transaction data.
+
+    It initializes the view and sets up the layout for displaying transactions.
+    """
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__('Transactions', parent=parent)
+        self.setObjectName('ExpenseTrackerTransactionsWidget')
+        self.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFloatable
+        )
+
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Preferred
+        )
+
+        self.view = None
+
+        self._create_ui()
+
+    def _create_ui(self) -> None:
+        content = QtWidgets.QWidget(self)
+        QtWidgets.QVBoxLayout(content)
+
+        o = ui.Size.Margin(1.0)
+        content.layout().setContentsMargins(o, o, o, o)
+        content.layout().setSpacing(o)
+
+        self.view = TransactionsView(content)
+        content.layout().addWidget(self.view, 1)
+
+        self.setWidget(content)
+
+    def sizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(1.0)
+        )

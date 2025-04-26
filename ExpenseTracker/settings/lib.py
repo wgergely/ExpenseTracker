@@ -80,6 +80,7 @@ LEDGER_SCHEMA: Dict[str, Any] = {
             'exclude_negative': {'type': bool, 'required': True},
             'exclude_zero': {'type': bool, 'required': True},
             'exclude_positive': {'type': bool, 'required': True},
+            'yearmonth': {'type': str, 'required': True},
             'span': {'type': int, 'required': True},
             'theme': {'type': str, 'required': True},
             'loess_fraction': {'type': float, 'required': True},

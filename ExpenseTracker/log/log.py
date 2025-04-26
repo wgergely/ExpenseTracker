@@ -5,7 +5,6 @@ from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
 from ..ui.actions import signals
 
-LOG_LEVEL = logging.DEBUG
 LOG_FORMAT = '[%(asctime)s] <%(module)s> %(levelname)s:  %(message)s'
 LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
 
@@ -28,7 +27,11 @@ def set_logging_level(level):
     ):
         raise ValueError('Invalid logging level. Use one of the standard logging levels, e.g., logging.DEBUG.')
 
-    logging.getLogger().setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    for handler in root_logger.handlers:
+        handler.setLevel(level)
 
 
 def qt_message_handler(mode, context, message):
@@ -53,30 +56,33 @@ def qt_message_handler(mode, context, message):
         sys.exit(1)
 
 
-def setup_logging():
+def setup_logging(
+        enable_stream_handler=True,
+        enable_qt_handler=False,
+        log_level=logging.INFO,
+):
     """
     Configures the root logger and installs Qt message handler.
     """
     root_logger = logging.getLogger()
-    root_logger.setLevel(LOG_LEVEL)
-
-    # Clear all handlers to avoid formatting conflicts
+    root_logger.setLevel(log_level)
     root_logger.handlers.clear()
 
     formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=LOG_DATEFMT)
 
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-    stream_handler.setLevel(LOG_LEVEL)
-    root_logger.addHandler(stream_handler)
+    if enable_stream_handler:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(log_level)
+        root_logger.addHandler(stream_handler)
+
+    if enable_qt_handler:
+        qInstallMessageHandler(qt_message_handler)
 
     tank_handler = TankHandler()
     tank_handler.setFormatter(formatter)
-    tank_handler.setLevel(LOG_LEVEL)
+    tank_handler.setLevel(log_level)
     root_logger.addHandler(tank_handler)
-
-    # Qt messages will now also be routed through this formatter
-    qInstallMessageHandler(qt_message_handler)
 
 
 class TankHandler(logging.Handler):
@@ -108,7 +114,6 @@ class TankHandler(logging.Handler):
         try:
             message = self.format(record)
             self.tank.append((record.levelno, message))
-            # Auto-show log viewer on errors and criticals
             if record.levelno >= logging.ERROR:
                 signals.showLogs.emit()
         except (Exception, KeyboardInterrupt):

@@ -72,6 +72,8 @@ class TrendGraph(QtWidgets.QWidget):
 
         self._geom: Geometry = Geometry()
 
+        self._is_paused = None
+
         self._show_axes: bool = False
         self._show_bars: bool = True
         self._show_trend: bool = True
@@ -85,28 +87,33 @@ class TrendGraph(QtWidgets.QWidget):
 
         self.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
         self.setMouseTracking(True)
-        # enable context-menu actions
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+        self._init_data_timer = QtCore.QTimer(self)
+        self._init_data_timer.setSingleShot(True)
+        self._init_data_timer.setInterval(QtWidgets.QApplication.keyboardInputInterval())
 
         self._connect_signals()
         self._init_actions()
 
+    @QtCore.Slot()
+    def start_init_data_timer(self) -> None:
+        self._init_data_timer.start(self._init_data_timer.interval())
+
     def _connect_signals(self) -> None:
         signals.categoryChanged.connect(self.set_category)
-        signals.dataRangeChanged.connect(self.init_data)
+        signals.categoryChanged.connect(self.start_init_data_timer)
+
+        signals.dataRangeChanged.connect(self.start_init_data_timer)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
-        signals.configSectionChanged.connect(self.init_data)
-        signals.presetActivated.connect(self.init_data)
+        signals.configSectionChanged.connect(self.start_init_data_timer)
+        signals.presetActivated.connect(self.start_init_data_timer)
 
-    @QtCore.Slot()
-    def init_data(self):
-        self.clear_data()
-        self.set_category(self._current_category)
+        self._init_data_timer.timeout.connect(self.init_data)
 
     def _init_actions(self) -> None:
         """Set up context-menu actions for toggles, span selection, and smoothing."""
-        # Toggle visibility actions
         bars_action = QtGui.QAction('Show Bars', self, checkable=True)
         bars_action.setChecked(self._show_bars)
         bars_action.toggled.connect(self.toggle_bars)
@@ -198,29 +205,31 @@ class TrendGraph(QtWidgets.QWidget):
         """Load and show trends for the specified category."""
         if not category:
             self._current_category = ''
-            self.clear_data()
             return
 
         self._current_category = category
 
+    @QtCore.Slot()
+    def init_data(self) -> None:
         # fetch category-specific trend data
         try:
-            logging.debug(f'TrendGraph: fetching trends for {category}', )
+            logging.debug(f'TrendGraph: fetching trends for {self._current_category}', )
             df = get_trends(
-                category=category,
+                category=self._current_category,
                 negative_span=lib.settings['negative_span'],
                 loess_fraction=lib.settings['loess_fraction']
             )
         except Exception as exc:
-            logging.error(f'TrendGraph: failed to fetch trends for {category}: {exc}')
+            logging.error(f'TrendGraph: failed to fetch trends for {self._current_category}: {exc}')
             self.clear_data()
             return
 
         # if no data, clear and return
         if df.empty:
-            logging.debug('TrendGraph: no trend data for category %s', category)
+            logging.debug(f'TrendGraph: no trend data for category {self._current_category}')
             self.clear_data()
             return
+
         # update series directly
         self._df = df
         self._dates = df['month']
@@ -311,6 +320,9 @@ class TrendGraph(QtWidgets.QWidget):
         super().resizeEvent(event)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        if self._is_paused:
+            return
+
         painter = QtGui.QPainter(self)
 
         # Check if the bottom axis is near the top
@@ -337,14 +349,14 @@ class TrendGraph(QtWidgets.QWidget):
     @paint
     def _draw_background(self, painter: QtGui.QPainter) -> None:
         # fill background using app-defined color
-        painter.fillRect(self.rect(), ui.Color.Background())
+        painter.fillRect(self.rect(), ui.Color.VeryDarkBackground())
 
         o = ui.Size.Margin(1.0)
         rect = self.rect().adjusted(o, o, -o, -o)
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(ui.Color.LightBackground())
+        painter.setBrush(ui.Color.DarkBackground())
 
         o = ui.Size.Indicator(2.0)
         painter.drawRoundedRect(rect, o, o)
@@ -504,7 +516,6 @@ class TrendGraph(QtWidgets.QWidget):
             int(base_color.green() * rate + theme_color.green() * (1 - rate)),
             int(base_color.blue() * rate + theme_color.blue() * (1 - rate))
         )
-
 
         # simplify to eliminate interior overlaps and redundant segments
         painter.setBrush(blend_color)
@@ -775,6 +786,16 @@ class TrendGraph(QtWidgets.QWidget):
         self._geom = Geometry()
         self.update()
 
+    @QtCore.Slot()
+    def pause(self) -> None:
+        """Pauses automatic fetching of new log messages."""
+        self._is_paused = True
+
+    @QtCore.Slot()
+    def resume(self) -> None:
+        """Resumes automatic fetching of new log messages."""
+        self._is_paused = False
+
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         """Show tooltip and highlight label when hovering over a bar."""
         pos = event.pos()
@@ -814,3 +835,44 @@ class TrendGraph(QtWidgets.QWidget):
             self._hover_pos = None
             self.update()
         super().leaveEvent(event)
+
+
+class TrendDockWidget(QtWidgets.QDockWidget):
+    """Dockable widget wrapping the TrendGraph chart."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__('Trends', parent=parent)
+        self.setObjectName('ExpenseTrackerTrendDockWidget')
+        self.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFloatable
+        )
+
+        graph = TrendGraph(self)
+        graph.setObjectName('ExpenseTrackerTrendGraph')
+        self.setWidget(graph)
+
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setMinimumSize(
+            ui.Size.DefaultWidth(0.3),
+            ui.Size.DefaultHeight(0.3)
+        )
+        self.setMaximumHeight(ui.Size.DefaultHeight(0.5))
+
+        self._connect_signals()
+
+    def _connect_signals(self) -> None:
+        self.visibilityChanged.connect(self.on_visibility_changed)
+
+    def sizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultHeight(0.5)
+        )
+
+    @QtCore.Slot(bool)
+    def on_visibility_changed(self, visible: bool) -> None:
+        if visible:
+            self.widget().resume()
+        else:
+            self.widget().pause()

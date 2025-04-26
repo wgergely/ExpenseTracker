@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore
 
 from .log import TankHandler
 from ..ui import ui
@@ -120,11 +120,8 @@ class LogTableModel(QtCore.QAbstractTableModel):
                 return log_data['message']
 
         if role == QtCore.Qt.FontRole:
-            # Make warning and error messages bold
-            if log_data['level_enum'] >= Level.WARNING:
-                font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
-                font.setWeight(QtGui.QFont.Bold)
-                return font
+            font, _ = ui.Font.LightFont(ui.Size.SmallText(1.0))
+            return font
 
         if role == QtCore.Qt.ForegroundRole:
             # Color code warning and error levels
@@ -248,15 +245,19 @@ class LogFilterProxyModel(QtCore.QSortFilterProxyModel):
         super().__init__(parent)
         self._filter_level = logging.NOTSET
 
-    def setFilterLogLevel(self, level: int) -> None:
+    def set_filter_level(self, level: int) -> None:
         """
         Sets the minimum log level for rows to be displayed.
 
         Args:
-            level (int): A logging level integer (e.g., logging.DEBUG, logging.debug).
+            level (int): A logging level integer, for example, `logging.DEBUG`.
+
         """
         self._filter_level = level
         self.invalidateFilter()
+
+    def filter_level(self) -> int:
+        return self._filter_level
 
     def filterAcceptsRow(self, source_row: int, source_parent: QtCore.QModelIndex) -> bool:
         """
