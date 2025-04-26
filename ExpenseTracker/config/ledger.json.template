@@ -37,7 +37,9 @@
     "exclude_positive": true,
     "yearmonth": "2024-01",
     "span": 1,
-    "theme": "dark"
+    "theme": "dark",
+    "loess_fraction": 0.15,
+    "negative_span": 24
   },
   "categories": {
     "Cash": {

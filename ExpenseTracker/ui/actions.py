@@ -53,7 +53,6 @@ class Signals(QtCore.QObject):
     openSpreadsheet = QtCore.Signal()
     openTransactions = QtCore.Signal()
     showLogs = QtCore.Signal()
-    showLogs = QtCore.Signal()
 
     themeChanged = QtCore.Signal(str)
     calculationChanged = QtCore.Signal()

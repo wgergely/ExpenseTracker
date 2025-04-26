@@ -30,7 +30,7 @@ def is_valid_hex_color(value: str) -> bool:
 
 EXPENSE_DATA_COLUMNS: List[str] = ['category', 'total', 'transactions', 'description', 'weight']
 TRANSACTION_DATA_COLUMNS: List[str] = ['date', 'amount', 'description', 'category', 'account']
-TREND_DATA_COLUMNS: List[str] = ['category', 'month', 'monthly_total', 'ewma', 'loess']
+TREND_DATA_COLUMNS: List[str] = ['category', 'month', 'monthly_total', 'loess']
 
 DATA_MAPPING_KEYS: List[str] = ['date', 'amount', 'description', 'category', 'account']
 DATA_MAPPING_SEPARATOR_CHARS: List[str] = ['|', '+']
@@ -48,7 +48,9 @@ METADATA_KEYS: List[str] = [
     'exclude_positive',
     'yearmonth',
     'span',
-    'theme'
+    'theme',
+    'loess_fraction',
+    'negative_span',
 ]
 
 LEDGER_SCHEMA: Dict[str, Any] = {
@@ -70,13 +72,18 @@ LEDGER_SCHEMA: Dict[str, Any] = {
         'required': True,
         'required_keys': METADATA_KEYS,
         'item_schema': {
+            'name': {'type': str, 'required': True},
+            'description': {'type': str, 'required': True},
             'locale': {'type': str, 'required': True},
             'summary_mode': {'type': str, 'required': True},
             'hide_empty_categories': {'type': bool, 'required': True},
             'exclude_negative': {'type': bool, 'required': True},
             'exclude_zero': {'type': bool, 'required': True},
             'exclude_positive': {'type': bool, 'required': True},
-            'theme': {'type': str, 'required': True}
+            'span': {'type': int, 'required': True},
+            'theme': {'type': str, 'required': True},
+            'loess_fraction': {'type': float, 'required': True},
+            'negative_span': {'type': int, 'required': True},
         }
     },
     'mapping': {
@@ -320,7 +327,11 @@ class SettingsAPI(ConfigPaths):
             raise RuntimeError('Malformed ledger data, missing "metadata" section.')
 
         # Verify type
-        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
+        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type', None)
+        if _type is None:
+            logging.error(f'Metadata key "{key}" is not defined in schema.')
+            return None
+
         v = self.ledger_data['metadata'].get(key)
 
         if _type and not isinstance(v, _type):
@@ -337,7 +348,11 @@ class SettingsAPI(ConfigPaths):
             raise RuntimeError('Malformed ledger data, missing "metadata" section.')
 
         # Verify
-        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type')
+        _type = LEDGER_SCHEMA['metadata']['item_schema'].get(key, {}).get('type', None)
+        if _type is None:
+            logging.error(f'Metadata key "{key}" is not defined in schema.')
+            raise KeyError(f'Metadata key "{key}" is not defined in schema.')
+
         if _type and not isinstance(value, _type):
             logging.warning(f'Metadata key "{key}" is not of type {_type}, got {type(value)}.')
 
@@ -522,23 +537,26 @@ class SettingsAPI(ConfigPaths):
             signals.configSectionChanged.emit(section_name)
             return
 
-        # Special handling for metadata section
+        # Special handling for the metadata section
         if section_name == 'metadata':
             # Validate that metadata is a dict
             if not isinstance(new_data, dict):
-                msg = 'metadata section must be a dict.'
+                msg = f'{section_name} must be a dict.'
                 logging.error(msg)
                 raise TypeError(msg)
+
             # Check for missing metadata keys
             missing_meta = [k for k in METADATA_KEYS if k not in new_data]
             if missing_meta:
                 msg = f'Missing metadata keys: {missing_meta}'
                 logging.error(msg)
                 raise ValueError(msg)
+
             # All required keys present; update and save
-            self.ledger_data['metadata'] = new_data
-            self.save_section('metadata')
+            self.ledger_data[section_name] = new_data
+            self.save_section(section_name)
             signals.configSectionChanged.emit(section_name)
+
             return
 
         if section_name not in self.ledger_data:

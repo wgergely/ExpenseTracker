@@ -227,6 +227,34 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.addRow('Exclude Zero Values', BooleanEditor('exclude_zero', parent=self))
         layout.addRow('Exclude Positive Values', BooleanEditor('exclude_positive', parent=self))
         layout.addRow('Theme', ThemeEditor(self))
+        # Span editor (negative period)
+        span_editor = QtWidgets.QSpinBox(self)
+        span_editor.setRange(1, 240)
+        span_editor.setValue(lib.settings['span'])
+        span_editor.valueChanged.connect(lambda v: lib.settings.__setitem__('span', v))
+        layout.addRow('Span (months)', span_editor)
+        # Smoothing factor editor
+        loess_editor = QtWidgets.QDoubleSpinBox(self)
+        loess_editor.setRange(0.01, 1.0)
+        loess_editor.setSingleStep(0.01)
+        loess_editor.setDecimals(2)
+        loess_editor.setValue(lib.settings['loess_fraction'])
+        loess_editor.valueChanged.connect(lambda v: lib.settings.__setitem__('loess_fraction', v))
+        layout.addRow('Smoothing Factor', loess_editor)
+
+        # Update editors on metadata changes
+        @QtCore.Slot(str)
+        def on_metadata_changed(section: str) -> None:
+            if section != 'metadata':
+                return
+            span_editor.blockSignals(True)
+            span_editor.setValue(lib.settings['span'])
+            span_editor.blockSignals(False)
+            loess_editor.blockSignals(True)
+            loess_editor.setValue(lib.settings['loess_fraction'])
+            loess_editor.blockSignals(False)
+
+        signals.configSectionChanged.connect(on_metadata_changed)
 
     def _init_actions(self):
         pass

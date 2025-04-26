@@ -60,7 +60,6 @@ class Geometry:
 
 class TrendGraph(QtWidgets.QWidget):
     """Custom QWidget painting a bar-plus-trend chart."""
-    loessChanged = QtCore.Signal(float)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
@@ -79,9 +78,6 @@ class TrendGraph(QtWidgets.QWidget):
         self._show_ticks: bool = True
         self._show_labels: bool = True
         self._show_tooltip: bool = True
-        # parameters for data fetching
-        self._negative_span: int = 120
-        self._loess_fraction: float = 0.15
 
         self._hover_index: Optional[int] = None
         self._hover_text: Optional[str] = None
@@ -99,8 +95,8 @@ class TrendGraph(QtWidgets.QWidget):
         signals.categoryChanged.connect(self.set_category)
         signals.dataRangeChanged.connect(self.init_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
-        signals.configSectionChanged.connect(self.init_data)
 
+        signals.configSectionChanged.connect(self.init_data)
         signals.presetActivated.connect(self.init_data)
 
     @QtCore.Slot()
@@ -141,17 +137,21 @@ class TrendGraph(QtWidgets.QWidget):
         tooltip_action.toggled.connect(self.toggle_tooltip)
         self.addAction(tooltip_action)
 
+        @QtCore.Slot()
+        def set_negative_span(action: QtGui.QAction) -> None:
+            lib.settings['negative_span'] = action.data().months
+
         # Span selection submenu
         span_menu = QtWidgets.QMenu('Span', self)
         span_group = QtGui.QActionGroup(self)
         span_group.setExclusive(True)
         for span in Span:
             act = QtGui.QAction(span.label, self, checkable=True)
-            act.setChecked(self._negative_span == span.months)
+            act.setChecked(lib.settings['negative_span'] == span.months)
             act.setData(span)
             span_group.addAction(act)
             span_menu.addAction(act)
-        span_group.triggered.connect(self.on_span_changed)
+        span_group.triggered.connect(set_negative_span)
         self.addAction(span_menu.menuAction())
 
         # Loess fraction adjustment action
@@ -174,8 +174,8 @@ class TrendGraph(QtWidgets.QWidget):
             logging.debug(f'TrendGraph: fetching trends for {category}', )
             df = get_trends(
                 category=category,
-                negative_span=self._negative_span,
-                loess_fraction=self._loess_fraction
+                negative_span=lib.settings['negative_span'],
+                loess_fraction=lib.settings['loess_fraction']
             )
         except Exception as exc:
             logging.error(f'TrendGraph: failed to fetch trends for {category}: {exc}')
@@ -230,12 +230,6 @@ class TrendGraph(QtWidgets.QWidget):
         self._show_tooltip = bool(visible)
         self.update()
 
-    @QtCore.Slot(QtGui.QAction)
-    def on_span_changed(self, action: QtGui.QAction) -> None:
-        data = action.data()
-        self._negative_span = data.months
-        self.init_data()
-
     @QtCore.Slot()
     def open_loess_dialog(self) -> None:
         """Open a dialog to adjust the LOESS smoothing fraction.
@@ -244,36 +238,30 @@ class TrendGraph(QtWidgets.QWidget):
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle('Adjust Smoothing Fraction')
         layout = QtWidgets.QVBoxLayout(dialog)
-        label = QtWidgets.QLabel(f'Loess Fraction: {self._loess_fraction:.2f}', dialog)
+        label = QtWidgets.QLabel(f'Loess Fraction: {lib.settings["loess_fraction"]:.2f}', dialog)
         layout.addWidget(label)
         slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, dialog)
         slider.setMinimum(1)
         slider.setMaximum(100)
-        slider.setValue(int(self._loess_fraction * 100))
+        slider.setValue(int(lib.settings['loess_fraction'] * 100))
         layout.addWidget(slider)
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
             parent=dialog
         )
         layout.addWidget(buttons)
-        original = self._loess_fraction
+        original = lib.settings['loess_fraction']
 
         def on_slider(val: int) -> None:
-            frac = val / 100.0
+            frac = float(val / 100.0)
             label.setText(f'Loess Fraction: {frac:.2f}')
-            self._loess_fraction = frac
-            if self._current_category:
-                self.set_category(self._current_category)
-            try:
-                self.loessChanged.emit(frac)
-            except Exception:
-                pass
+            lib.settings['loess_fraction'] = frac
 
         slider.valueChanged.connect(on_slider)
         buttons.accepted.connect(dialog.accept)
 
         def on_reject() -> None:
-            self._loess_fraction = original
+            lib.settings['loess_fraction'] = original
             if self._current_category:
                 self.set_category(self._current_category)
             dialog.reject()
