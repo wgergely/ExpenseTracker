@@ -3,6 +3,7 @@
 
 import logging
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
 
 import pandas as pd
@@ -13,6 +14,21 @@ from ...settings import lib
 from ...settings import locale as _locale
 from ...ui import ui
 from ...ui.actions import signals
+
+
+class Span(Enum):
+    """Predefined negative span durations for TrendGraph menu."""
+    THREE_MONTHS = (3, '3 Months')
+    SIX_MONTHS = (6, '6 Months')
+    ONE_YEAR = (12, '1 Year')
+    TWO_YEARS = (24, '2 Years')
+    FIVE_YEARS = (60, '5 Years')
+    TEN_YEARS = (120, '10 Years')
+    TWENTY_YEARS = (240, '20 Years')
+
+    def __init__(self, months: int, label: str) -> None:
+        self.months = months
+        self.label = label
 
 
 def paint(func):  # type: ignore[valid-type]
@@ -44,6 +60,7 @@ class Geometry:
 
 class TrendGraph(QtWidgets.QWidget):
     """Custom QWidget painting a bar-plus-trend chart."""
+    loessChanged = QtCore.Signal(float)
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
@@ -62,6 +79,9 @@ class TrendGraph(QtWidgets.QWidget):
         self._show_ticks: bool = True
         self._show_labels: bool = True
         self._show_tooltip: bool = True
+        # parameters for data fetching
+        self._negative_span: int = 120
+        self._loess_fraction: float = 0.15
 
         self._hover_index: Optional[int] = None
         self._hover_text: Optional[str] = None
@@ -69,6 +89,8 @@ class TrendGraph(QtWidgets.QWidget):
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setMouseTracking(True)
+        # enable context-menu actions
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         self._connect_signals()
         self._init_actions()
@@ -87,8 +109,55 @@ class TrendGraph(QtWidgets.QWidget):
         self.set_category(self._current_category)
 
     def _init_actions(self) -> None:
-        """Placeholder for future QAction or context-menu wiring."""
-        pass
+        """Set up context-menu actions for toggles, span selection, and smoothing."""
+        # Toggle visibility actions
+        bars_action = QtGui.QAction('Show Bars', self, checkable=True)
+        bars_action.setChecked(self._show_bars)
+        bars_action.toggled.connect(self.toggle_bars)
+        self.addAction(bars_action)
+
+        trend_action = QtGui.QAction('Show Trend', self, checkable=True)
+        trend_action.setChecked(self._show_trend)
+        trend_action.toggled.connect(self.toggle_trend)
+        self.addAction(trend_action)
+
+        axes_action = QtGui.QAction('Show Axes', self, checkable=True)
+        axes_action.setChecked(self._show_axes)
+        axes_action.toggled.connect(self.toggle_axes)
+        self.addAction(axes_action)
+
+        ticks_action = QtGui.QAction('Show Ticks', self, checkable=True)
+        ticks_action.setChecked(self._show_ticks)
+        ticks_action.toggled.connect(self.toggle_ticks)
+        self.addAction(ticks_action)
+
+        labels_action = QtGui.QAction('Show Labels', self, checkable=True)
+        labels_action.setChecked(self._show_labels)
+        labels_action.toggled.connect(self.toggle_labels)
+        self.addAction(labels_action)
+
+        tooltip_action = QtGui.QAction('Show Tooltip', self, checkable=True)
+        tooltip_action.setChecked(self._show_tooltip)
+        tooltip_action.toggled.connect(self.toggle_tooltip)
+        self.addAction(tooltip_action)
+
+        # Span selection submenu
+        span_menu = QtWidgets.QMenu('Span', self)
+        span_group = QtGui.QActionGroup(self)
+        span_group.setExclusive(True)
+        for span in Span:
+            act = QtGui.QAction(span.label, self, checkable=True)
+            act.setChecked(self._negative_span == span.months)
+            act.setData(span)
+            span_group.addAction(act)
+            span_menu.addAction(act)
+        span_group.triggered.connect(self.on_span_changed)
+        self.addAction(span_menu.menuAction())
+
+        # Loess fraction adjustment action
+        smooth_action = QtGui.QAction('Adjust Smoothing...', self)
+        smooth_action.triggered.connect(self.open_loess_dialog)
+        self.addAction(smooth_action)
 
     @QtCore.Slot(str)
     def set_category(self, category: str) -> None:
@@ -103,7 +172,11 @@ class TrendGraph(QtWidgets.QWidget):
         # fetch category-specific trend data
         try:
             logging.debug(f'TrendGraph: fetching trends for {category}', )
-            df = get_trends(category=category, loess_fraction=0.15, negative_span=24)
+            df = get_trends(
+                category=category,
+                negative_span=self._negative_span,
+                loess_fraction=self._loess_fraction
+            )
         except Exception as exc:
             logging.error(f'TrendGraph: failed to fetch trends for {category}: {exc}')
             self.clear_data()
@@ -132,6 +205,81 @@ class TrendGraph(QtWidgets.QWidget):
     def toggle_trend(self, visible: bool) -> None:
         self._show_trend = bool(visible)
         self.update()
+
+    @QtCore.Slot(bool)
+    def toggle_axes(self, visible: bool) -> None:
+        """Toggle axis visibility."""
+        self._show_axes = bool(visible)
+        self.update()
+
+    @QtCore.Slot(bool)
+    def toggle_ticks(self, visible: bool) -> None:
+        """Toggle tick marks visibility."""
+        self._show_ticks = bool(visible)
+        self.update()
+
+    @QtCore.Slot(bool)
+    def toggle_labels(self, visible: bool) -> None:
+        """Toggle labels visibility."""
+        self._show_labels = bool(visible)
+        self.update()
+
+    @QtCore.Slot(bool)
+    def toggle_tooltip(self, visible: bool) -> None:
+        """Toggle tooltip visibility."""
+        self._show_tooltip = bool(visible)
+        self.update()
+
+    @QtCore.Slot(QtGui.QAction)
+    def on_span_changed(self, action: QtGui.QAction) -> None:
+        data = action.data()
+        self._negative_span = data.months
+        self.init_data()
+
+    @QtCore.Slot()
+    def open_loess_dialog(self) -> None:
+        """Open a dialog to adjust the LOESS smoothing fraction.
+
+        """
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle('Adjust Smoothing Fraction')
+        layout = QtWidgets.QVBoxLayout(dialog)
+        label = QtWidgets.QLabel(f'Loess Fraction: {self._loess_fraction:.2f}', dialog)
+        layout.addWidget(label)
+        slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, dialog)
+        slider.setMinimum(1)
+        slider.setMaximum(100)
+        slider.setValue(int(self._loess_fraction * 100))
+        layout.addWidget(slider)
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+            parent=dialog
+        )
+        layout.addWidget(buttons)
+        original = self._loess_fraction
+
+        def on_slider(val: int) -> None:
+            frac = val / 100.0
+            label.setText(f'Loess Fraction: {frac:.2f}')
+            self._loess_fraction = frac
+            if self._current_category:
+                self.set_category(self._current_category)
+            try:
+                self.loessChanged.emit(frac)
+            except Exception:
+                pass
+
+        slider.valueChanged.connect(on_slider)
+        buttons.accepted.connect(dialog.accept)
+
+        def on_reject() -> None:
+            self._loess_fraction = original
+            if self._current_category:
+                self.set_category(self._current_category)
+            dialog.reject()
+
+        buttons.rejected.connect(on_reject)
+        dialog.exec()
 
     def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(ui.Size.DefaultWidth(1.0), ui.Size.DefaultHeight(1.0))
@@ -598,10 +746,9 @@ class TrendGraph(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def clear_data(self) -> None:
-        # clear current data
+        # clear current data (preserve selected category)
         self._df = pd.DataFrame()
-        self._current_category = None
-
+        # do not reset _current_category here
         self._dates = pd.Index([])
         self._bar_series = pd.Series(dtype=float)
         self._trend_series = pd.Series(dtype=float)
