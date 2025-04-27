@@ -107,6 +107,18 @@ LEDGER_SCHEMA: Dict[str, Any] = {
 }
 
 
+def parse_mapping_spec(spec: str) -> list[str]:
+    """
+    Split a mapping specification string on the configured separators into individual header names.
+
+    Whitespace around header names is stripped, and empty segments are dropped.
+    """
+    import re
+    pattern = '|'.join(map(re.escape, DATA_MAPPING_SEPARATOR_CHARS))
+    parts = re.split(pattern, spec or '')
+    return [hdr.strip() for hdr in parts if hdr and hdr.strip()]
+
+
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
     logging.debug('Validating "header" section.')
     if not isinstance(header_dict, dict):
