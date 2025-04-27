@@ -382,6 +382,7 @@ class TrendGraph(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
 
         geom = self._geom
+
         # use thin small font for axis legends
         font, _ = ui.Font.ThinFont(ui.Size.SmallText(1.0))
         painter.setFont(font)
