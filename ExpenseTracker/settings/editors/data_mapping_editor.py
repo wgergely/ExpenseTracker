@@ -158,10 +158,12 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         # Determine key for this row
         key = lib.DATA_MAPPING_KEYS[drop_row]
         existing = self._mapping.get(key, '')
+
         # Parse existing components
         from ..lib import parse_mapping_spec, DATA_MAPPING_SEPARATOR_CHARS
         sep = DATA_MAPPING_SEPARATOR_CHARS[0] if DATA_MAPPING_SEPARATOR_CHARS else '|'
         parts = parse_mapping_spec(existing)
+
         # Determine keyboard modifiers
         mods = QtWidgets.QApplication.keyboardModifiers()
         if mods & QtCore.Qt.ShiftModifier:
@@ -175,7 +177,9 @@ class DataMappingModel(QtCore.QAbstractTableModel):
             new_parts = parts.copy()
             if header_name not in new_parts:
                 new_parts.append(header_name)
+
         new_spec = sep.join(new_parts)
+
         # Update mapping
         success = self.setData(self.index(drop_row, drop_col), new_spec, QtCore.Qt.EditRole)
         return success
