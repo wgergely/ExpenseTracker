@@ -12,9 +12,9 @@ from typing import Any, Dict, List, Tuple
 from PySide6 import QtCore
 
 from .database import DatabaseAPI, google_serial_date_to_iso
-from .service import _verify_sheet_access, _fetch_headers, _query_sheet_size, start_asynchronous, TOTAL_TIMEOUT
+from .service import _verify_sheet_access, _fetch_headers, _query_sheet_size, start_asynchronous, TOTAL_TIMEOUT, \
+    _verify_mapping
 from ..settings import lib
-from ..status import status
 
 
 @dataclass
@@ -52,17 +52,22 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
     def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
         self._queue: List[EditOperation] = []
-        # mapping of logical→header name
-        self._map: Dict[str, str] = lib.settings.get_section('mapping') or {}
-        # sheet config
-        cfg = lib.settings.get_section('spreadsheet') or {}
-        self._sheet_id: str = cfg.get('id', '')
-        self._worksheet: str = cfg.get('worksheet', '')
+
+    @property
+    def sheet_id(self) -> str:
+        config = lib.settings.get_section('spreadsheet')
+        return config.get('id', '')
+
+    @property
+    def worksheet(self) -> str:
+        config = lib.settings.get_section('spreadsheet')
+        return config.get('worksheet', '')
 
     def queue_edit(self, local_id: int, column: str, new_value: Any) -> None:
         """
         Add an edit to the queue, recording the original and stable key values.
         """
+        logging.debug(f'Queueing edit: local_id={local_id}, column={column}, new_value={new_value}')
         row = DatabaseAPI.get_row(local_id)
         if not row:
             raise ValueError(f'No local row with id {local_id}')
@@ -103,20 +108,21 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
         if not self._queue:
             return results
 
+        logging.debug(f'Starting commit of {len(self._queue)} queued edit(s)')
         # verify access
         service = _verify_sheet_access()
         # fetch headers
         headers = _fetch_headers()
+        logging.debug(f'Remote sheet headers: {headers}')
+        # verify header mapping configuration
+        mapping = lib.settings.get_section('mapping')
+        logging.debug(f'Using header mapping: {mapping}')
+        _verify_mapping(remote_headers=headers)
+        logging.debug('Header mapping verified successfully')
         header_to_idx = {h: i for i, h in enumerate(headers)}
-        # ensure mapping headers exist
-        for logical, hdr in self._map.items():
-            if hdr not in header_to_idx:
-                raise status.HeaderMappingInvalidException(
-                    f'Mapped header "{hdr}" not in remote sheet',
-                )
 
         # determine sheet size
-        row_count, _ = _query_sheet_size(service, self._sheet_id, self._worksheet)
+        row_count, _ = _query_sheet_size(service, self.sheet_id, self.worksheet)
         data_rows = max(row_count - 1, 0)
         if data_rows == 0:
             for op in self._queue:
@@ -129,16 +135,15 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
             needed.update(op.stable_keys.keys())
             needed.add(op.column)
 
-        # batchGet each column 2..row_count
         ranges: List[str] = []
         for logical in needed:
-            hdr = self._map.get(logical)
+            hdr = mapping.get(logical)
             idx = header_to_idx[hdr]
             col = _idx_to_col(idx)
-            ranges.append(f'{self._worksheet}!{col}2:{col}{row_count}')
+            ranges.append(f'{self.worksheet}!{col}2:{col}{row_count}')
 
         batch = service.spreadsheets().values().batchGet(
-            spreadsheetId=self._sheet_id,
+            spreadsheetId=self.sheet_id,
             ranges=ranges,
             valueRenderOption='UNFORMATTED_VALUE',
             fields='valueRanges(values)',
@@ -202,16 +207,16 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
         # batchUpdate all
         data: List[Dict[str, Any]] = []
         for op, sheet_row in to_update:
-            hdr = self._map.get(op.column)
+            hdr = mapping.get(op.column)
             idx = header_to_idx[hdr]
             col = _idx_to_col(idx)
             data.append({
-                'range': f'{self._worksheet}!{col}{sheet_row}',
+                'range': f'{self.worksheet}!{col}{sheet_row}',
                 'values': [[op.new_value]],
             })
         body = {'valueInputOption': 'USER_ENTERED', 'data': data}
         service.spreadsheets().values().batchUpdate(
-            spreadsheetId=self._sheet_id,
+            spreadsheetId=self.sheet_id,
             body=body,
         ).execute()
 
@@ -232,6 +237,7 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
     @QtCore.Slot()
     def commit_queue_async(self) -> None:
         """Run commit_queue in a QThread and emit commitFinished when done."""
+        logging.debug('Starting asynchronous commit_queue')
         result = start_asynchronous(
             self.commit_queue,
             total_timeout=TOTAL_TIMEOUT,
