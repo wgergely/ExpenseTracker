@@ -3,7 +3,91 @@ from typing import Optional
 from PySide6 import QtWidgets, QtCore, QtGui
 
 from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
+from ...core.sync import sync_manager
+from ...settings import lib
 from ...ui import ui
+from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
+
+
+class PopupCombobox(QtWidgets.QComboBox):
+    def showPopup(self):
+
+        fm = self.fontMetrics()
+        max_text = 0
+        for i in range(self.count()):
+            text = self.itemText(i)
+            w = fm.horizontalAdvance(text)
+            if w > max_text:
+                max_text = w
+        icon_w = self.iconSize().width()
+        # add padding
+        total_w = max_text + icon_w + ui.Size.Margin(1.0)
+        self.view().setMinimumWidth(total_w)
+        super().showPopup()
+
+
+class CategoryDelegate(QtWidgets.QStyledItemDelegate):
+    """
+    A delegate that provides a dropdown editor with category icons and colors,
+    and highlights cells with pending edits.
+    """
+
+    def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
+                     index: QtCore.QModelIndex) -> QtWidgets.QWidget:
+        editor = PopupCombobox(parent)
+        cats = lib.settings.get_section('categories') or {}
+        for key, info in cats.items():
+            icon_name = info.get('icon', 'cat_unclassified')
+            hex_color = info.get('color', Color.Text().name(QtGui.QColor.HexRgb))
+            qcolor = QtGui.QColor(hex_color)
+            icon = get_icon(icon_name, color=qcolor, engine=CategoryIconEngine)
+            display = info.get('display_name') or key
+            editor.addItem(icon, display, userData=key)
+        # automatically open the dropdown on single-click
+        QtCore.QTimer.singleShot(0, editor.showPopup)
+        return editor
+
+    def setEditorData(self, editor: QtWidgets.QComboBox, index: QtCore.QModelIndex) -> None:
+        value = index.data(QtCore.Qt.EditRole)
+        for i in range(editor.count()):
+            if editor.itemData(i) == value:
+                editor.setCurrentIndex(i)
+                return
+
+    def setModelData(self, editor: QtWidgets.QComboBox, model: QtCore.QAbstractItemModel,
+                     index: QtCore.QModelIndex) -> None:
+        new_val = editor.currentData()
+        model.setData(index, new_val, QtCore.Qt.EditRole)
+
+    def updateEditorGeometry(self, editor: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
+                             index: QtCore.QModelIndex) -> None:
+        # match the cell geometry including height
+        editor.setGeometry(option.rect)
+        editor.setStyleSheet(f'height: {option.rect.height()}px;')
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex) -> None:
+        super().paint(painter, option, index)
+        pending = False
+        try:
+            model = index.model()
+            if isinstance(model, QtCore.QSortFilterProxyModel):
+                src_index = model.mapToSource(index)
+                src_model = model.sourceModel()
+            else:
+                src_index = index
+                src_model = model
+            last_col = len(lib.TRANSACTION_DATA_COLUMNS) - 1
+            lid = src_model.index(src_index.row(), last_col).data(QtCore.Qt.EditRole)
+            pending = any(op.local_id == lid and op.column == 'category' for op in sync_manager.get_queued_ops())
+        except Exception:
+            pass
+        if pending:
+            pen = QtGui.QPen(Color.Yellow())
+            pen.setWidthF(Size.Separator(2.0))
+            painter.save()
+            painter.setPen(pen)
+            painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
+            painter.restore()
 
 
 class TransactionsView(QtWidgets.QTableView):
@@ -19,10 +103,8 @@ class TransactionsView(QtWidgets.QTableView):
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         # Allow editing of editable cells via double-click or pressing F2
-        self.setEditTriggers(
-            QtWidgets.QAbstractItemView.DoubleClicked |
-            QtWidgets.QAbstractItemView.EditKeyPressed
-        )
+        # Enable editing on single click, key press, double click, etc.
+        self.setEditTriggers(QtWidgets.QAbstractItemView.AllEditTriggers)
 
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
@@ -49,8 +131,7 @@ class TransactionsView(QtWidgets.QTableView):
         proxy = TransactionsSortFilterProxyModel(self)
         proxy.setSourceModel(model)
         self.setModel(proxy)
-        # use a custom delegate for category editing with icons and edit-border
-        from ...ui.delegates import CategoryDelegate
+
         delegate = CategoryDelegate(self)
         self.setItemDelegateForColumn(Columns.Category.value, delegate)
 
@@ -59,8 +140,6 @@ class TransactionsView(QtWidgets.QTableView):
         self.setSortingEnabled(True)
         self.sortByColumn(Columns.Amount.value, QtCore.Qt.AscendingOrder)
 
-        # Hide internal local_id column (not user-facing)
-        from ...settings import lib
         last_col = len(lib.TRANSACTION_DATA_COLUMNS) - 1
         self.setColumnHidden(last_col, True)
 
@@ -245,14 +324,10 @@ class TransactionsWidget(QtWidgets.QDockWidget):
 
         self._create_ui()
         self._connect_signals()
-        # update status when queue size changes
-        from ...core.sync import sync_manager
+
         sync_manager.queueChanged.connect(self._on_queue_changed)
 
     def _connect_signals(self):
-        # Refresh sync button when commit finishes
-        from ...core.sync import sync_manager
-
         sync_manager.commitFinished.connect(lambda _: self._update_sync_button())
         self.sync_button.clicked.connect(sync_manager.commit_queue_async)
         self.view.model().dataChanged.connect(self._update_sync_button)
@@ -290,7 +365,6 @@ class TransactionsWidget(QtWidgets.QDockWidget):
 
     def _update_sync_button(self) -> None:
         """Enable or disable the sync button based on queued edits."""
-        from ...core.sync import sync_manager
         self.sync_button.setEnabled(bool(sync_manager.get_queued_ops()))
 
     @QtCore.Slot(int)
