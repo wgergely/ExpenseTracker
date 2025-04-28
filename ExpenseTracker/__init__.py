@@ -1,3 +1,3 @@
 from .log import log
-log.setup_logging()
 
+log.setup_logging()

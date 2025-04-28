@@ -207,7 +207,6 @@ class DatabaseAPI(QtCore.QObject):
             conn.commit()
             conn.close()
 
-
     @classmethod
     def verify(cls) -> None:
         """Verify that the local cache database exists and is valid."""

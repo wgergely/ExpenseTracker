@@ -21,7 +21,7 @@ from PySide6 import QtCore, QtWidgets
 
 from ..status import status
 
-DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly', ]
+DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', ]
 
 
 class AuthFlowWorker(QtCore.QThread):
