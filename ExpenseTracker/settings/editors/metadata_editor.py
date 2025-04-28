@@ -233,6 +233,7 @@ class MetadataWidget(QtWidgets.QWidget):
         def on_metadata_changed(section: str) -> None:
             if section != 'metadata':
                 return
+
         signals.configSectionChanged.connect(on_metadata_changed)
 
     def _init_actions(self):

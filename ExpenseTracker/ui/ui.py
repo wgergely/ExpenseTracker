@@ -517,7 +517,6 @@ class CategoryIconEngine(ThemedIconEngine):
                 logging.debug(f'Found icon: {_icon.stem}')
                 icons.append(_icon.stem)
 
-
     def paint(self, painter, rect, mode, state):
         painter.save()
 

@@ -126,7 +126,6 @@ class LogDockWidget(QtWidgets.QDockWidget):
         action_group = QtGui.QActionGroup(self)
         action_group.setExclusive(True)
 
-
         for name, lvl in [
             ('Debug', logging.DEBUG),
             ('Info', logging.INFO),

@@ -509,7 +509,7 @@ class PresetsAPI(QtCore.QObject):
         idx = len(self._items) - 1
         self.presetAdded.emit(idx)
         return new_item
-    
+
     def set_description(self, item: PresetItem, new_description: str) -> bool:
         """
         Update the description for a preset and propagate to any matching items.

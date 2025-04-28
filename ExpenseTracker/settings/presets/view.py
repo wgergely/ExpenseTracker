@@ -253,7 +253,6 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
-
         # Delete Preset
         @QtCore.Slot()
         def delete_preset() -> None:
@@ -374,7 +373,6 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
         action.setStatusTip('Update the selected preset with current settings')
         action.triggered.connect(save_preset)
         self.view.addAction(action)
-
 
     def _connect_signals(self) -> None:
         # No additional connections beyond view behaviors
