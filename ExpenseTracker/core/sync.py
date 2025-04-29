@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 from PySide6 import QtCore
 
 from .database import DatabaseAPI, google_serial_date_to_iso
-from .service import _verify_sheet_access, _fetch_headers, _query_sheet_size, start_asynchronous, TOTAL_TIMEOUT, \
+from .service import _verify_sheet_access, _query_sheet_size, start_asynchronous, TOTAL_TIMEOUT, \
     _verify_mapping
 from ..settings import lib
 
@@ -109,25 +109,40 @@ class SyncManager(QtCore.QObject):
             return results
 
         logging.debug(f'Starting commit of {len(self._queue)} queued edit(s)')
-        # verify access
+        # verify access and get service client
         service = _verify_sheet_access()
-        # fetch headers
-        headers = _fetch_headers()
+
+        # determine sheet size (rows, cols)
+        row_count, col_count = _query_sheet_size(service, self.sheet_id, self.worksheet)
+        data_rows = max(row_count - 1, 0)
+        if data_rows == 0:
+            for op in self._queue:
+                results[op.local_id] = (False, 'Remote sheet has no data rows')
+            return results
+
+        # fetch header row in one request
+        last_col = _idx_to_col(col_count - 1)
+        hdr_range = f'{self.worksheet}!A1:{last_col}1'
+        hdr_batch = service.spreadsheets().values().batchGet(
+            spreadsheetId=self.sheet_id,
+            ranges=[hdr_range],
+            valueRenderOption='UNFORMATTED_VALUE',
+            fields='valueRanges(values)',
+        ).execute()
+        # parse headers
+        ranges_out = hdr_batch.get('valueRanges', [])
+        if ranges_out and ranges_out[0].get('values'):
+            headers = [str(cell) for cell in ranges_out[0]['values'][0]]
+        else:
+            headers = []
         logging.debug(f'Remote sheet headers: {headers}')
+
         # verify header mapping configuration
         mapping = lib.settings.get_section('mapping')
         logging.debug(f'Using header mapping: {mapping}')
         _verify_mapping(remote_headers=headers)
         logging.debug('Header mapping verified successfully')
         header_to_idx = {h: i for i, h in enumerate(headers)}
-
-        # determine sheet size
-        row_count, _ = _query_sheet_size(service, self.sheet_id, self.worksheet)
-        data_rows = max(row_count - 1, 0)
-        if data_rows == 0:
-            for op in self._queue:
-                results[op.local_id] = (False, 'Remote sheet has no data rows')
-            return results
 
         # which logical columns to fetch
         needed = set()
