@@ -19,6 +19,9 @@ from googleapiclient.errors import HttpError
 
 from ..status import status
 
+# Cached Sheets API client to avoid repeated discovery/auth costs
+_cached_service: Any = None
+
 TOTAL_TIMEOUT: int = 180
 MAX_RETRIES: int = 6
 BATCH_SIZE: int = 3000  # Number of rows per batch for large sheets
@@ -134,16 +137,22 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
 
 def get_service() -> Any:
     """
-    Builds and returns a Google Sheets service client.
+    Builds (or returns cached) Google Sheets service client.
 
     Returns:
-        The Sheets API Resource.
+        The Sheets API Resource, reusing a single client per app run.
     """
+    global _cached_service
     from . import auth
+    # Obtain fresh credentials (with auto-refresh capability)
     creds: Any = auth.get_creds()
+    # Return cached client if already created
+    if _cached_service is not None:
+        return _cached_service
     try:
         service: Any = build('sheets', 'v4', credentials=creds)
         logging.debug('Google Sheets service client created successfully.')
+        _cached_service = service
         return service
     except Exception as ex:
         raise status.ServiceUnavailableException from ex
@@ -616,3 +625,23 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int 
         from ..status import status
         raise status.UnknownException(result['error'])
     return result['data']
+
+
+# Reset cached Sheets API client when credentials/config change
+try:
+    from ..ui.actions import signals
+
+
+    @QtCore.Slot(str)
+    def _reset_cached_service(section: str) -> None:
+        """Clear the cached Sheets client when client_secret changes."""
+        if section == 'client_secret':
+            logging.debug('Clearing cached Sheets service client due to client_secret change')
+            global _cached_service
+            _cached_service = None
+
+
+    signals.configSectionChanged.connect(_reset_cached_service)
+except ImportError:
+    # UI signals not available
+    pass
