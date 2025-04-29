@@ -352,7 +352,7 @@ class TrendGraph(QtWidgets.QWidget):
         if self.property('rounded'):
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
             painter.setPen(QtCore.Qt.NoPen)
-            painter.setBrush(ui.Color.Background())
+            painter.setBrush(ui.Color.VeryDarkBackground())
             painter.drawRoundedRect(self.rect(), ui.Size.Indicator(2.0), ui.Size.Indicator(2.0))
         else:
             painter.fillRect(self.rect(), ui.Color.VeryDarkBackground())
