@@ -38,12 +38,14 @@ def _idx_to_col(idx: int) -> str:
     return letters
 
 
-class SyncManager(QtCore.QObject):  # noqa: WPS214
+class SyncManager(QtCore.QObject):
     """
     Buffer edits to transactions and commit them safely to the remote sheet.
+
     Emits:
-      - dataUpdated(List[EditOperation]): after local cache has been updated
-      - commitFinished(dict): with per-row results
+      dataUpdated(List[EditOperation]): after the local cache has been updated.
+      commitFinished(dict): with per-row results.
+
     """
     commitFinished = QtCore.Signal(object)
     dataUpdated = QtCore.Signal(list)
@@ -77,26 +79,24 @@ class SyncManager(QtCore.QObject):  # noqa: WPS214
             'description': row.get('description'),
         }
         orig = row.get(column)
-        # If an edit for this cell is already queued, squash it (keep orig_value, update new_value)
+        # If an edit for this cell is already queued, squash it
         for op in self._queue:
             if op.local_id == local_id and op.column == column:
                 op.new_value = new_value
                 # emit queue size unchanged
                 self.queueChanged.emit(len(self._queue))
                 return
-        # otherwise append a new operation
+
         self._queue.append(EditOperation(local_id, column, orig, new_value, stable))
-        # notify UI of queue size change
         self.queueChanged.emit(len(self._queue))
 
-    def get_queued_ops(self) -> List[EditOperation]:  # noqa: WPS210
+    def get_queued_ops(self) -> List[EditOperation]:
         """Return the list of pending edits."""
         return list(self._queue)
 
     def clear_queue(self) -> None:
         """Discard all pending edits."""
         self._queue.clear()
-        # notify UI the queue is now empty
         self.queueChanged.emit(0)
 
     def commit_queue(self) -> Dict[int, Tuple[bool, str]]:
