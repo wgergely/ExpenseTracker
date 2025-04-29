@@ -863,9 +863,8 @@ class TrendDockWidget(QtWidgets.QDockWidget):
         self.setContentsMargins(0, 0, 0, 0)
         self.setMinimumSize(
             ui.Size.DefaultWidth(0.3),
-            ui.Size.DefaultHeight(0.3)
+            ui.Size.DefaultHeight(0.3),
         )
-        self.setMaximumHeight(ui.Size.DefaultHeight(0.5))
 
         self._connect_signals()
 
