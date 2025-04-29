@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+from status.status import BaseStatusException
 from ..core import database
 from ..settings import lib
 from ..settings import locale
@@ -45,7 +46,11 @@ def metadata():
             for key in METADATA_KEYS:
                 if key in data:
                     kwargs[key] = data[key]
-            db.verify()
+
+            try:
+                db.verify()
+            except BaseStatusException:
+                return pd.DataFrame()
             return func(db.data(), **kwargs)
 
         return wrapper
