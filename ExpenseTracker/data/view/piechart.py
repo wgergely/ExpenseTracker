@@ -65,7 +65,6 @@ class PieChartModel:
         df = df.reset_index(drop=True)
 
         if df.empty or df['total'].abs().sum() == 0:
-            logging.warning('PieChart has no data to display')
             self._slices = []
             self._version += 1
             return
@@ -270,7 +269,7 @@ class PieChartView(QtWidgets.QWidget):
 
     def _draw_background(self, painter: QtGui.QPainter) -> None:
         if self.property('rounded'):
-            painter.setBrush(ui.Color.Background())
+            painter.setBrush(ui.Color.VeryDarkBackground())
             painter.setPen(QtCore.Qt.NoPen)
             painter.drawRoundedRect(self.rect(), ui.Size.Indicator(2.0), ui.Size.Indicator(2.0))
         else:
@@ -461,12 +460,6 @@ class PieChartView(QtWidgets.QWidget):
         self.addAction(action)
 
 
-
-
-
-
-
-
 class PieChartDockWidget(QtWidgets.QDockWidget):
     """Dockable wrapper around :class:`PieChartView`."""
 
@@ -485,12 +478,3 @@ class PieChartDockWidget(QtWidgets.QDockWidget):
 
         self.setContentsMargins(0, 0, 0, 0)
         self.setMinimumSize(ui.Size.DefaultWidth(0.3), ui.Size.DefaultHeight(0.3))
-        self.setMaximumHeight(ui.Size.DefaultHeight(0.5))
-
-        self.visibilityChanged.connect(self._on_visibility_changed)
-
-    @QtCore.Slot(bool)
-    def _on_visibility_changed(self, visible: bool) -> None:
-        if visible:
-            self.widget().model.rebuild()
-            self.widget().update()
