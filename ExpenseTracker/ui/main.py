@@ -8,6 +8,7 @@ from . import ui
 from .yearmonth import RangeSelectorBar
 from ..core import database
 from ..data.view.expense import ExpenseView
+from ..data.view.piechart import PieChartDockWidget
 from ..data.view.transaction import TransactionsWidget
 from ..data.view.trends import TrendDockWidget
 from ..log.view import LogDockWidget
@@ -565,9 +566,6 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
 
-        painter.setBrush(QtCore.Qt.red)
-        painter.drawRect(self.rect())
-
         color = ui.Color.VeryDarkBackground()
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(color)
@@ -665,6 +663,12 @@ class MainWindow(ResizableMainWidget):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.trends_view)
         self.trends_view.hide()
 
+        # Add pie chart dock (right side)
+        self.piechart_view = PieChartDockWidget(parent=self)
+        self.piechart_view.setObjectName('ExpenseTrackerPieChartDockWidget')
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.piechart_view)
+        self.piechart_view.hide()
+
     def _connect_signals(self):
         signals.openTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
@@ -751,6 +755,15 @@ class MainWindow(ResizableMainWidget):
         action.setShortcut('Ctrl+Shift+T')
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_trend'))
         action.triggered.connect(functools.partial(toggle_vis, self.trends_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+        # Pie Chart toggle
+        action = QtGui.QAction('Pie Chart', self)
+        action.setCheckable(True)
+        action.setChecked(self.piechart_view.isVisible())
+        action.setToolTip('Show pie chart...')
+        action.setStatusTip('Show pie chart...')
+        action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
         self.toolbar.addAction(action)
         self.addAction(action)
 

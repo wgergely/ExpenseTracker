@@ -284,7 +284,7 @@ class DataMappingEditor(QtWidgets.QWidget):
     def _init_actions(self):
         @QtCore.Slot()
         def save_to_disk():
-            lib.settings.set_section('mapping', self.view.modelw().get_current_section_data())
+            lib.settings.set_section('mapping', self.view.model().get_current_section_data())
 
         action = QtGui.QAction('Save to Disk', self.view)
         action.setToolTip('Save the current mapping to disk')
