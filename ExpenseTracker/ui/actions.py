@@ -83,16 +83,6 @@ class Signals(QtCore.QObject):
 
         self.presetActivated.connect(emit_changed_signals)
 
-        @QtCore.Slot()
-        def show_status_error(status: status.Status):
-            QtWidgets.QMessageBox.critical(
-                None,
-                status.name,
-                status.value
-            )
-
-        self.statusError.connect(show_status_error)
-
 
 # Create a singleton instance of Signals
 signals = Signals()
