@@ -91,7 +91,7 @@ class LogTableView(QtWidgets.QTableView):
 
 
 class LogDockWidget(QtWidgets.QDockWidget):
-    """Dockable widget for viewing application logs."""
+    """Dockable widget for viewing app logs."""
 
     def __init__(self, parent=None) -> None:
         super().__init__('Logs', parent)
@@ -102,6 +102,8 @@ class LogDockWidget(QtWidgets.QDockWidget):
         )
 
         widget = QtWidgets.QWidget(self)
+        widget.setProperty('rounded', True)
+
         QtWidgets.QVBoxLayout(widget)
         widget.layout().setContentsMargins(0, 0, 0, 0)
         widget.layout().setSpacing(0)
