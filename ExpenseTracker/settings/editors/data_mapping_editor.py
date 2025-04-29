@@ -209,8 +209,27 @@ class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
         completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         completer.setCompletionMode(QtWidgets.QCompleter.UnfilteredPopupCompletion)
         editor.setCompleter(completer)
+
         # When a completion is activated, merge/replace/remove based on modifiers
-        completer.activated[str].connect(lambda text, ed=editor: self._on_completer_activated(ed, text))
+        def completer_activated(ed, text):
+            if not ed or not text:
+                return
+            # Determine keyboard modifiers
+            mods = QtWidgets.QApplication.keyboardModifiers()
+            if mods & QtCore.Qt.ShiftModifier:
+                # replace
+                new_parts = [text]
+            elif mods & QtCore.Qt.AltModifier:
+                # remove
+                new_parts = [p for p in ed.text().split('|') if p != text]
+            else:
+                # append (default), avoid duplicates
+                new_parts = ed.text().split('|')
+                if text not in new_parts:
+                    new_parts.append(text)
+            ed.setText('|'.join(new_parts))
+
+        completer.activated[str].connect(lambda text, ed=editor: completer_activated(ed, text))
         return editor
 
     def setEditorData(self, editor, index):
