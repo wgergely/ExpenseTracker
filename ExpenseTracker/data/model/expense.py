@@ -131,6 +131,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 if index.data(QtCore.Qt.DisplayRole) == 'Total':
                     return None
 
+                if category == '':
+                    return ui.get_icon('cat_unknown', color=ui.Color.Yellow(), engine=ui.CategoryIconEngine)
+
                 config = lib.settings.get_section('categories')
                 if not config:
                     return None
@@ -156,12 +159,16 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                         return 'Monthly Average'
                     return 'Total*'
 
+                if category == '':
+                    return 'Uncategorized'
+
                 categories_cfg = lib.settings.get_section('categories')
                 if not categories_cfg:
                     return category
-                # Use a display name if present
+
                 if category in categories_cfg and categories_cfg[category].get('display_name'):
                     return categories_cfg[category]['display_name']
+
                 return category
             if role == QtCore.Qt.FontRole:
                 font, _ = ui.Font.ThinFont(ui.Size.MediumText(1.0))
@@ -170,6 +177,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
             if role == QtCore.Qt.ForegroundRole:
                 if total_value == 0:
                     return ui.Color.DisabledText()
+
+                if category == '':
+                    return ui.Color.Yellow()
 
         elif col == Columns.Weight:
             return None
