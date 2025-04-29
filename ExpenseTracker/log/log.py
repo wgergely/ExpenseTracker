@@ -58,7 +58,7 @@ def qt_message_handler(mode, context, message):
 
 def setup_logging(
         enable_stream_handler=True,
-        enable_qt_handler=False,
+        enable_qt_handler=True,
         log_level=logging.INFO,
 ):
     """

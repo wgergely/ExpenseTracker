@@ -545,6 +545,10 @@ QToolBar QToolButton:hover {
     border : <Separator@2.0>px solid <Background>;
 }
 
+QToolButton {
+    border-radius: <Indicator@1.5>px;
+}
+
 
 
 QSplitter::handle {
@@ -670,4 +674,8 @@ LogTableView {
     padding: 0px;
     margin: 0px;
     border: <Separator@2.0>px solid <Transparent>;
+}
+
+QWidget[rounded="true"] {
+    border-radius: <Indicator@2.0>px;
 }

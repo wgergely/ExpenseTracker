@@ -164,6 +164,8 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
     def _create_ui(self) -> None:
         content = QtWidgets.QWidget(self)
+        content.setProperty('rounded', True)
+
         layout = QtWidgets.QVBoxLayout(content)
 
         o = ui.Size.Margin(0.5)

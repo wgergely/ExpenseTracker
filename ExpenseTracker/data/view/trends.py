@@ -349,7 +349,13 @@ class TrendGraph(QtWidgets.QWidget):
     @paint
     def _draw_background(self, painter: QtGui.QPainter) -> None:
         # fill background using app-defined color
-        painter.fillRect(self.rect(), ui.Color.VeryDarkBackground())
+        if self.property('rounded'):
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(ui.Color.Background())
+            painter.drawRoundedRect(self.rect(), ui.Size.Indicator(2.0), ui.Size.Indicator(2.0))
+        else:
+            painter.fillRect(self.rect(), ui.Color.VeryDarkBackground())
 
         o = ui.Size.Margin(1.0)
         rect = self.rect().adjusted(o, o, -o, -o)
@@ -841,7 +847,7 @@ class TrendGraph(QtWidgets.QWidget):
 class TrendDockWidget(QtWidgets.QDockWidget):
     """Dockable widget wrapping the TrendGraph chart."""
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Trends', parent=parent)
         self.setObjectName('ExpenseTrackerTrendDockWidget')
         self.setFeatures(
@@ -850,6 +856,7 @@ class TrendDockWidget(QtWidgets.QDockWidget):
         )
 
         graph = TrendGraph(self)
+        graph.setProperty('rounded', True)
         graph.setObjectName('ExpenseTrackerTrendGraph')
         self.setWidget(graph)
 
