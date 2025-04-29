@@ -577,7 +577,6 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
             return
 
         c = ui.Size.Indicator(2.0)
-        painter.setOpacity(0.2)
         painter.drawRoundedRect(rect, c, c)
 
 
@@ -830,6 +829,7 @@ class MainWindow(ResizableMainWidget):
         settings = QtCore.QSettings(app_name, app_name)
         settings.setValue('MainWindow/geometry', self.saveGeometry())
         settings.setValue('MainWindow/windowState', self.saveState())
+        settings.setValue('MainWindow/maximized', self.isMaximized())
         super().closeEvent(event)
 
     @QtCore.Slot(QtCore.QModelIndex)
@@ -844,31 +844,50 @@ class MainWindow(ResizableMainWidget):
 
     def load_window_settings(self) -> None:
         settings = QtCore.QSettings(app_name, app_name)
-        geom = settings.value('MainWindow/geometry')
+        geom_data = settings.value('MainWindow/geometry')
+        was_maximized = settings.value('MainWindow/maximized', False)
+        primary = QtGui.QGuiApplication.primaryScreen()
+        avail_primary = primary.availableGeometry()
 
-        if isinstance(geom, QtCore.QByteArray):
-            self.restoreGeometry(geom)
-        else:
-            screen = QtGui.QGuiApplication.primaryScreen()
+        if isinstance(geom_data, QtCore.QByteArray) and not was_maximized:
+            tmp = QtWidgets.QWidget()
+            tmp.restoreGeometry(geom_data)
+            rect = tmp.frameGeometry()
+            width = min(rect.width(), avail_primary.width())
+            height = min(rect.height(), avail_primary.height())
 
-            self.resize(self.sizeHint())
+            center = rect.center()
+            screen = QtGui.QGuiApplication.screenAt(center) or primary
             avail = screen.availableGeometry()
 
-            x = avail.x() + (avail.width() - self.width()) // 2
-            y = avail.y() + (avail.height() - self.height()) // 2
+            x = max(avail.left(), min(rect.x(), avail.right() - width))
+            y = max(avail.top(), min(rect.y(), avail.bottom() - height))
+            self.setGeometry(x, y, width, height)
+        else:
+            self.resize(self.sizeHint())
+            x = avail_primary.x() + (avail_primary.width() - self.width()) // 2
+            y = avail_primary.y() + (avail_primary.height() - self.height()) // 2
             self.move(x, y)
 
         state = settings.value('MainWindow/windowState')
         if isinstance(state, QtCore.QByteArray):
             self.restoreState(state)
 
-        self.clamp_window_to_screens()
+        if was_maximized:
+            self.showMaximized()
+        else:
+            self.clamp_window_to_screens()
 
     def clamp_window_to_screens(self) -> None:
-        screen = QtGui.QGuiApplication.screenAt(self.frameGeometry().center()) or QtGui.QGuiApplication.primaryScreen()
+        frame = self.frameGeometry()
+        center = frame.center()
+        screen = QtGui.QGuiApplication.screenAt(center) or QtGui.QGuiApplication.primaryScreen()
         avail = screen.availableGeometry()
-        geom = self.geometry()
-        x = max(avail.left(), min(geom.x(), avail.right() - geom.width()))
-        y = max(avail.top(), min(geom.y(), avail.bottom() - geom.height()))
-        geom.moveTopLeft(QtCore.QPoint(x, y))
-        self.setGeometry(geom)
+
+        width = min(frame.width(), avail.width())
+        height = min(frame.height(), avail.height())
+
+        x = max(avail.left(), min(frame.x(), avail.right() - width))
+        y = max(avail.top(), min(frame.y(), avail.bottom() - height))
+
+        self.setGeometry(x, y, width, height)
