@@ -186,6 +186,27 @@ class DatabaseAPI(QtCore.QObject):
 
     def _connect_signals(self):
         signals.dataFetched.connect(self.cache_data)
+        # Listen for preset activation to reset cache
+        signals.presetAboutToBeActivated.connect(self.reset_cache)
+
+    @QtCore.Slot()
+    def reset_cache(self) -> None:
+        """Reset and delete the local cache database file before applying a preset."""
+        logging.debug('Resetting local cache database for preset activation')
+        # Close any open connections
+        try:
+            conn = self.connection()
+            conn.close()
+        except Exception:
+            pass
+        # Delete the database file
+        try:
+            db_file = lib.settings.db_path
+            if db_file.exists():
+                db_file.unlink()
+                logging.debug(f'Deleted cache file {db_file}')
+        except Exception as ex:
+            logging.error(f'Error deleting cache file {db_file}: {ex}')
 
     @classmethod
     def connection(cls) -> sqlite3.Connection:
@@ -567,3 +588,5 @@ class DatabaseAPI(QtCore.QObject):
 
 
 database = DatabaseAPI()
+# Connect preset reset to clear the cache
+signals.presetAboutToBeActivated.connect(database.reset_cache)
