@@ -50,13 +50,15 @@ class PresetModel(QtCore.QAbstractItemModel):
 
         self._api.presetActivated.connect(self.beginResetModel)
         self._api.presetActivated.connect(self.endResetModel)
-        # Reload flags and metadata when underlying config or presets metadata changes
+
         signals.configSectionChanged.connect(self._reset_model)
+        signals.metadataChanged.connect(self._reset_model)
         signals.presetsChanged.connect(self._reset_model)
 
     def _reset_model(self, *args) -> None:
         """Reset the model to refresh all item flags and metadata."""
         # Refresh item status flags (active/out-of-date) before resetting
+        self.beginResetModel()
         try:
             for item in self._api._items:
                 # Reinitialize each item to recompute flags based on current settings
@@ -64,7 +66,6 @@ class PresetModel(QtCore.QAbstractItemModel):
         except Exception:
             # Ignore errors during status refresh
             pass
-        self.beginResetModel()
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
