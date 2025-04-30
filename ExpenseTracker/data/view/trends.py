@@ -9,9 +9,10 @@ from typing import Optional
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ...core.sync import sync_manager
 from ...data.data import get_trends
 from ...settings import lib
-from ...settings import locale as _locale
+from ...settings import locale
 from ...ui import ui
 from ...ui.actions import signals
 
@@ -104,13 +105,19 @@ class TrendGraph(QtWidgets.QWidget):
         signals.categoryChanged.connect(self.set_category)
         signals.categoryChanged.connect(self.start_init_data_timer)
 
-        signals.dataRangeChanged.connect(self.start_init_data_timer)
+        signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
-
-        signals.configSectionChanged.connect(self.start_init_data_timer)
-        signals.presetActivated.connect(self.start_init_data_timer)
+        signals.dataFetched.connect(self.init_data)
 
         self._init_data_timer.timeout.connect(self.init_data)
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            self.start_init_data_timer()
+
+        signals.metadataChanged.connect(metadata_changed)
+        # reload trends when local cache is updated by sync
+        sync_manager.dataUpdated.connect(lambda ops: self.start_init_data_timer())
 
     def _init_actions(self) -> None:
         """Set up context-menu actions for toggles, span selection, and smoothing."""
@@ -420,7 +427,7 @@ class TrendGraph(QtWidgets.QWidget):
         metrics = painter.fontMetrics()
         offset = ui.Size.Separator(2.0)
         # format axis labels according to user locale
-        max_lbl = _locale.format_currency_value(geom.data_max, lib.settings['locale'])
+        max_lbl = locale.format_currency_value(geom.data_max, lib.settings['locale'])
         # draw to the right of y-axis
         painter.drawText(
             QtCore.QPointF(
@@ -428,7 +435,7 @@ class TrendGraph(QtWidgets.QWidget):
                 geom.area.top() + metrics.ascent()
             ), max_lbl
         )
-        min_lbl = _locale.format_currency_value(geom.data_min, lib.settings['locale'])
+        min_lbl = locale.format_currency_value(geom.data_min, lib.settings['locale'])
         painter.drawText(
             QtCore.QPointF(
                 geom.area.left() + offset,
@@ -591,7 +598,7 @@ class TrendGraph(QtWidgets.QWidget):
             val = data_min
             if span > 0 and data_max != data_min:
                 val = data_min + (geom.area.bottom() - y) / span * (data_max - data_min)
-            amt_lbl = _locale.format_currency_value(val, lib.settings['locale'])
+            amt_lbl = locale.format_currency_value(val, lib.settings['locale'])
             w = metrics.horizontalAdvance(amt_lbl)
             h = metrics.height()
             # position to the right of y-axis
@@ -826,7 +833,7 @@ class TrendGraph(QtWidgets.QWidget):
                 # prepare custom tooltip text using locale currency formatting
                 date_str = pd.Timestamp(self._dates[hovered]).strftime('%b %Y')
                 total = self._bar_series.iat[hovered]
-                total_str = _locale.format_currency_value(total, lib.settings['locale'])
+                total_str = locale.format_currency_value(total, lib.settings['locale'])
                 self._hover_text = f"{date_str}: {total_str}"
             else:
                 self._hover_text = None
@@ -852,7 +859,8 @@ class TrendDockWidget(QtWidgets.QDockWidget):
         self.setObjectName('ExpenseTrackerTrendDockWidget')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         graph = TrendGraph(self)
