@@ -142,21 +142,19 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
     Dockable widget for listing and managing presets.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Presets', parent=parent)
         self.setObjectName('ExpenseTrackerPresetsWidget')
-
-        # Allow floating and moving
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         self.toolbar: QtWidgets.QToolBar
         self.view: PresetsListView
 
-        # Allow child view to handle context menus (disable dock widget's own policy)
-        # self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self.setMinimumWidth(ui.Size.DefaultWidth(0.6))
 
         self._create_ui()
         self._init_actions()
