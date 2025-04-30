@@ -624,8 +624,6 @@ class PresetsAPI(QtCore.QObject):
                 lib.settings.init_data()
             except Exception as ex:
                 logging.error(f'Failed to reload settings after activation: {ex}')
-            # Notify data fetch of updated state
-            signals.dataAboutToBeFetched.emit()
             logging.debug(f'Activated preset: {item.name}')
             # Reload presets list to update model items (flags, names, active state)
             self.load_presets()
