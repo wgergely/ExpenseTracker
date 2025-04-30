@@ -153,8 +153,8 @@ class PieChartView(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     def _connect_signals(self) -> None:
-
         signals.presetAboutToBeActivated.connect(self.init_data)
+        signals.dataAboutToBeFetched.connect(self.init_data)
         signals.dataFetched.connect(self.init_data)
 
         @QtCore.Slot(str, object)
