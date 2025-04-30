@@ -66,7 +66,12 @@ class TitleLabel(QtWidgets.QWidget):
     def _connect_signals(self) -> None:
         from ..ui.actions import signals
 
-        signals.configSectionChanged.connect(self.update_title)
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key == 'name':
+                self.update_title()
+
+        signals.metadataChanged.connect(metadata_changed)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
@@ -238,11 +243,9 @@ class StatusIndicator(QtWidgets.QWidget):
     def _connect_signals(self):
         self.clicked.connect(self.action)
 
-        signals.configFileChanged.connect(self.update_status)
         signals.configSectionChanged.connect(self.update_status)
         signals.dataAboutToBeFetched.connect(self.update_status)
         signals.dataFetched.connect(self.update_status)
-        signals.presetsChanged.connect(self.update_status)
         signals.presetActivated.connect(self.update_status)
 
     def mouseReleaseEvent(self, event):
@@ -476,6 +479,8 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
         self.emit_window_changed()
 
     def showMinimized(self) -> None:
+        self._previous_geometry = self.geometry()
+        super().setWindowState(QtCore.Qt.WindowMinimized)
         super().showMinimized()
         self.emit_window_changed()
 
@@ -484,8 +489,8 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
 
         self.setGraphicsEffect(None)
         super().setContentsMargins(0, 0, 0, 0)
+        super().setWindowState(QtCore.Qt.WindowMaximized)
         super().showMaximized()
-        self.setWindowState(QtCore.Qt.WindowMaximized)
 
         self.emit_window_changed()
         self.update()
@@ -493,8 +498,8 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
     def showNormal(self) -> None:
         self.setGraphicsEffect(self._get_effect())
         super().setContentsMargins(*self._default_margins)
+        super().setWindowState(QtCore.Qt.WindowNoState)
         super().showNormal()
-        self.setWindowState(QtCore.Qt.WindowNoState)
 
         if self._previous_geometry is not None:
             self.setGeometry(self._previous_geometry)
@@ -523,11 +528,11 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
 
     def resize_window(self) -> None:
         """Resize the window according to the dragged edge and global pointer."""
-        global_pos = QtGui.QCursor.pos()
         edge = self._press_state.edge
         if edge == Edge.NONE:
             return
 
+        global_pos = QtGui.QCursor.pos()
         delta = global_pos - self._press_state.pos
         if delta.x() == 0 and delta.y() == 0:
             return
@@ -543,11 +548,11 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
         if edge & Edge.BOTTOM:
             r.setBottom(r.bottom() + delta.y())
 
-        mw, mh = self.minimumWidth(), self.minimumHeight()
-        if r.width() <= mw:
-            return
-        if r.height() <= mh:
-            return
+        # mw, mh = self.minimumWidth(), self.minimumHeight()
+        # if r.width() <= mw:
+        #     return
+        # if r.height() <= mh:
+        #     return
 
         self.setGeometry(r)
 
@@ -612,13 +617,14 @@ class MainWindow(ResizableMainWidget):
         QtWidgets.QVBoxLayout(central)
 
         o = ui.Size.Margin(1.0)
-        central.layout().setContentsMargins(o, o, o, o)
+        central.layout().setContentsMargins(o, 0, o, o)
         central.layout().setSpacing(o * 0.5)
 
         self.setCentralWidget(central)
 
         # Action bar at the top.
         self.toolbar = QtWidgets.QToolBar(self)
+        self.toolbar.setProperty('no_background', True)
         self.toolbar.setObjectName('ExpenseTrackerActionToolBar')
         self.menuWidget().layout().insertWidget(1, self.toolbar, 1)
 
@@ -673,8 +679,9 @@ class MainWindow(ResizableMainWidget):
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
         signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
 
-    def _init_actions(self):
+        signals.showSettings.connect(self.settings_view.show)
 
+    def _init_actions(self):
         action = QtGui.QAction('Maximize', self)
         action.setIcon(ui.get_icon('btn_maximize'))
         action.setToolTip('Maximize')
@@ -704,11 +711,19 @@ class MainWindow(ResizableMainWidget):
         self.toolbar.addWidget(w)
 
         action = QtGui.QAction('Refresh Data', self)
-        action.setIcon(ui.get_icon('btn_fetch'))
+        action.setIcon(ui.get_icon('btn_sync'))
         action.setToolTip('Fetch data')
         action.setStatusTip('Fetch data')
         action.triggered.connect(signals.dataFetchRequested)
         self.toolbar.addAction(action)
+
+        action = QtGui.QAction('Open Spreadsheet', self)
+        action.setShortcut('Ctrl+Shift+O')
+        action.setToolTip('Open spreadsheet in browser')
+        action.setIcon(ui.get_icon('btn_ledger'))
+        action.triggered.connect(signals.openSpreadsheet)
+        self.toolbar.addAction(action)
+        self.addAction(action)
 
         action = QtGui.QAction(self)
         action.setSeparator(True)
