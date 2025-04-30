@@ -91,9 +91,6 @@ class BaseStatusException(Exception):
 
         logging.error(exception_message)
 
-        from ..ui.actions import signals
-        signals.statusError.emit(self.status)
-
 
 class UnknownException(BaseStatusException):
     pass
