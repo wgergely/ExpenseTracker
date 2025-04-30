@@ -6,16 +6,13 @@ import logging
 import pandas
 from PySide6 import QtCore, QtWidgets, QtGui
 
-from ..status import status
-
 
 @QtCore.Slot()
-def open_spreadsheet(self) -> None:
+def open_spreadsheet() -> None:
     """
     Opens the spreadsheet in the default browser.
     """
     from ..settings import lib
-    from .. import ui
 
     config = lib.settings.get_section('spreadsheet')
 
@@ -24,7 +21,7 @@ def open_spreadsheet(self) -> None:
         sheet_name: str = config['worksheet']
     except Exception as ex:
         logging.error(f'Error retrieving spreadsheet config: {ex}')
-        QtWidgets.QMessageBox.critical(ui.parent(), 'Error', 'Invalid spreadsheet configuration.')
+        QtWidgets.QMessageBox.critical(None, 'Error', 'Invalid spreadsheet configuration.')
         raise
 
     url: str = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
@@ -35,29 +32,23 @@ def open_spreadsheet(self) -> None:
 
 
 class Signals(QtCore.QObject):
-    configFileChanged = QtCore.Signal(str)
     configSectionChanged = QtCore.Signal(str)  # Section, config
+    metadataChanged = QtCore.Signal(str, object)
 
     dataFetchRequested = QtCore.Signal()
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal(pandas.DataFrame)
 
-    dataRangeChanged = QtCore.Signal(str, int)  # year-date, span
-
     expenseCategoryChanged = QtCore.Signal(list)
     categoryChanged = QtCore.Signal(str)
-
-    statusError = QtCore.Signal(status.Status)
 
     showSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
     openTransactions = QtCore.Signal()
     showLogs = QtCore.Signal()
 
-    themeChanged = QtCore.Signal(str)
-    calculationChanged = QtCore.Signal()
-
     presetsChanged = QtCore.Signal()
+    presetAboutToBeActivated = QtCore.Signal()
     presetActivated = QtCore.Signal()
 
     def __init__(self):
@@ -70,18 +61,18 @@ class Signals(QtCore.QObject):
         from ..core import service
         self.dataFetchRequested.connect(service.fetch_data)
 
-        from . import ui
-        self.themeChanged.connect(ui.apply_theme)
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key != 'theme':
+                return
 
-        @QtCore.Slot()
-        def emit_changed_signals():
-            from ..settings import lib
-            for section in lib.LEDGER_SCHEMA.keys():
-                self.configSectionChanged.emit(section)
-            self.themeChanged.emit(lib.settings['theme'])
-            QtCore.QTimer.singleShot(100, self.dataFetchRequested.emit)
+            try:
+                from . import ui
+                ui.apply_theme()
+            except Exception as ex:
+                logging.error(f'Error applying theme: {ex}')
 
-        self.presetActivated.connect(emit_changed_signals)
+        self.metadataChanged.connect(metadata_changed)
 
 
 # Create a singleton instance of Signals
