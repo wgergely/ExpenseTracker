@@ -7,7 +7,7 @@ and if all still match, send a single batchUpdate.  Ambiguities or mismatches ab
 """
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 from PySide6 import QtCore
 from googleapiclient.errors import HttpError
@@ -53,9 +53,19 @@ class SyncManager(QtCore.QObject):
     dataUpdated = QtCore.Signal(list)
     queueChanged = QtCore.Signal(int)
 
-    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self._queue: List[EditOperation] = []
+
+        self._connect_signals()
+
+    def _connect_signals(self) -> None:
+        """
+        Connect signals to slots.
+        """
+        from ..ui.actions import signals
+        signals.presetAboutToBeActivated.connect(self.clear_queue)
+        signals.dataAboutToBeFetched.connect(self.clear_queue)
 
     @property
     def sheet_id(self) -> str:
@@ -348,10 +358,4 @@ class SyncManager(QtCore.QObject):
         self.commitFinished.emit(result)
 
 
-# singleton for app use
-# Singleton instance for app use
 sync_manager = SyncManager()
-# Clear pending edits on preset activation
-from ..ui.actions import signals
-
-signals.presetAboutToBeActivated.connect(sync_manager.clear_queue)
