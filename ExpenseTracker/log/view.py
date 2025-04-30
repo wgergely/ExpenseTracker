@@ -98,7 +98,8 @@ class LogDockWidget(QtWidgets.QDockWidget):
         self.setObjectName('ExpenseTrackerLogDockWidget')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         widget = QtWidgets.QWidget(self)
