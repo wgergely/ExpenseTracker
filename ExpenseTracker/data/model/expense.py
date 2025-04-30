@@ -53,7 +53,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def _connect_signals(self) -> None:
         signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
-
         signals.dataFetched.connect(self.init_data)
 
         @QtCore.Slot(str, object)
