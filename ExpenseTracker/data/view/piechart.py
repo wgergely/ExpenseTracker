@@ -5,9 +5,11 @@ from typing import List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ...core.sync import sync_manager
 from ...data import data
 from ...settings import lib, locale
 from ...ui import ui
+from ...ui.actions import signals
 from ...ui.ui import CategoryIconEngine, get_icon
 
 
@@ -151,11 +153,19 @@ class PieChartView(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     def _connect_signals(self) -> None:
-        from ...ui.actions import signals
 
-        signals.configSectionChanged.connect(self.init_data)
-        signals.dataRangeChanged.connect(self.init_data)
-        signals.presetActivated.connect(self.init_data)
+        signals.presetAboutToBeActivated.connect(self.init_data)
+        signals.dataFetched.connect(self.init_data)
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key in ('hide_empty_categories', 'exclude_negative', 'exclude_zero', 'exclude_positive', 'span',
+                       'yearmonth'):
+                self.init_data()
+
+        signals.metadataChanged.connect(metadata_changed)
+        # refresh slices when local cache is updated by sync
+        sync_manager.dataUpdated.connect(lambda _: self.init_data())
 
     @QtCore.Slot()
     def init_data(self) -> None:
@@ -468,7 +478,9 @@ class PieChartDockWidget(QtWidgets.QDockWidget):
 
         self.setObjectName('ExpenseTrackerPieChartDockWidget')
         self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable | QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         chart = PieChartView(self)
