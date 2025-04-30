@@ -13,7 +13,7 @@ from ...ui import ui
 class PresetsListDelegate(QtWidgets.QStyledItemDelegate):
     """Delegate for rendering preset items in the list view."""
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent=parent)
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,

@@ -1,6 +1,6 @@
 import enum
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -26,7 +26,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
     renamed based on the ledger.json "mapping" configuration.
     """
 
-    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent=parent)
 
         self._pending_data = []

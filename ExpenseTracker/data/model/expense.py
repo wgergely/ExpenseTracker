@@ -1,6 +1,6 @@
 import enum
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from PySide6 import QtCore, QtGui
@@ -31,7 +31,7 @@ class Columns(enum.IntEnum):
 class ExpenseModel(QtCore.QAbstractTableModel):
     header = ['', 'Category', '', 'Amount']
 
-    def __init__(self, parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent=parent)
         self.setObjectName('ExpenseTrackerExpenseModel')
 

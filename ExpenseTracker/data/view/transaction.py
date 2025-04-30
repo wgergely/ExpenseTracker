@@ -307,7 +307,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
     It initializes the view and sets up the layout for displaying transactions.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Transactions', parent=parent)
         self.setObjectName('ExpenseTrackerTransactionsWidget')
         self.setFeatures(
