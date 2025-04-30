@@ -312,7 +312,8 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         self.setObjectName('ExpenseTrackerTransactionsWidget')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         self.setSizePolicy(
@@ -328,7 +329,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         sync_manager.queueChanged.connect(self._on_queue_changed)
 
     def _connect_signals(self):
-        sync_manager.commitFinished.connect(lambda _: self._update_sync_button())
+        sync_manager.commitFinished.connect(self._on_commit_finished)
         self.sync_button.clicked.connect(sync_manager.commit_queue_async)
         self.view.model().dataChanged.connect(self._update_sync_button)
 
@@ -345,6 +346,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         # Transaction table
         self.view = TransactionsView(content)
         content.layout().addWidget(self.view, 1)
+
         # Pending edits status label (rich text)
         self.status_label = QtWidgets.QLabel('', content)
         self.status_label.setVisible(False)
@@ -382,3 +384,25 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         else:
             self.status_label.setVisible(False)
             self.sync_button.setVisible(False)
+    
+    @QtCore.Slot(object)
+    def _on_commit_finished(self, results) -> None:
+        """Handle completion of commit, displaying success and error summary."""
+        # Summarize results
+        successes = [lid for lid, (ok, _) in results.items() if ok]
+        failures = [(lid, msg) for lid, (ok, msg) in results.items() if not ok]
+        parts = []
+        if successes:
+            parts.append(f'<b>{len(successes)}</b> edit(s) applied')
+        if failures:
+            parts.append(f'<b>{len(failures)}</b> failed')
+            parts.append('<ul>')
+            for lid, msg in failures:
+                parts.append(f'<li>ID {lid}: {msg}</li>')
+            parts.append('</ul>')
+        # Update status label
+        text = ' '.join(parts)
+        self.status_label.setText(text)
+        self.status_label.setVisible(True)
+        # Hide sync button after commit
+        self.sync_button.setVisible(False)
