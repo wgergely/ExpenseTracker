@@ -22,6 +22,7 @@ CategoryRole = QtCore.Qt.UserRole + 7
 
 
 class Columns(enum.IntEnum):
+    """Column indices for the ExpenseModel table."""
     Icon = 0
     Category = 1
     Weight = 2
@@ -29,6 +30,8 @@ class Columns(enum.IntEnum):
 
 
 class ExpenseModel(QtCore.QAbstractTableModel):
+    """Table model for displaying expense summaries."""
+
     header = ['', 'Category', '', 'Amount']
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
@@ -244,9 +247,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
     @QtCore.Slot()
     def clear_data(self) -> None:
-        """
-        Clear the model data and reset the DataFrame.
-        """
         logging.debug('Clearing model data')
 
         self.beginResetModel()
@@ -267,8 +267,9 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
 
 class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
-    """
-    Sort/Filter proxy for ExpenseModel.
+    """Sort/filter proxy model for expense summaries.
+
+    Ensures the 'Total' row remains at the end and supports sorting by category or amount.
     """
 
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:

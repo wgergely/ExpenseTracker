@@ -1,3 +1,7 @@
+"""Transactions table model and proxy.
+
+Includes classes to display, edit, sort, and filter transaction data.
+"""
 import enum
 import logging
 from typing import Any, Optional
@@ -12,6 +16,7 @@ from ...ui.actions import signals
 
 
 class Columns(enum.IntEnum):
+    """Column indices for the TransactionsModel table."""
     Date = 0
     Amount = 1
     Description = 2
@@ -20,10 +25,9 @@ class Columns(enum.IntEnum):
 
 
 class TransactionsModel(QtCore.QAbstractTableModel):
-    """
-    TransactionsModel displays transaction data as table rows and columns.
-    The header names are derived from the transaction DataFrame columns, which are
-    renamed based on the ledger.json "mapping" configuration.
+    """Table model for displaying transaction data.
+
+    Header labels are derived from mapping configuration and formatted from ledger settings.
     """
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
@@ -50,9 +54,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     @QtCore.Slot(list)
     def queue_data_init(self, data: list) -> None:
-        """
-        Start the timer to initialize data.
-        """
         self._pending_data = data
         self._init_data_timer.start(self._init_data_timer.interval())
 
@@ -73,9 +74,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     @QtCore.Slot()
     def clear_data(self) -> None:
-        """
-        Clear the model data and reset the DataFrame.
-        """
         self.beginResetModel()
         self._data = []
         self._pending_data = []
@@ -215,9 +213,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
-        """
-        Make the Category column editable when a local_id is present.
-        """
         if not index.isValid():
             return QtCore.Qt.NoItemFlags
         flags = super().flags(index)
@@ -234,9 +229,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         return flags
 
     def setData(self, index: QtCore.QModelIndex, value: Any, role: int = QtCore.Qt.EditRole) -> bool:
-        """
-        Handle edits: queue a sync operation and update local data.
-        """
         if role == QtCore.Qt.EditRole and index.column() == Columns.Category.value:
             row = index.row()
             try:
@@ -258,9 +250,6 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
     @QtCore.Slot(list)
     def on_sync_success(self, ops: list) -> None:
-        """
-        Reflect successfully committed edits in the in-memory model.
-        """
         for op in ops:
             # find matching record in _data
             for row_idx, rec in enumerate(self._data):
@@ -279,9 +268,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
 
 class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
-    """
-    Sort/Filter proxy for TransactionsModel.
-    Sorts by absolute amount for column 1. Allows text filtering on description (column 2).
+    """Sort and filter proxy model for transaction data.
+
+    Sorts by absolute amount in the Amount column and filters by Description wildcard.
     """
 
     def __init__(self, parent=None):

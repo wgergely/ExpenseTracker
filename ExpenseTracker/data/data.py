@@ -1,9 +1,7 @@
-"""
-Data Analytics API Module
+"""Data analytics API for transaction analysis.
 
-This module provides a high-level interface for loading transaction data from the local
-cache database, filtering and preparing it for analysis, and retrieving expenditure summaries.
-
+This module provides a high-level interface for loading transaction data from the local cache
+database, filtering and preparing it for analysis, and retrieving expenditure summaries.
 """
 import enum
 import functools
@@ -37,6 +35,11 @@ class SummaryMode(enum.StrEnum):
 
 
 def metadata():
+    """Decorator to inject metadata settings and verify database connectivity.
+
+    Retrieves metadata settings from configuration and verifies the database before calling
+    the wrapped function.
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -59,13 +62,18 @@ def metadata():
 
 
 def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Return a DataFrame that contains **exactly** the columns defined in the
-    '[mapping]' section of the config (**lib.TRANSACTION_DATA_COLUMNS** order).
+    """Map and reorder DataFrame columns based on configuration.
 
-    * Columns in the file but not in mapping are discarded.
-    * Columns specified in mapping but missing in the file create empty Series.
-    * Merge syntax supported:  description = Desc+Notes   etc.
+    Returns a DataFrame with exactly the columns defined in the 'mapping' section of the config
+    (in the order of lib.TRANSACTION_DATA_COLUMNS). Columns in the file but not in mapping are
+    discarded. Columns specified in mapping but missing in the file create empty Series. Merge
+    syntax for combined fields is supported.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with raw columns.
+
+    Returns:
+        pd.DataFrame: DataFrame with strict header mapping.
     """
     cfg = lib.settings.get_section('mapping')
     if not cfg:
@@ -101,6 +109,17 @@ def _strict_header_mapping(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _conform_date_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert 'date' column to datetime, drop invalid entries, and sort.
+
+    Parses the 'date' column using the database.DATE_COLUMN_FORMAT, drops rows with invalid
+    dates, logs warnings for parsing failures, and returns a sorted DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame with a 'date' column.
+
+    Returns:
+        pd.DataFrame: DataFrame sorted by 'date' with valid datetime entries.
+    """
     df['date'] = pd.to_datetime(df['date'], format=database.DATE_COLUMN_FORMAT, errors='coerce')
     clean_df = df.dropna(subset=['date'])
 
@@ -120,6 +139,17 @@ def _conform_date_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _conform_amount_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert 'amount' column to numeric, handle invalid values, and fill NaNs.
+
+    Converts the 'amount' column to numeric floats, logs warnings for invalid values, replaces
+    NaNs with zero, and returns the DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame with an 'amount' column.
+
+    Returns:
+        pd.DataFrame: DataFrame with numeric 'amount' values.
+    """
     df['amount'] = pd.to_numeric(df['amount'], downcast='float', errors='coerce')
 
     l = len(df) - len(df.dropna(subset=['amount']))
@@ -133,12 +163,35 @@ def _conform_amount_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _conform_string_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure string columns have no missing values and are of type str.
+
+    Fills NaNs in description, category, and account columns with empty strings and casts them
+    to string type.
+
+    Args:
+        df (pd.DataFrame): DataFrame with potential string columns.
+
+    Returns:
+        pd.DataFrame: DataFrame with standardized string columns.
+    """
     for col in 'description', 'category', 'account':
         df[col] = df[col].fillna('').astype(str)
     return df
 
 
 def _conform_period(df: pd.DataFrame, yearmonth: str, span: int) -> pd.DataFrame:
+    """Filter DataFrame to a specified period range.
+
+    Selects rows where 'date' falls within the span of months starting at yearmonth.
+
+    Args:
+        df (pd.DataFrame): DataFrame with a 'date' column of datetime type.
+        yearmonth (str): Starting year-month in 'YYYY-MM' format.
+        span (int): Number of months to include.
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame within the specified period.
+    """
     start_period = pd.Period(yearmonth)
     target_periods = [start_period + i for i in range(span)]
     df_month = df[df['date'].dt.to_period('M').isin(target_periods)]
@@ -149,17 +202,19 @@ def _calculate_weights(df: pd.DataFrame,
                        exclude_negative: bool,
                        exclude_positive: bool,
                        min_weight: float = 0.02) -> pd.DataFrame:
-    """Calculate and assign normalized weights for each row in df (grouped by category).
-    0.0 = pivot value (e.g. zero or min/max), 1.0 = dataset extreme.
+    """Calculate and assign normalized weights for each row in a grouped DataFrame.
+
+    Weights range from 0 to 1, based on min-max normalization of the 'total' column within
+    each category, with a minimum non-zero weight.
 
     Args:
-        df: The dataframe after grouping by category (and possibly a 'Total' row).
-        exclude_negative: Whether negative amounts were excluded from the dataset.
-        exclude_positive: Whether positive amounts were excluded from the dataset.
-        min_weight: The minimum weight to assign to non-zero rows (e.g. 0.05).
+        df (pd.DataFrame): DataFrame after grouping by category (and possibly including a 'Total' row).
+        exclude_negative (bool): Whether negative totals were excluded from the dataset.
+        exclude_positive (bool): Whether positive totals were excluded from the dataset.
+        min_weight (float): Minimum weight to assign to non-zero rows.
 
     Returns:
-        df: The same dataframe with a new 'weight' column updated.
+        pd.DataFrame: The same DataFrame with an additional 'weight' column.
     """
     # Exclude any "Total" row from min/max analysis
     core_df = df[df['category'] != 'Total']
@@ -214,6 +269,18 @@ def _calculate_weights(df: pd.DataFrame,
 
 
 def _build_description(_df, _locale):
+    """Build a summary description string for a category's transactions.
+
+    Constructs a description including category name, total amount, accounts involved, and sample
+    transactions.
+
+    Args:
+        _df (pd.DataFrame): DataFrame containing transactions for a single category.
+        _locale (str): Locale code for formatting currency values.
+
+    Returns:
+        str: Formatted description string, or empty string on error.
+    """
     try:
         total_val = _df['amount'].sum()
         total_str = locale.format_currency_value(total_val, _locale)
@@ -249,22 +316,25 @@ def get_data(
         summary_mode: str = SummaryMode.Total.value,
         add_total_row: bool = True,
 ) -> pd.DataFrame:
-    """Load data from the local cache database, filter, and prepare it for analysis.
+    """Load and prepare transaction data for analysis.
+
+    Loads transaction data, applies column mapping, type conversions, period filtering,
+    and category aggregations, then calculates weights and optionally adds a total row.
 
     Args:
-        df (pd.DataFrame): DataFrame containing transaction data.
-        hide_empty_categories (bool): Whether to hide empty categories.
-        exclude_negative (bool): Whether to exclude negative amounts.
-        exclude_zero (bool): Whether to exclude zero amounts.
-        exclude_positive (bool): Whether to exclude positive amounts.
-        yearmonth (str): Year and month in 'YYYY-MM' format.
+        df (pd.DataFrame): Raw transaction data.
+        hide_empty_categories (bool): Hide categories with no transactions.
+        exclude_negative (bool): Exclude negative amount transactions.
+        exclude_zero (bool): Exclude zero amount transactions.
+        exclude_positive (bool): Exclude positive amount transactions.
+        yearmonth (str): Starting year-month in 'YYYY-MM' format.
         span (int): Number of months to include in the analysis.
         summary_mode (str): Summary mode, either 'total' or 'monthly'.
-        add_total_row (bool): Whether to add a total row to the output DataFrame.
+        add_total_row (bool): Append a total summary row to the result.
 
     Returns:
-        pd.DataFrame: DataFrame containing the filtered and prepared data.
-
+        pd.DataFrame: Prepared DataFrame with columns ['category', 'total', 'transactions',
+            'description', 'weight'] and an optional total row.
     """
     if df.empty:
         logging.warning('No data available in the database.')
@@ -368,33 +438,26 @@ def get_trends(
         summary_mode: str = SummaryMode.Total.value,
         loess_fraction: float = 0.15,
 ) -> pd.DataFrame:
-    """
-    Processes transaction data to compute monthly trends for amounts within given categories, applying
-    filters, LOESS smoothing, and time span computation. The function handles the aggregation of
-    amounts into specified periods, category filtering, and ensures proper handling of edge cases, such
-    as empty data results.
+    """Compute monthly spending trends with smoothing.
+
+    Aggregates transaction amounts into monthly totals for each category (or a single category),
+    applies LOESS smoothing, and returns trend data within a specified period range.
 
     Args:
-        df (pd.DataFrame): A DataFrame containing transaction data with columns such as 'amount',
-            'category', and 'date'.
-        category (Optional[str]): The category name to filter transactions. If None, trends for all
-            categories are computed.
-        hide_empty_categories (bool): A flag indicating whether categories with no data are hidden.
-            Currently unused in the function.
-        exclude_negative (bool): If True, filters out transactions with negative amounts.
-        exclude_zero (bool): If True, filters out transactions with zero amounts.
-        exclude_positive (bool): If True, filters out transactions with positive amounts.
-        yearmonth (str): The specific year and month to focus on for trend computation, in the format
-            'YYYY-MM'. If empty, the latest month in the data is used.
-        span (int): The forward time span (in months) for calculating trends.
-        negative_span (int): The backward time span (in months) for calculating trends.
-        summary_mode (str): A string dictating the summary mode, e.g., "Total". Determines the type
-            of summary computed for trend data.
-        loess_fraction (float): The fraction of data used for LOESS smoothing. Default is 0.15.
+        df (pd.DataFrame): Input DataFrame with 'amount', 'category', and 'date' columns.
+        category (Optional[str]): Category to filter. If None, computes trends for all categories.
+        hide_empty_categories (bool): Currently unused flag to hide categories with no data.
+        exclude_negative (bool): Exclude negative amount transactions.
+        exclude_zero (bool): Exclude zero amount transactions.
+        exclude_positive (bool): Exclude positive amount transactions.
+        yearmonth (str): Year-month 'YYYY-MM' to center the trend window; uses latest period if empty.
+        span (int): Forward span in months for trend computation.
+        negative_span (int): Backward span in months for trend computation.
+        summary_mode (str): Summary mode; maintained for compatibility.
+        loess_fraction (float): Fraction of data for LOESS smoothing (0 < loess_fraction <= 1).
 
     Returns:
-        pd.DataFrame: A DataFrame containing trends data for the filtered transactions, including
-            columns like 'category', 'month', 'loess', 'monthly_total', etc.
+        pd.DataFrame: Trend data with columns ['category', 'month', 'loess', 'monthly_total'].
     """
     # conform input
     df2 = (

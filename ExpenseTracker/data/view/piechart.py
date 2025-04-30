@@ -1,3 +1,11 @@
+"""Pie chart view and model for visualizing category expense distribution.
+
+This module provides:
+    - PieChartSlice: dataclass for individual pie slices.
+    - PieChartModel: builds slices from filtered expense data.
+    - PieChartView: interactive widget rendering an exploded pie chart.
+    - PieChartDockWidget: dockable container for PieChartView.
+"""
 import logging
 import math
 from dataclasses import dataclass, field
@@ -38,7 +46,7 @@ class PieChartSlice:
 
 
 class PieChartModel:
-    """Builds :class:`PieChartSlice` objects from the dataframe."""
+    """Model for constructing PieChartSlice instances from expense data."""
 
     def __init__(self) -> None:
         self._slices: List[PieChartSlice] = []
@@ -248,20 +256,6 @@ class PieChartView(QtWidgets.QWidget):
         return -1
 
     def paintEvent(self, _: QtGui.QPaintEvent) -> None:
-        """
-        Repaint the widget.
-
-        Each slice's centre angle θ and angular width α are known in Qt
-        *angle units* (1/16 °).  For a desired linear gap *g* between two
-        neighbouring slice edges, the radial offset *t* that produces it is::
-
-            t_raw = g / (2 · sin(α / 2))
-
-        ``t_raw`` is clamped to *[min_offset_px, max_offset_clip]*, where
-        *max_offset_clip* is the smaller of *max_offset_px* and 30 % of the
-        pie radius.  The hovered slice is rendered at half the full pop-out
-        distance for a subtler effect.
-        """
         self._recalc_geometry()
 
         painter = QtGui.QPainter(self)
@@ -471,7 +465,7 @@ class PieChartView(QtWidgets.QWidget):
 
 
 class PieChartDockWidget(QtWidgets.QDockWidget):
-    """Dockable wrapper around :class:`PieChartView`."""
+    """Dock widget for displaying a pie chart of expenses."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Pie Chart', parent)

@@ -1,3 +1,10 @@
+"""Expense view and delegates for rendering expense summaries.
+
+This module provides:
+    - IconColumnDelegate and WeightColumnDelegate for custom cell rendering
+    - ExpenseView for displaying expense data as a Qt table with interactive actions
+    - Context menu actions for filtering, sorting, and refreshing expense data
+"""
 import logging
 from copy import deepcopy
 
@@ -11,9 +18,7 @@ from ...ui.actions import signals
 
 
 class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
-    """A custom delegate to draw the icon for the icon column.
-
-    """
+    """Delegate to draw category icons in the icon column."""
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
@@ -39,9 +44,7 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
-    """A custom delegate to draw a simple bar chart for the chart column.
-
-    """
+    """Delegate to draw a bar chart in the weight column."""
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
@@ -86,9 +89,7 @@ class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class ExpenseView(QtWidgets.QTableView):
-    """
-    The view to display the expense data in a table format.
-    """
+    """Table view for displaying expense summaries with interactive controls."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent=parent)
@@ -153,9 +154,6 @@ class ExpenseView(QtWidgets.QTableView):
 
         @QtCore.Slot()
         def exclude_category() -> None:
-            """
-            Exclude the selected category.
-            """
             index = self.selectionModel().currentIndex()
             if not index.isValid():
                 logging.debug('No valid index')
@@ -181,9 +179,6 @@ class ExpenseView(QtWidgets.QTableView):
 
         @QtCore.Slot()
         def show_all_categories() -> None:
-            """
-            Show all categories.
-            """
             config = lib.settings.get_section('categories')
             if not config:
                 raise RuntimeError('Invalid configuration')
@@ -310,9 +305,6 @@ class ExpenseView(QtWidgets.QTableView):
 
         @QtCore.Slot()
         def emit_category_selection_changed() -> None:
-            """
-            Emit the category selection changed signal.
-            """
             if not self.selectionModel().hasSelection():
                 logging.debug('No selection')
                 signals.expenseCategoryChanged.emit([])

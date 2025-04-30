@@ -1,8 +1,7 @@
-"""
-Google Sheets Service Module.
+"""Google Sheets API integration with asynchronous operations.
 
-Provides functions to load ledger configuration, authenticate with Google Sheets,
-and retrieve the specified worksheet as a pandas DataFrame and its headers asynchronously.
+Provides methods to authenticate, fetch, and verify Google Sheets data (headers, rows, categories)
+using asynchronous workers and progress dialogs.
 """
 
 import logging
@@ -29,11 +28,11 @@ BATCH_SIZE: int = 3000  # Number of rows per batch for large sheets
 
 class AsyncWorker(QtCore.QThread):
     """
-    Generic worker that runs a blocking function in a QThread with retry logic.
+    Generic worker thread with retry logic for blocking functions.
 
-    Emits:
-      - resultReady(object): with the function's result on success.
-      - errorOccurred(str): with an error message on failure.
+    Signals:
+        resultReady (object): Emitted with the function's result on success.
+        errorOccurred (str): Emitted with an error message on failure.
     """
     resultReady = QtCore.Signal(object)
     errorOccurred = QtCore.Signal(str)
@@ -75,10 +74,10 @@ class AsyncWorker(QtCore.QThread):
 
 class SheetsFetchProgressDialog(QtWidgets.QDialog):
     """
-    Generic progress dialog for asynchronous operations.
+    Progress dialog for asynchronous API operations.
 
-    Emits:
-      - cancelled: when the user cancels the operation.
+    Signals:
+        cancelled (): Emitted when the user cancels the operation.
     """
     cancelled = QtCore.Signal()
 

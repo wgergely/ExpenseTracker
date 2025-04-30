@@ -1,3 +1,11 @@
+"""Transaction view and delegates for editing and displaying transactions.
+
+This module provides:
+    - PopupCombobox: adaptive-width combo box for category selection
+    - CategoryDelegate: custom delegate with category icons and pending-edit highlights
+    - TransactionsView: table view for transaction records with sorting and filtering
+    - TransactionsWidget: dockable widget for viewing transactions with sync controls
+"""
 from typing import Optional
 
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -10,6 +18,8 @@ from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
 
 
 class PopupCombobox(QtWidgets.QComboBox):
+    """Combo box that expands its popup to fit content width."""
+
     def showPopup(self):
 
         fm = self.fontMetrics()
@@ -27,10 +37,7 @@ class PopupCombobox(QtWidgets.QComboBox):
 
 
 class CategoryDelegate(QtWidgets.QStyledItemDelegate):
-    """
-    A delegate that provides a dropdown editor with category icons and colors,
-    and highlights cells with pending edits.
-    """
+    """Delegate providing a dropdown with category icons and highlighting pending edits."""
 
     def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
                      index: QtCore.QModelIndex) -> QtWidgets.QWidget:
@@ -91,11 +98,7 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class TransactionsView(QtWidgets.QTableView):
-    """
-    TransactionsView is a custom QTableView for displaying transaction data.
-
-    It configures selection, sizing, and header behavior for an optimal display of the transactions table.
-    """
+    """Table view for displaying and interacting with transaction records."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent=parent)
@@ -301,11 +304,7 @@ class TransactionsView(QtWidgets.QTableView):
 
 
 class TransactionsWidget(QtWidgets.QDockWidget):
-    """
-    TransactionsWidget is a custom dockable widget for displaying transaction data.
-
-    It initializes the view and sets up the layout for displaying transactions.
-    """
+    """Dock widget for displaying transactions with sync status and controls."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Transactions', parent=parent)
@@ -368,14 +367,11 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         )
 
     def _update_sync_button(self) -> None:
-        """Enable or disable the sync button based on queued edits."""
+        # Enable or disable the sync button based on queued edits
         self.sync_button.setEnabled(bool(sync_manager.get_queued_ops()))
 
     @QtCore.Slot(int)
     def _on_queue_changed(self, count: int) -> None:
-        """
-        Show or hide the pending-edits status and button based on queue size.
-        """
         if count > 0:
             self.status_label.setText(f'<b>{count}</b> edit(s) pending')
             self.status_label.setVisible(True)
@@ -387,7 +383,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
 
     @QtCore.Slot(object)
     def _on_commit_finished(self, results) -> None:
-        """Handle completion of commit, displaying success and error summary."""
+        # Handle completion of commit, displaying success and error summary
         # Summarize results
         successes = [lid for lid, (ok, _) in results.items() if ok]
         failures = [(lid, msg) for lid, (ok, msg) in results.items() if not ok]

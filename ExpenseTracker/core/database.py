@@ -1,11 +1,8 @@
 """
-Local Cache Database Module
+Local SQLite cache and data access for ledger data.
 
-This module maintains a local SQLite cache of remote ledger data from Google Sheets.
-The primary functions are:
-  - fetch_data: Fetches remote data and caches it locally.
-  - get_cached_data: Returns cached data as a pandas DataFrame.
-  - verify: Verifies that the local cache is valid and up-to-date.
+This module provides utilities to manage a local SQLite cache of Google Sheets ledger data,
+including schema creation, verification, type casting, and data retrieval or updates.
 """
 
 import datetime
@@ -55,10 +52,31 @@ def now_str() -> str:
 
 
 def get_sql_type(column: str) -> str:
+    """
+    Get the SQLite column type for a given header column.
+
+    Args:
+        column: Configured column name.
+
+    Returns:
+        The SQL type as a string (e.g., 'TEXT', 'INTEGER', 'REAL').
+    """
     return TYPE_MAPPING.get(get_config_type(column), 'TEXT')
 
 
 def get_config_type(column: str) -> str:
+    """
+    Get the configured data type for a column from header settings.
+
+    Args:
+        column: Column name to look up.
+
+    Returns:
+        Type string as defined in configuration (e.g., 'date', 'int').
+
+    Raises:
+        status.HeadersInvalidException: If column not in header configuration.
+    """
     config = lib.settings.get_section('header')
 
     if column not in config:
@@ -190,7 +208,7 @@ class DatabaseAPI(QtCore.QObject):
 
     @QtCore.Slot()
     def reset_cache(self) -> None:
-        """Reset and delete the local cache database file before applying a preset."""
+        # Reset and delete the local cache database file before applying a preset.
         logging.debug('Resetting local cache database for preset activation')
         # Close any open connections
         try:
@@ -209,13 +227,26 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def connection(cls) -> sqlite3.Connection:
-        """Return a new SQLite database connection."""
+        """
+        Return a connection to the cache database.
+
+        Returns:
+            sqlite3.Connection: Database connection object.
+        """
 
         return sqlite3.connect(str(lib.settings.db_path))
 
     @classmethod
     def table_exists(cls, table_name: str) -> bool:
-        """Return True if table_name exists in the database."""
+        """
+        Check if a table exists in the database.
+
+        Args:
+            table_name: Name of the table to check.
+
+        Returns:
+            True if the table exists, False otherwise.
+        """
         conn = cls.connection()
         try:
             cursor = conn.execute(
@@ -229,7 +260,13 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def verify(cls) -> None:
-        """Verify that the local cache database exists and is valid."""
+        """
+        Verify that the local cache database exists with correct schema and is up-to-date.
+
+        Raises:
+            status.CacheInvalidException: On missing database, schema mismatch, or stale cache.
+            status.HeadersInvalidException: If configuration headers are invalid or missing.
+        """
 
         conn = cls.connection()
         if not lib.settings.db_path.exists():
@@ -305,7 +342,11 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def create(cls) -> None:
-        """Create a new local cache database."""
+        """
+        Create a new local cache database with initial metadata table.
+
+        Does nothing if the database already exists.
+        """
 
         if lib.settings.db_path.exists():
             logging.warning('Cache database already exists. Ignoring create request.')
@@ -333,7 +374,12 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def delete(cls) -> None:
-        """Delete the local cache database ensuring the connection is properly closed."""
+        """
+        Delete the local cache database file, retrying on failure.
+
+        Raises:
+            status.CacheInvalidException: If unable to remove the database file.
+        """
 
         if not lib.settings.db_path.exists():
             logging.debug('No cache database found to delete.')
@@ -364,7 +410,9 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def stamp(cls) -> None:
-        """Update the last sync time in the database."""
+        """
+        Update the last synchronization timestamp in the metadata table.
+        """
         conn = cls.connection()
         try:
             conn.execute(f"""
@@ -377,7 +425,12 @@ class DatabaseAPI(QtCore.QObject):
             conn.close()
 
     def get_stamp(self) -> Optional[datetime.datetime]:
-        """Get the last sync time from the database."""
+        """
+        Retrieve the last synchronization timestamp.
+
+        Returns:
+            datetime.datetime or None: Last sync time, or None if not set/invalid.
+        """
         conn = self.connection()
         try:
             cursor = conn.execute(f"""
@@ -398,7 +451,15 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def set_state(cls, state: CacheState) -> None:
-        """Mark the cache state."""
+        """
+        Update the cache state in the metadata table.
+
+        Args:
+            state: New cache state to set.
+
+        Raises:
+            ValueError: If the state is not a valid CacheState enum.
+        """
         if state not in CacheState:
             raise ValueError(f'Invalidation reason must be one of {list(CacheState)}')
 
@@ -413,7 +474,12 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def get_state(cls) -> CacheState:
-        """Get the current state of the cache."""
+        """
+        Retrieve the current cache state from the metadata table.
+
+        Returns:
+            CacheState: Current state of the cache.
+        """
         conn = cls.connection()
         try:
             cursor = conn.execute(f"""
@@ -432,12 +498,10 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def data(cls) -> pd.DataFrame:
         """
-        Loads the cached data from disk as a DataFrame.
+        Load cached transactions into a pandas DataFrame.
 
         Returns:
-            A DataFrame with all columns from the transaction table, or an empty DataFrame if the
-            database is invalid or an error occurs during loading.
-
+            pandas.DataFrame: Transactions DataFrame, or empty if cache invalid or stale.
         """
         try:
             cls.verify()
@@ -475,8 +539,13 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def get_row(cls, local_id: int) -> Optional[dict[str, Any]]:
         """
-        Retrieve a single transaction row by local_id as a dict.
-        Returns None if not found.
+        Retrieve a transaction row by its local database ID.
+
+        Args:
+            local_id: Primary key of the transaction.
+
+        Returns:
+            dict[str, Any] or None: Row data as dict, or None if not found.
         """
         logging.debug('DatabaseAPI.get_row: fetching row local_id=%d', local_id)
         conn = cls.connection()
@@ -500,7 +569,15 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def update_cell(cls, local_id: int, column: str, new_value: Any) -> None:
         """
-        Update a single cell in transactions by local_id.
+        Update a specific cell in the transactions table.
+
+        Args:
+            local_id: Primary key of the row.
+            column: Column name to update.
+            new_value: New value to assign.
+
+        Raises:
+            Exception: If the update operation fails.
         """
         logging.debug('DatabaseAPI.update_cell: local_id=%d, column=%s, new_value=%r', local_id, column, new_value)
         conn = cls.connection()
@@ -520,8 +597,18 @@ class DatabaseAPI(QtCore.QObject):
 
     @classmethod
     def cache_data(cls, df: pd.DataFrame) -> None:
-        conn = cls.connection()
+        """
+        Cache a DataFrame of ledger data into the local database.
 
+        Drops existing transactions table and inserts new rows.
+
+        Args:
+            df: pandas.DataFrame containing transactions to cache.
+
+        Raises:
+            status.HeadersInvalidException: If DataFrame columns mismatch configuration.
+        """
+        conn = cls.connection()
         logging.debug(f'Caching data.')
         try:
             conn.execute(f"""DROP TABLE IF EXISTS {Table.Transactions}""")
