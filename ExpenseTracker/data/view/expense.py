@@ -291,7 +291,13 @@ class ExpenseView(QtWidgets.QTableView):
         self.addAction(action)
 
     def _connect_signals(self) -> None:
+        # preserve selection across model resets
         self.activated.connect(signals.openTransactions)
+        self._saved_category = None
+        src = self.model().sourceModel()
+        src.modelAboutToBeReset.connect(self._save_category_selection)
+        # delay restore to ensure model has finished resetting its internal state
+        src.modelReset.connect(lambda: QtCore.QTimer.singleShot(0, self._restore_category_selection))
         self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
         self.model().sourceModel().modelReset.connect(self._weight_anim.start)
 
@@ -339,6 +345,39 @@ class ExpenseView(QtWidgets.QTableView):
 
         self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
         self.model().sourceModel().modelReset.connect(emit_category_selection_changed)
+
+    def _save_category_selection(self) -> None:
+        """Save the selected category before the model is reset."""
+        if self.selectionModel().hasSelection():
+            sel_idx = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
+        else:
+            sel_idx = QtCore.QModelIndex()
+        if sel_idx.isValid():
+            self._saved_category = sel_idx.data(CategoryRole)
+        else:
+            self._saved_category = None
+
+    def _restore_category_selection(self) -> None:
+        """Restore the selected category after the model has been reset."""
+        if not getattr(self, '_saved_category', None):
+            return
+        proxy = self.model()
+        cat_col = Columns.Category.value
+        selmodel = self.selectionModel()
+        # find and select the saved category row
+        for row in range(proxy.rowCount()):
+            idx0 = proxy.index(row, 0)
+            idx = idx0.sibling(row, cat_col)
+            if idx.data(CategoryRole) == self._saved_category:
+                selmodel.clearSelection()
+                selmodel.select(
+                    idx,
+                    QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows
+                )
+                selmodel.setCurrentIndex(
+                    idx, QtCore.QItemSelectionModel.NoUpdate
+                )
+                break
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
