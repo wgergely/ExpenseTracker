@@ -236,8 +236,8 @@ class SyncManager(QtCore.QObject):
             key_tuple = tuple(row.get(field) for field in stable_fields)
             # skip rows where all stable key values are blank
             if all(
-                (v is None) or (isinstance(v, tuple) and all(elem is None for elem in v))
-                for v in key_tuple
+                    (v is None) or (isinstance(v, tuple) and all(elem is None for elem in v))
+                    for v in key_tuple
             ):
                 continue
             remote_index_map.setdefault(key_tuple, []).append(idx)
@@ -353,4 +353,5 @@ class SyncManager(QtCore.QObject):
 sync_manager = SyncManager()
 # Clear pending edits on preset activation
 from ..ui.actions import signals
+
 signals.presetAboutToBeActivated.connect(sync_manager.clear_queue)

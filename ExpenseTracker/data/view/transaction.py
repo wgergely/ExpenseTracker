@@ -384,7 +384,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         else:
             self.status_label.setVisible(False)
             self.sync_button.setVisible(False)
-    
+
     @QtCore.Slot(object)
     def _on_commit_finished(self, results) -> None:
         """Handle completion of commit, displaying success and error summary."""

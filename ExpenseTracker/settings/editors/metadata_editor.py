@@ -225,7 +225,6 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.addRow('Exclude Positive Values', BooleanEditor('exclude_positive', parent=self))
         layout.addRow('Theme', ThemeEditor(self))
 
-
     def _init_actions(self):
         pass
 

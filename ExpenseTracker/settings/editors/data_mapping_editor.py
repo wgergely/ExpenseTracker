@@ -84,14 +84,23 @@ class DataMappingModel(QtCore.QAbstractTableModel):
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         if not index.isValid() or role != QtCore.Qt.EditRole:
             return False
-
         row = index.row()
         col = index.column()
         if col == 1:
             key = lib.DATA_MAPPING_KEYS[row]
-            self._mapping[key] = value
+            # enforce single-column mapping unless allowed by schema
+            schema = lib.LEDGER_SCHEMA.get('mapping', {})
+            allowed_multi = schema.get('multi_allowed_keys', [])
+            val_str = str(value)
+            if key not in allowed_multi:
+                # trim at first separator to enforce single mapping
+                from ..lib import DATA_MAPPING_SEPARATOR_CHARS
+                for sep in DATA_MAPPING_SEPARATOR_CHARS:
+                    if sep in val_str:
+                        val_str = val_str.split(sep, 1)[0].strip()
+                        break
+            self._mapping[key] = val_str
             self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
-
             return True
         return False
 
@@ -164,19 +173,26 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         sep = DATA_MAPPING_SEPARATOR_CHARS[0] if DATA_MAPPING_SEPARATOR_CHARS else '|'
         parts = parse_mapping_spec(existing)
 
-        # Determine keyboard modifiers
-        mods = QtWidgets.QApplication.keyboardModifiers()
-        if mods & QtCore.Qt.ShiftModifier:
-            # replace
+        # Determine update behavior: replace/append/remove
+        schema = lib.LEDGER_SCHEMA.get('mapping', {})
+        allowed_multi = schema.get('multi_allowed_keys', [])
+        key = lib.DATA_MAPPING_KEYS[drop_row]
+        # if multi-mapping not allowed for this field, always replace
+        if key not in allowed_multi:
             new_parts = [header_name]
-        elif mods & QtCore.Qt.AltModifier:
-            # remove
-            new_parts = [p for p in parts if p != header_name]
         else:
-            # append (default), avoid duplicates
-            new_parts = parts.copy()
-            if header_name not in new_parts:
-                new_parts.append(header_name)
+            mods = QtWidgets.QApplication.keyboardModifiers()
+            if mods & QtCore.Qt.ShiftModifier:
+                # replace explicitly
+                new_parts = [header_name]
+            elif mods & QtCore.Qt.AltModifier:
+                # remove
+                new_parts = [p for p in parts if p != header_name]
+            else:
+                # append (default), avoid duplicates
+                new_parts = parts.copy()
+                if header_name not in new_parts:
+                    new_parts.append(header_name)
 
         new_spec = sep.join(new_parts)
 
