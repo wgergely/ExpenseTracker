@@ -185,9 +185,8 @@ class DatabaseAPI(QtCore.QObject):
         self._connect_signals()
 
     def _connect_signals(self):
-        signals.dataFetched.connect(self.cache_data)
-        # Listen for preset activation to reset cache
         signals.presetAboutToBeActivated.connect(self.reset_cache)
+        signals.dataFetched.connect(self.cache_data)
 
     @QtCore.Slot()
     def reset_cache(self) -> None:
@@ -588,5 +587,3 @@ class DatabaseAPI(QtCore.QObject):
 
 
 database = DatabaseAPI()
-# Connect preset reset to clear the cache
-signals.presetAboutToBeActivated.connect(database.reset_cache)
