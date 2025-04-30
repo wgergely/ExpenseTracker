@@ -91,7 +91,9 @@ LEDGER_SCHEMA: Dict[str, Any] = {
         'type': dict,
         'required': True,
         'required_keys': DATA_MAPPING_KEYS,
-        'value_type': str
+        'value_type': str,
+        # Only these logical mapping keys may contain multiple headers separated
+        'multi_allowed_keys': ['description']
     },
     'categories': {
         'type': dict,
@@ -150,11 +152,23 @@ def _validate_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> No
         )
         logging.error(msg)
         raise ValueError(msg)
-    for val in mapping_dict.values():
+    # validate each mapping value and enforce single vs. multi mapping rules
+    allowed_multi = specs.get('multi_allowed_keys', [])
+    for key, val in mapping_dict.items():
         if not isinstance(val, specs['value_type']):
             msg: str = 'All mapping values must be strings.'
             logging.error(msg)
             raise TypeError(msg)
+        # unless explicitly allowed, mapping must reference exactly one column
+        if key not in allowed_multi:
+            for sep in DATA_MAPPING_SEPARATOR_CHARS:
+                if sep in val:
+                    msg = (
+                        f'Mapping for "{key}" must not contain multiple source columns; '
+                        f'found separator "{sep}" in "{val}".'
+                    )
+                    logging.error(msg)
+                    raise ValueError(msg)
 
 
 def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
@@ -394,26 +408,7 @@ class SettingsAPI(ConfigPaths):
             return
 
         from ..ui.actions import signals
-        if key == 'theme':
-            logging.debug(f'Setting theme to {value}')
-            signals.themeChanged.emit(value)
-        if key == 'hide_empty_categories':
-            signals.calculationChanged.emit()
-        if key == 'exclude_negative':
-            signals.calculationChanged.emit()
-        if key == 'exclude_zero':
-            signals.calculationChanged.emit()
-        if key == 'exclude_positive':
-            signals.calculationChanged.emit()
-        if key == 'summary_mode':
-            signals.calculationChanged.emit()
-
-        if key == 'yearmonth':
-            signals.dataRangeChanged.emit(value, self.ledger_data['metadata']['span'])
-        if key == 'span':
-            signals.dataRangeChanged.emit(self.ledger_data['metadata']['yearmonth'], value)
-
-        signals.configSectionChanged.emit('metadata')
+        signals.metadataChanged.emit(key, value)
 
     def _connect_signals(self) -> None:
         from ..ui.actions import signals
@@ -425,9 +420,20 @@ class SettingsAPI(ConfigPaths):
         """Blocks signals from being emitted."""
         self._signals_blocked = v
 
+    @QtCore.Slot()
     def init_data(self) -> None:
         self.load_ledger()
         self.load_client_secret()
+
+        from ..ui.actions import signals
+        signals.configSectionChanged.emit('client_secret')
+        for section in LEDGER_SCHEMA.keys():
+            if section == 'metadata':
+                continue
+            signals.configSectionChanged.emit(section)
+
+        for k, v in self.ledger_data.get('metadata', {}).items():
+            signals.metadataChanged.emit(k, v)
 
     def load_ledger(self) -> Dict[str, Any]:
         logging.debug(f'Loading ledger from "{self.ledger_path}"')
