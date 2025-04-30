@@ -39,6 +39,7 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         self._connect_signals()
 
     def _connect_signals(self) -> None:
+        signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
         signals.expenseCategoryChanged.connect(self.queue_data_init)
