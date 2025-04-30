@@ -49,12 +49,14 @@ class SettingsWidget(QtWidgets.QWidget):
         self.category_editor = None
         self.metadata_editor = None
 
+        self.setMinimumWidth(ui.Size.DefaultWidth(1.0))
+
         self._create_ui()
         self._connect_signals()
 
     def _add_section(self, title: str, label: str, parent: QtWidgets.QWidget, editor):
         title_widget = QtWidgets.QLabel(title)
-        title_widget.setStyleSheet(f'font-weight: 900;font-size:{ui.Size.LargeText(1.0)}px;')
+        title_widget.setProperty('h1', True)
 
         parent.layout().addSpacing(ui.Size.Margin(1.0))
         parent.layout().addWidget(title_widget, 0)
@@ -62,7 +64,7 @@ class SettingsWidget(QtWidgets.QWidget):
         group = QtWidgets.QGroupBox('')
         QtWidgets.QFormLayout(group)
 
-        o = ui.Size.Margin(1.0)
+        o = ui.Size.Margin(0.5)
         group.layout().setContentsMargins(o, o, o, o)
         group.layout().setSpacing(o)
         group.layout().setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
@@ -85,21 +87,24 @@ class SettingsWidget(QtWidgets.QWidget):
 
         scroll_area = SettingsScrollArea(self)
         scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumWidth(ui.Size.DefaultWidth(1.0))
         self.layout().addWidget(scroll_area)
 
         parent = QtWidgets.QWidget()
+        parent.setMinimumWidth(ui.Size.DefaultWidth(1.0))
         QtWidgets.QVBoxLayout(parent)
 
-        scroll_area.setFocusProxy(parent)
+        parent.setContentsMargins(0, 0, 0, 0)
 
+        scroll_area.setFocusProxy(parent)
         scroll_area.setWidget(parent)
 
         parent.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.MinimumExpanding
+            QtWidgets.QSizePolicy.Maximum
         )
 
-        o = ui.Size.Margin(1.0)
+        o = ui.Size.Margin(0.5)
         parent.layout().setContentsMargins(o, o, o, o)
         parent.layout().setSpacing(o)
 
@@ -171,17 +176,19 @@ class SettingsDockWidget(QtWidgets.QDockWidget):
         self.setObjectName('ExpenseTrackerSettingsWidget')
         self.setFeatures(
             QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable
+            QtWidgets.QDockWidget.DockWidgetFloatable |
+            QtWidgets.QDockWidget.DockWidgetClosable
         )
 
         content = QtWidgets.QWidget(self)
-        layout = QtWidgets.QVBoxLayout(content)
-
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        QtWidgets.QVBoxLayout(content)
+        content.layout().setContentsMargins(0, 0, 0, 0)
+        content.layout().setSpacing(0)
 
         settings_widget = SettingsWidget(parent=content)
         settings_widget.setWindowFlags(QtCore.Qt.Widget)
-        layout.addWidget(settings_widget, 1)
+        content.layout().addWidget(settings_widget, 1)
+
+        self.setMinimumWidth(ui.Size.DefaultWidth(1.0))
 
         self.setWidget(content)
