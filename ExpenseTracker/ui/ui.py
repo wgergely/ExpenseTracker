@@ -361,7 +361,6 @@ def apply_theme() -> None:
     for widget in QtWidgets.QApplication.instance().allWidgets():
         try:
             widget.setStyleSheet(qss)
-            widget.update()
         except:
             pass
 
