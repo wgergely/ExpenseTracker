@@ -6,6 +6,7 @@ import pandas as pd
 from PySide6 import QtCore, QtGui
 
 from ..data import get_data, SummaryMode
+from ...core.sync import sync_manager
 from ...settings import lib
 from ...settings import locale
 from ...ui import ui
@@ -50,12 +51,20 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         self._connect_signals()
 
     def _connect_signals(self) -> None:
+        signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
         signals.dataFetched.connect(self.init_data)
-        signals.dataRangeChanged.connect(self.init_data)
-        signals.configSectionChanged.connect(self.init_data)
-        signals.calculationChanged.connect(self.init_data)
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key in ('hide_empty_categories', 'exclude_negative', 'exclude_zero', 'exclude_positive', 'summary_mode',
+                       'span', 'yearmonth'):
+                self.init_data()
+
+        signals.metadataChanged.connect(metadata_changed)
+        # refresh expense model when local cache is updated by sync
+        sync_manager.dataUpdated.connect(self.init_data)
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self._df)
