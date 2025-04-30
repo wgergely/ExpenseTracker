@@ -516,10 +516,9 @@ QToolBar {
     font-size: <MediumText@1.0>px;
     color: <SecondaryText>;
     background-color: <DarkBackground>;
-    border: <Separator@2.0>px solid <DarkBackground>;
+    border: none;
     border-radius: <Indicator@1.5>px;
     spacing: <Indicator@1.0>px;
-
 }
 QToolBar::separator {
     margin: 0 <Indicator@8.0>px;
@@ -565,13 +564,30 @@ QSplitter::handle:vertical {
 }
 
 QMainWindow::separator {
-    background: <Opaque>;
+    background: red;
+}
+QMainWindow::separator:horizontal {
     width: <Indicator@1.0>px;
+}
+QMainWindow::separator:vertical {
     height: <Indicator@1.0>px;
 }
-
 QMainWindow::separator:hover {
-    background: <DarkBackground>;
+    background: <SecondaryText>;
+}
+QMainWindow::separator:pressed {
+    background: <Text>;
+}
+
+QDockWidget::title {
+    background-color: <DarkBackground>;
+    color: <Text>;
+    font-size: <MediumText@1.0>px;
+    font-weight: 700;
+    padding: <Indicator@1.0>px;
+    margin: 0;
+    border-radius: <Indicator@1.5>px;
+    border: <Separator@1.0>px solid <Transparent>;
 }
 
 
@@ -677,4 +693,10 @@ LogTableView {
 
 QWidget[rounded="true"] {
     border-radius: <Indicator@2.0>px;
+}
+
+QLabel[h1="true"] {
+    font-size: <LargeText@1.0>px;
+    font-weight: 900;
+    color: <Text>;
 }
