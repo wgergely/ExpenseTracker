@@ -207,6 +207,14 @@ class YearMonthSelector(QtWidgets.QToolButton):
 
     def _connect_signals(self):
         self.clicked.connect(self.show_popup)
+        from ..ui.actions import signals
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key == 'yearmonth' and isinstance(value, str):
+                self.set_value(value)
+
+        signals.metadataChanged.connect(metadata_changed)
 
     def _init_actions(self):
         pass
@@ -279,6 +287,14 @@ class RangeSelectorBar(QtWidgets.QToolBar):
 
         self.end_selector.yearMonthChanged.connect(self.on_end_changed)
         self.end_selector.yearMonthChanged.connect(self.save_range)
+
+        from ..ui.actions import signals
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key in ('yearmonth', 'span'):
+                self.load_saved_state()
+
+        signals.metadataChanged.connect(metadata_changed)
 
     def _create_ui(self):
         prev_action = QtGui.QAction(ui.get_icon('btn_left'), '', self)
