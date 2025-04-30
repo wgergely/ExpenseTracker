@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 from PySide6 import QtCore
+from googleapiclient.errors import HttpError
 
 from .database import DatabaseAPI, google_serial_date_to_iso
 from .service import _verify_sheet_access, _query_sheet_size, start_asynchronous, TOTAL_TIMEOUT, \
     _verify_mapping
 from ..settings import lib
+from ..settings.lib import parse_mapping_spec
 
 
 @dataclass
@@ -70,15 +72,29 @@ class SyncManager(QtCore.QObject):
         Add an edit to the queue, recording the original and stable key values.
         """
         logging.debug(f'Queueing edit: local_id={local_id}, column={column}, new_value={new_value}')
+        # fetch the local database row
         row = DatabaseAPI.get_row(local_id)
         if not row:
             raise ValueError(f'No local row with id {local_id}')
-        stable = {
-            'date': row.get('date'),
-            'amount': row.get('amount'),
-            'description': row.get('description'),
-        }
-        orig = row.get(column)
+        # resolve stable key values using mapping; collect all mapped columns per logical key
+        mapping_conf = lib.settings.get_section('mapping')
+        stable_fields = ['date', 'amount', 'description']
+        stable: Dict[str, Tuple[Any, ...]] = {}
+        for logical in stable_fields:
+            raw_spec = mapping_conf.get(logical)
+            candidates = parse_mapping_spec(raw_spec)
+            present = [c for c in candidates if c in row]
+            if not present:
+                raise ValueError(f'Mapping for stable key "{logical}" references no valid column: {raw_spec}')
+            # store tuple of values for all mapped source columns
+            stable[logical] = tuple(row.get(c) for c in present)
+        # determine the original value for the edited column
+        # column is a logical name; map to actual DB column via mapping
+        # determine the original value for the edited column using its mapping (first candidate)
+        raw_spec_col = mapping_conf.get(column, column)
+        candidates_col = parse_mapping_spec(raw_spec_col)
+        found_col = next((c for c in candidates_col if c in row), None)
+        orig = row.get(found_col) if found_col is not None else row.get(column)
         # If an edit for this cell is already queued, squash it
         for op in self._queue:
             if op.local_id == local_id and op.column == column:
@@ -114,6 +130,7 @@ class SyncManager(QtCore.QObject):
 
         # determine sheet size (rows, cols)
         row_count, col_count = _query_sheet_size(service, self.sheet_id, self.worksheet)
+        logging.debug(f'Sheet dimensions: rows={row_count}, cols={col_count}')
         data_rows = max(row_count - 1, 0)
         if data_rows == 0:
             for op in self._queue:
@@ -123,6 +140,7 @@ class SyncManager(QtCore.QObject):
         # fetch header row in one request
         last_col = _idx_to_col(col_count - 1)
         hdr_range = f'{self.worksheet}!A1:{last_col}1'
+        logging.debug(f'Fetching header row with range: {hdr_range}')
         hdr_batch = service.spreadsheets().values().batchGet(
             spreadsheetId=self.sheet_id,
             ranges=[hdr_range],
@@ -144,19 +162,27 @@ class SyncManager(QtCore.QObject):
         logging.debug('Header mapping verified successfully')
         header_to_idx = {h: i for i, h in enumerate(headers)}
 
-        # which logical columns to fetch
-        needed = set()
-        for op in self._queue:
-            needed.update(op.stable_keys.keys())
-            needed.add(op.column)
+        # determine stable fields and their mapped headers for matching
+        stable_fields = list(self._queue[0].stable_keys.keys())
+        # map each stable logical to all its remote headers
+        stable_headers_map: Dict[str, List[str]] = {}
+        for logical in stable_fields:
+            raw_spec = mapping.get(logical)
+            candidates = parse_mapping_spec(raw_spec)
+            present = [c for c in candidates if c in header_to_idx]
+            if not present:
+                raise ValueError(f'Mapping for stable key "{logical}" references no valid remote header: {raw_spec}')
+            stable_headers_map[logical] = present
+        logging.debug(f'Stable headers map: {stable_headers_map}')
 
+        # fetch all stable-key columns ranges
         ranges: List[str] = []
-        for logical in needed:
-            hdr = mapping.get(logical)
-            idx = header_to_idx[hdr]
-            col = _idx_to_col(idx)
-            ranges.append(f'{self.worksheet}!{col}2:{col}{row_count}')
-
+        for logical, hdrs in stable_headers_map.items():
+            for hdr in hdrs:
+                idx = header_to_idx[hdr]
+                col = _idx_to_col(idx)
+                ranges.append(f'{self.worksheet}!{col}2:{col}{row_count}')
+        logging.debug(f'Fetching stable-key data ranges: {ranges}')
         batch = service.spreadsheets().values().batchGet(
             spreadsheetId=self.sheet_id,
             ranges=ranges,
@@ -164,88 +190,148 @@ class SyncManager(QtCore.QObject):
             fields='valueRanges(values)',
         ).execute()
 
-        # build column→values lists, padded to data_rows
-        col_vals: Dict[str, List[Any]] = {}
-        for logical, vr in zip(needed, batch.get('valueRanges', [])):
-            raw = vr.get('values', [])
-            flat = [r[0] if r else None for r in raw]
-            # pad
-            flat += [None] * (data_rows - len(flat))
-            # normalize stable types
-            normed: List[Any] = []
-            for v in flat:
-                if logical == 'date':
-                    try:
-                        nv = google_serial_date_to_iso(float(v))
-                    except Exception:
+        # build (logical, header) → values list, normalized
+        col_vals_map: Dict[Tuple[str, str], List[Any]] = {}
+        vr_list = batch.get('valueRanges', [])
+        idx_vr = 0
+        for logical, hdrs in stable_headers_map.items():
+            for hdr in hdrs:
+                vr = vr_list[idx_vr] if idx_vr < len(vr_list) else {}
+                idx_vr += 1
+                raw = vr.get('values', [])
+                flat = [r[0] if r else None for r in raw]
+                flat += [None] * (data_rows - len(flat))
+                normed: List[Any] = []
+                for v in flat:
+                    if logical == 'date':
+                        try:
+                            nv = google_serial_date_to_iso(float(v))
+                        except Exception:
+                            nv = v
+                    elif logical == 'amount':
+                        try:
+                            nv = float(v)
+                        except Exception:
+                            nv = v
+                    else:
                         nv = v
-                elif logical == 'amount':
-                    try:
-                        nv = float(v)
-                    except Exception:
-                        nv = v
-                else:
-                    nv = v
-                normed.append(nv)
-            col_vals[logical] = normed
+                    normed.append(nv)
+                col_vals_map[(logical, hdr)] = normed
 
-        # assemble remote rows by index
+        # assemble remote rows for matching stable keys
         remote: List[Dict[str, Any]] = []
         for i in range(data_rows):
-            remote.append({logical: col_vals[logical][i] for logical in needed})
+            row_map: Dict[str, Any] = {}
+            for logical in stable_fields:
+                values = tuple(col_vals_map[(logical, hdr)][i] for hdr in stable_headers_map[logical])
+                row_map[logical] = values
+            remote.append(row_map)
+        logging.debug(f'Assembled {len(remote)} remote rows for matching stable keys')
 
-        # match each op
-        to_update: List[Tuple[EditOperation, int]] = []  # op, sheet_row
+        # build a mapping from stable key tuples to remote row indices
+        stable_fields = list(self._queue[0].stable_keys.keys())
+        remote_index_map: Dict[Tuple[Any, ...], List[int]] = {}
+        # build a mapping from stable key tuples to remote row indices, skipping blank rows
+        for idx, row in enumerate(remote):
+            key_tuple = tuple(row.get(field) for field in stable_fields)
+            # skip rows where all stable key values are blank
+            if all(
+                (v is None) or (isinstance(v, tuple) and all(elem is None for elem in v))
+                for v in key_tuple
+            ):
+                continue
+            remote_index_map.setdefault(key_tuple, []).append(idx)
+        logging.debug(f'Remote index map (stable_fields={stable_fields}): {remote_index_map}')
+
+        # match each edit operation and collect updates
+        to_update: List[Tuple[EditOperation, int]] = []
         for op in self._queue:
-            matches: List[int] = []
-            for i, row in enumerate(remote):
-                ok = True
-                for key, val in op.stable_keys.items():
-                    if row.get(key) != val:
-                        ok = False
-                        break
-                if ok:
-                    matches.append(i)
+            key_tuple = tuple(op.stable_keys.get(field) for field in stable_fields)
+            matches = remote_index_map.get(key_tuple, [])
+            logging.debug(f'Op {op.local_id} key {key_tuple} -> matches {matches}')
             if len(matches) == 1:
-                sheet_row = matches[0] + 2
+                idx = matches[0]
+                sheet_row = idx + 2
                 to_update.append((op, sheet_row))
                 results[op.local_id] = (True, '')
-            elif not matches:
-                results[op.local_id] = (False, 'No matching row; remote changed')
+            elif len(matches) > 1:
+                expected_idx = op.local_id - 1
+                if expected_idx in matches:
+                    sheet_row = expected_idx + 2
+                    to_update.append((op, sheet_row))
+                    results[op.local_id] = (True, 'Disambiguated by cache row order')
+                    logging.warning(f'Ambiguous matches for op {op.local_id}, disambiguated to row {sheet_row}')
+                else:
+                    results[op.local_id] = (False, 'Ambiguous match; multiple rows match')
             else:
-                results[op.local_id] = (False, 'Ambiguous match; multiple rows match')
+                results[op.local_id] = (False, 'No matching row; remote changed')
 
-        # abort on any failure
-        if any(not ok for ok, _ in results.values()):
+        # abort if no valid updates after matching
+        if not to_update:
+            failed_count = len([ok for ok, msg in results.values() if not ok])
+            logging.info(f'No matching edits to apply; {failed_count} edit(s) failed to match criteria')
+            self.clear_queue()
             return results
 
-        # batchUpdate all
+        # prepare batch update payload (single target column per operation)
         data: List[Dict[str, Any]] = []
         for op, sheet_row in to_update:
-            hdr = mapping.get(op.column)
-            idx = header_to_idx[hdr]
-            col = _idx_to_col(idx)
+            # resolve target header for this logical column
+            raw_spec = mapping.get(op.column)
+            candidates = parse_mapping_spec(raw_spec)
+            found = next((c for c in candidates if c in header_to_idx), None)
+            if not found:
+                raise ValueError(f'Mapping for "{op.column}" references no valid remote header: {raw_spec}')
+            idx_col = header_to_idx[found]
+            col_letter = _idx_to_col(idx_col)
             data.append({
-                'range': f'{self.worksheet}!{col}{sheet_row}',
+                'range': f'{self.worksheet}!{col_letter}{sheet_row}',
                 'values': [[op.new_value]],
             })
         body = {'valueInputOption': 'USER_ENTERED', 'data': data}
-        service.spreadsheets().values().batchUpdate(
-            spreadsheetId=self.sheet_id,
-            body=body,
-        ).execute()
+        logging.debug(f'Batch update payload: {body}')
+        try:
+            service.spreadsheets().values().batchUpdate(
+                spreadsheetId=self.sheet_id,
+                body=body,
+            ).execute()
+            logging.info(f'Successfully pushed {len(to_update)} edit(s) to remote sheet')
+        except HttpError as ex:
+            # Log detailed HTTP error information
+            status_code = getattr(ex, 'status_code', None)
+            content = getattr(ex, 'content', None)
+            logging.error(
+                f'Batch update HTTPError: status={status_code}, content={content}'
+            )
+            for op, _ in to_update:
+                results[op.local_id] = (
+                    False,
+                    f'Batch update HTTPError: status={status_code}'
+                )
+            self.clear_queue()
+            return results
+        except Exception:
+            logging.exception('Batch update failed for queued edits')
+            for op, _ in to_update:
+                results[op.local_id] = (False, 'Batch update failed')
+            self.clear_queue()
+            return results
 
-        # update local cache database
+        # update local cache database for successful edits, mapping logical to DB column
         for op, _ in to_update:
             try:
-                DatabaseAPI.update_cell(op.local_id, op.column, op.new_value)
+                # resolve the actual DB column via mapping spec and sheet headers
+                raw_spec = mapping.get(op.column)
+                candidates = parse_mapping_spec(raw_spec)
+                # pick first candidate present in header_to_idx (and thus in DB)
+                db_col = next((c for c in candidates if c in header_to_idx), None)
+                if not db_col:
+                    db_col = op.column
+                DatabaseAPI.update_cell(op.local_id, db_col, op.new_value)
             except Exception:
                 logging.exception(f'Failed to update local cache for id {op.local_id}')
 
-        # notify listeners that local data has been updated
         self.dataUpdated.emit([op for op, _ in to_update])
-
-        # clear the edit queue
         self.clear_queue()
         return results
 
@@ -258,8 +344,13 @@ class SyncManager(QtCore.QObject):
             total_timeout=TOTAL_TIMEOUT,
             status_text='Syncing edits.',
         )
+        logging.debug(f'Asynchronous commit_queue completed with results: {result}')
         self.commitFinished.emit(result)
 
 
 # singleton for app use
+# Singleton instance for app use
 sync_manager = SyncManager()
+# Clear pending edits on preset activation
+from ..ui.actions import signals
+signals.presetAboutToBeActivated.connect(sync_manager.clear_queue)
