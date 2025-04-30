@@ -598,6 +598,8 @@ class PresetsAPI(QtCore.QObject):
             except Exception as ex:
                 logging.error(f'Backup failed, aborting activation: {ex}')
                 return False
+        # Notify all listeners that a preset activation is about to happen
+        signals.presetAboutToBeActivated.emit()
         # Clear config_dir completely
         try:
             if lib.settings.config_dir.exists():
@@ -622,13 +624,8 @@ class PresetsAPI(QtCore.QObject):
                 lib.settings.init_data()
             except Exception as ex:
                 logging.error(f'Failed to reload settings after activation: {ex}')
-            # Notify data fetch and config editors of updated sections
+            # Notify data fetch of updated state
             signals.dataAboutToBeFetched.emit()
-            # Client secret section may have changed
-            signals.configSectionChanged.emit('client_secret')
-            # Ledger sections
-            for section in lib.LEDGER_SCHEMA:
-                signals.configSectionChanged.emit(section)
             logging.debug(f'Activated preset: {item.name}')
             # Reload presets list to update model items (flags, names, active state)
             self.load_presets()
