@@ -88,18 +88,16 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
         return self.default_value
 
     def _connect_signals(self):
-        # Save changes when selection changes
         self.currentIndexChanged.connect(self.save)
 
-        # Refresh editor when metadata section is externally updated
-        @QtCore.Slot(str)
-        def _on_config_changed(section_name: str) -> None:
-            if section_name != 'metadata':
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key != self.property_name:
                 return
-            # Reload the combo-box data to reflect current settings
+
             QtCore.QTimer.singleShot(0, self.init_data)
 
-        signals.configSectionChanged.connect(_on_config_changed)
+        signals.metadataChanged.connect(metadata_changed)
 
     @QtCore.Slot(int)
     def save(self, index):
@@ -184,16 +182,15 @@ class BooleanEditor(QtWidgets.QCheckBox):
         self.blockSignals(False)
 
     def _connect_signals(self):
-        # Persist changes when checkbox toggles
         self.stateChanged.connect(self.save)
 
-        @QtCore.Slot(str)
-        def on_config_changed(section_name: str) -> None:
-            if section_name != 'metadata':
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key != self.property_name:
                 return
             self.init_data()
 
-        signals.configSectionChanged.connect(on_config_changed)
+        signals.metadataChanged.connect(metadata_changed)
 
     @QtCore.Slot()
     def save(self, *args, **kwargs):
@@ -228,13 +225,6 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.addRow('Exclude Positive Values', BooleanEditor('exclude_positive', parent=self))
         layout.addRow('Theme', ThemeEditor(self))
 
-        # Update editors on metadata changes
-        @QtCore.Slot(str)
-        def on_metadata_changed(section: str) -> None:
-            if section != 'metadata':
-                return
-
-        signals.configSectionChanged.connect(on_metadata_changed)
 
     def _init_actions(self):
         pass
