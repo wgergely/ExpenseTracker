@@ -1,12 +1,8 @@
 """
-Google OAuth2 Authentication Module.
+Google OAuth2 authentication and credential management.
 
-This module provides a high-level interface for authenticating
-Google services and getting valid credentials.
-
-This implementation uses a QThread to run the OAuth web flow asynchronously,
-and a custom QDialog to show authentication progress.
-
+Provides functions and classes to authenticate with Google services,
+manage credential storage, and run OAuth flows asynchronously.
 """
 
 import json
@@ -26,11 +22,11 @@ DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', ]
 
 class AuthFlowWorker(QtCore.QThread):
     """
-    QThread subclass that runs the OAuth web flow.
+    Runs OAuth web flow in a background thread.
 
-    Emits:
-      - resultReady(object): with the credentials on success.
-      - errorOccurred(str): with an error message on failure.
+    Signals:
+        resultReady (object): Emitted with credentials on success.
+        errorOccurred (str): Emitted with an error message on failure.
     """
     resultReady = QtCore.Signal(object)
     errorOccurred = QtCore.Signal(str)
@@ -52,8 +48,11 @@ class AuthFlowWorker(QtCore.QThread):
 
 
 class AuthProgressDialog(QtWidgets.QDialog):
-    """Authentication progress dialog.
+    """
+    Dialog displaying authentication progress with countdown and cancel.
 
+    Signals:
+        cancelled (): Emitted when the user cancels authentication.
     """
     cancelled = QtCore.Signal()
 
@@ -124,8 +123,15 @@ class AuthProgressDialog(QtWidgets.QDialog):
 
 
 def get_creds() -> google.oauth2.credentials.Credentials:
-    """Get OAuth credentials for connecting to Google services.
+    """
+    Obtain valid OAuth2 credentials for Google Sheets API.
 
+    Returns:
+        google.oauth2.credentials.Credentials: Authorized credentials.
+
+    Raises:
+        status.ClientSecretNotFoundException: If client secret file is missing.
+        status.CredsNotFoundException: If credentials cannot be obtained.
     """
     from ..settings import lib
     if not lib.settings.client_secret_path.exists():
@@ -158,8 +164,11 @@ def get_creds() -> google.oauth2.credentials.Credentials:
 
 
 def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> None:
-    """Save the given credentials to the specified token path.
+    """
+    Save OAuth2 credentials to the configured token file.
 
+    Args:
+        creds (Union[google.oauth2.credentials.Credentials, Dict]): Credentials or dict to save.
     """
     from ..settings import lib
     with open(lib.settings.creds_path, 'w', encoding='utf-8') as token_file:
@@ -171,13 +180,14 @@ def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> Non
 
 def authenticate() -> google.oauth2.credentials.Credentials:
     """
-    Authenticate and return credentials.
+    Run OAuth flow to authenticate and obtain credentials.
 
     Returns:
         google.oauth2.credentials.Credentials: The authenticated credentials.
 
     Raises:
-        RuntimeError: If authentication fails, is cancelled, or times out.
+        status.AuthenticationExceptionException: If authentication fails or is cancelled.
+        status.CredsInvalidException: If credentials returned are invalid.
     """
     scopes = DEFAULT_SCOPES
 
@@ -260,8 +270,8 @@ def authenticate() -> google.oauth2.credentials.Credentials:
 
 
 def sign_out() -> None:
-    """Sign out the user by deleting the credentials file.
-
+    """
+    Delete stored credentials to sign out the user.
     """
     from ..settings import lib
     if lib.settings.creds_path.exists():
