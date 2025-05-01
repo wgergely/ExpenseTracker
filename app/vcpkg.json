@@ -1,0 +1,11 @@
+  {
+    "name": "expensetracker",
+    "version": "0.0.0",
+    "description": "Expense Tracker is a simple application to track your expenses.",
+    "homepage": "https://github.com/wgergely/ExpenseTracker",
+    "license": "MIT",
+    "dependencies": [
+      {"name": "python3", "version>=": "3.11.11"}
+    ],
+    "builtin-baseline": "ce613c41372b23b1f51333815feb3edd87ef8a8b"
+  }
