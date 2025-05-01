@@ -1,5 +1,8 @@
-"""Config editor for ledger.json's "categories" section.
+"""Category editor: UI for editing expense categories in ledger.json.
 
+Provides:
+    - IconPickerDialog: dialog for selecting category icons
+    - CategoriesModel: table model for editing category properties (name, display name, icon, color, excluded)
 """
 import functools
 import logging

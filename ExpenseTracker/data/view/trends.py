@@ -1,4 +1,11 @@
-"""
+"""Trend graph visualization and dock widget.
+
+This module provides:
+    - Span: predefined span selections for negative lookback
+    - paint decorator: wraps paint helpers with save/restore and error logging
+    - Geometry: container for calculated drawing regions
+    - TrendGraph: custom QWidget showing bar and LOESS trend lines
+    - TrendDockWidget: dockable wrapper around TrendGraph
 """
 
 import logging

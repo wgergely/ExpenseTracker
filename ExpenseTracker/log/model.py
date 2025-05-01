@@ -1,3 +1,11 @@
+"""Log table models and proxy for displaying and filtering in-memory logs.
+
+Provides:
+    - Columns, Level, Roles: enums for table structure and roles
+    - LogTableModel: polls TankHandler for log entries
+    - LogFilterProxyModel: filters and sorts log entries
+    - get_handler: utility to access the TankHandler
+"""
 import enum
 import logging
 import re

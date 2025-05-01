@@ -1,5 +1,8 @@
-"""Config editor for ledger.json's "spreadsheet" section.
+"""Spreadsheet editor: configure Google Sheets source for transaction data.
 
+Provides:
+    - SpreadsheetEditor: UI to set spreadsheet ID and worksheet name
+    - Verification of spreadsheet URL/ID extraction and reload/reset actions
 """
 import logging
 import re
@@ -12,6 +15,7 @@ from ...ui.actions import signals
 
 
 class SpreadsheetEditor(QtWidgets.QWidget):
+    """Widget to configure Google Spreadsheet ID and worksheet name for transactions."""
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)

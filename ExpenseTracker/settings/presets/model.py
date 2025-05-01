@@ -1,5 +1,8 @@
-"""
+"""Preset model for Qt: defines data structures and roles for listing presets.
 
+This module provides:
+    - Columns: IntEnum for table columns (Status, Name, Description)
+    - PresetModel: QAbstractItemModel exposing PresetItem instances to Qt views
 """
 
 import enum

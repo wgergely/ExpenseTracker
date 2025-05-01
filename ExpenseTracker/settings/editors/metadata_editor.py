@@ -1,10 +1,10 @@
-"""
-Module for editors for application settings including locale, summary mode,
-boolean properties, and theme.
+"""Metadata editor: UI components for general application settings.
 
-This module provides UI widgets that load their options and default values from
-a persistent settings object (lib.settings). The ComboBox editors use a common base
-class to reduce repeated logic.
+Provides editors for:
+    - Locale selection (LocaleEditor)
+    - Summary mode and theme (SummaryModeEditor, ThemeEditor)
+    - Boolean settings (BooleanEditor)
+    - Composite settings panel (MetadataWidget)
 """
 
 import enum

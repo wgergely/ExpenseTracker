@@ -1,3 +1,9 @@
+"""Log views and dock widget for displaying and interacting with log messages.
+
+This module provides:
+    - LogTableView: table view for formatted log entries
+    - LogDockWidget: dockable container with filtering and clear actions
+"""
 import logging
 
 from PySide6 import QtCore, QtWidgets, QtGui
@@ -12,7 +18,6 @@ class LogTableView(QtWidgets.QTableView):
     """A QTableView displaying log messages from LogTableModel."""
 
     def __init__(self, parent=None):
-        """Initializes the log table view."""
         super().__init__(parent=parent)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -59,7 +64,6 @@ class LogTableView(QtWidgets.QTableView):
 
     @QtCore.Slot()
     def on_rows_inserted(self):
-        """Resize rows after insert to accommodate new entries."""
         header = self.horizontalHeader()
         sort_col = header.sortIndicatorSection()
         sort_order = header.sortIndicatorOrder()
@@ -181,7 +185,6 @@ class LogDockWidget(QtWidgets.QDockWidget):
 
     @QtCore.Slot()
     def _clear_logs(self) -> None:
-        """Clear log entries from the model and the log tank."""
         # Clear underlying log tank
         try:
             handler = get_handler()
@@ -195,7 +198,6 @@ class LogDockWidget(QtWidgets.QDockWidget):
 
     @QtCore.Slot(bool)
     def on_visibility_changed(self, visible: bool) -> None:
-        """Pause or resume log model updates when dock visibility changes."""
         model = self.view.model().sourceModel()
         if visible:
             model.resume()

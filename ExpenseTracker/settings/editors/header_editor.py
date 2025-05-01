@@ -1,6 +1,10 @@
-"""Section editor for ledger.json "header" definitions.
+"""Header editor: configure expected columns and types for the spreadsheet source.
 
+Provides:
+    - HeaderItemModel: table model for defining header names and data types
+    - Drag-and-drop and edit support for headers list
 """
+import ast
 import logging
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -12,6 +16,7 @@ from ...ui.actions import signals
 
 
 class HeaderItemModel(QtCore.QAbstractTableModel):
+    """Table model for defining and editing source header names and types."""
     MIME_INTERNAL = 'application/vnd.text.list'
     MIME_EXTERNAL = 'application/x-headeritem'
 
@@ -194,7 +199,8 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
                 drop_row = self.rowCount()
 
             encoded_data = data.data(self.MIME_INTERNAL).data()
-            row_list = eval(encoded_data.decode('utf-8'))
+            # use safe literal_eval instead of eval to parse row list
+            row_list = ast.literal_eval(encoded_data.decode('utf-8'))
             to_move = [self._headers[r] for r in row_list]
 
             self.rowsAboutToBeMoved.emit(parent, row_list[0], row_list[-1], parent, drop_row)
@@ -293,6 +299,7 @@ class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
             editor.setView(view)
             editor.addItems(lib.HEADER_TYPES)
             return editor
+        return None
 
     def updateEditorGeometry(self, editor, option, index):
         """Explicitly set the editor geometry to match the cell area.

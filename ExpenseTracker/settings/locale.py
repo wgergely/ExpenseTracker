@@ -1,6 +1,11 @@
-"""
-Module for formatting decimal and currency values using Babel.
+"""Locale utilities for formatting numbers, currency, and dates.
 
+Provides:
+    - get_currency_from_locale: map locale to default currency code.
+    - format_float: format decimal numbers per locale conventions.
+    - format_currency_value: format currency values based on locale.
+    - parse_date: parse date strings into datetime objects.
+    - CURRENCY_MAP and LOCALE_MAP for default mappings.
 """
 import datetime
 import logging

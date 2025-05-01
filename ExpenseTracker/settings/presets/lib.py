@@ -1,3 +1,10 @@
+"""Presets library for creating and managing configuration snapshots.
+
+Provides core classes and operations for:
+    - PresetItem: representation of a live or saved preset archive
+    - PresetsAPI: manager for listing, creating, activating, and removing presets
+    - PresetType and PresetFlags: enums for preset classification and status
+"""
 import datetime
 import json
 import logging

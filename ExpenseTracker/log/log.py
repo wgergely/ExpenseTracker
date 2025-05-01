@@ -1,3 +1,11 @@
+"""Configure application logging and bridge Qt messages to Python logging.
+
+This module provides:
+    - set_logging_level: adjust root logger level
+    - qt_message_handler: redirect Qt logs
+    - setup_logging: initialize log handlers
+    - TankHandler: in-memory log storage with signaling
+"""
 import logging
 import sys
 

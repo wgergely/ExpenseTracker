@@ -1,9 +1,10 @@
-"""
-Manages settings for ledger.json and client_secret.json files. Provides
-schema validation, unified get/set/revert/save methods, and logs important
-operations and errors. Supports creating, removing, listing, and loading
-"preset" zips containing client_secret.json and ledger.json.
+"""Settings library for ledger and authentication configurations.
 
+Provides:
+    - Schema validation and enforcement for ledger.json structure.
+    - Loading, saving, reverting, and managing application settings.
+    - Preset handling for bundling and loading client_secret.json and ledger.json.
+    - Constants for column names and data schemas.
 """
 
 import json
@@ -22,8 +23,13 @@ app_name: str = 'ExpenseTracker'
 
 
 def is_valid_hex_color(value: str) -> bool:
-    """
-    Checks if a string is a valid #RRGGBB color format.
+    """Check if a string is a valid hexadecimal color in #RRGGBB format.
+
+    Args:
+        value (str): Color string to validate.
+
+    Returns:
+        bool: True if value matches '#RRGGBB', False otherwise.
     """
     return bool(re.fullmatch(r'#[0-9A-Fa-f]{6}', value))
 
@@ -110,10 +116,15 @@ LEDGER_SCHEMA: Dict[str, Any] = {
 
 
 def parse_mapping_spec(spec: str) -> list[str]:
-    """
-    Split a mapping specification string on the configured separators into individual header names.
+    """Split a mapping specification string into individual header names.
 
-    Whitespace around header names is stripped, and empty segments are dropped.
+    Splits on configured separator characters, strips whitespace, and drops empty segments.
+
+    Args:
+        spec (str): Mapping specification (e.g., 'ColA|ColB').
+
+    Returns:
+        list[str]: List of header names extracted from spec.
     """
     import re
     pattern = '|'.join(map(re.escape, DATA_MAPPING_SEPARATOR_CHARS))
@@ -122,6 +133,18 @@ def parse_mapping_spec(spec: str) -> list[str]:
 
 
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
+    """Validate the 'header' section of the ledger configuration.
+
+    Ensures header_dict is a mapping of column names to allowed type strings.
+
+    Args:
+        header_dict: Mapping of header names to type identifiers.
+        allowed_values: List of allowed type identifiers (e.g., 'string', 'int').
+
+    Raises:
+        TypeError: If header_dict is not a dict or contains non-string keys/values.
+        ValueError: If a header value is not one of the allowed_values.
+    """
     logging.debug('Validating "header" section.')
     if not isinstance(header_dict, dict):
         msg: str = 'header must be a dict.'
@@ -143,6 +166,19 @@ def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> 
 
 
 def _validate_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
+    """Validate the 'mapping' section of the ledger configuration.
+
+    Ensures mapping_dict has exactly the required keys and that values conform to type and
+    multi-value rules defined in specs.
+
+    Args:
+        mapping_dict: Mapping from internal data keys to spreadsheet column specifications.
+        specs: Schema dict containing 'required_keys', 'value_type', and 'multi_allowed_keys'.
+
+    Raises:
+        ValueError: If mapping_dict keys do not match required_keys or if unauthorized multi-mapping.
+        TypeError: If a mapping value is not of the expected type.
+    """
     logging.debug('Validating "mapping" section.')
     required_keys = set(specs['required_keys'])
     if set(mapping_dict.keys()) != required_keys:
@@ -172,6 +208,18 @@ def _validate_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> No
 
 
 def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
+    """Validate the 'categories' section of the ledger configuration.
+
+    Ensures categories_dict maps category names to dicts of required fields matching item_schema.
+
+    Args:
+        categories_dict: Mapping of category identifiers to their configuration dicts.
+        item_schema: Dict describing required fields, types, and format constraints.
+
+    Raises:
+        TypeError: If categories_dict is not a dict or category entries are not dicts or wrong types.
+        ValueError: If a required field is missing or fails format validation (e.g., hexcolor).
+    """
     logging.debug('Validating "categories" section.')
     if not isinstance(categories_dict, dict):
         msg: str = '"categories" must be a dict.'
@@ -207,8 +255,19 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
 
 
 class ConfigPaths:
+    """Manage application file paths and ensure default templates and directories exist.
+
+    This class initializes paths for configuration templates, icons, presets, database,
+    and user settings. It verifies the presence of template assets and prepares
+    default configuration files by copying them into the user data directory.
+    """
 
     def __init__(self) -> None:
+        """Set up application paths and ensure required directories and templates exist.
+
+        Defines template, config, auth, db, presets, and user settings paths.
+        Creates missing directories and copies default templates where needed.
+        """
         # Set the application name and organization
         QtWidgets.QApplication.setApplicationName(app_name)
         QtWidgets.QApplication.setOrganizationName('')
@@ -246,6 +305,15 @@ class ConfigPaths:
         self._verify_and_prepare()
 
     def _verify_and_prepare(self) -> None:
+        """Verify templates exist and prepare configuration directories and files.
+
+        Ensures template and icon directories and template files are present.
+        Creates missing config, auth, db, and presets directories.
+        Copies default ledger and client_secret templates into the config directory if absent.
+
+        Raises:
+            FileNotFoundError: If required template directory or file is missing.
+        """
         logging.debug(f'Verifying required directories and templates in {self.template_dir}')
         if not self.template_dir.exists():
             msg: str = f'Missing template directory: {self.template_dir}'
@@ -294,8 +362,10 @@ class ConfigPaths:
             self.presets_dir.mkdir(parents=True, exist_ok=True)
 
     def revert_ledger_to_template(self) -> None:
-        """
-        Restores ledger.json from the ledger template.
+        """Restore ledger.json from the default template file.
+
+        Raises:
+            FileNotFoundError: If the ledger template file is missing.
         """
         logging.debug(f'Reverting ledger to template: {self.ledger_template}')
         if not self.ledger_template.exists():
@@ -305,8 +375,10 @@ class ConfigPaths:
         shutil.copy(self.ledger_template, self.ledger_path)
 
     def revert_client_secret_to_template(self) -> None:
-        """
-        Restores client_secret.json from the client_secret template.
+        """Restore client_secret.json from the default template file.
+
+        Raises:
+            FileNotFoundError: If the client_secret template file is missing.
         """
         logging.debug(f'Reverting client_secret to template: {self.client_secret_template}')
         if not self.client_secret_template.exists():
@@ -324,6 +396,12 @@ class SettingsAPI(ConfigPaths):
     required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
     def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
+        """Initialize SettingsAPI and load ledger and client_secret data.
+
+        Args:
+            ledger_path: Optional path to a custom ledger.json file.
+            client_secret_path: Optional path to a custom client_secret.json file.
+        """
         super().__init__()
 
         self.ledger_path: pathlib.Path = pathlib.Path(ledger_path) if ledger_path else self.ledger_path
@@ -347,6 +425,18 @@ class SettingsAPI(ConfigPaths):
         self.init_data()
 
     def __getitem__(self, key: str) -> Any:
+        """Retrieve a metadata value using dictionary-style access.
+
+        Args:
+            key: Metadata key to retrieve.
+
+        Returns:
+            Value stored for the metadata key.
+
+        Raises:
+            KeyError: If key is not in METADATA_KEYS.
+            RuntimeError: If metadata section is missing from ledger_data.
+        """
         if key not in METADATA_KEYS:
             raise KeyError(f'Invalid metadata key: {key}, must be one of {METADATA_KEYS}')
 
@@ -368,6 +458,16 @@ class SettingsAPI(ConfigPaths):
         return v
 
     def __setitem__(self, key: str, value: Any) -> None:
+        """Assign a metadata value using dictionary-style access and persist it.
+
+        Args:
+            key: Metadata key to set.
+            value: Value to assign to the metadata key.
+
+        Raises:
+            KeyError: If key is not in METADATA_KEYS or undefined in schema.
+            RuntimeError: If metadata section is missing.
+        """
         if key not in METADATA_KEYS:
             raise KeyError(f'Invalid metadata key: {key}, must be one of {METADATA_KEYS}')
 
@@ -411,17 +511,23 @@ class SettingsAPI(ConfigPaths):
         signals.metadataChanged.emit(key, value)
 
     def _connect_signals(self) -> None:
+        """Connect preset-related signals to reload configuration data."""
         from ..ui.actions import signals
 
         signals.presetsChanged.connect(self.init_data)
         signals.presetActivated.connect(self.init_data)
 
     def block_signals(self, v: bool) -> None:
-        """Blocks signals from being emitted."""
+        """Enable or disable emission of configuration change signals.
+
+        Args:
+            v: True to block signals, False to allow signals to emit.
+        """
         self._signals_blocked = v
 
     @QtCore.Slot()
     def init_data(self) -> None:
+        """Reload ledger and client_secret data, emitting UI update signals."""
         self.load_ledger()
         self.load_client_secret()
 
@@ -436,6 +542,15 @@ class SettingsAPI(ConfigPaths):
             signals.metadataChanged.emit(k, v)
 
     def load_ledger(self) -> Dict[str, Any]:
+        """Load ledger.json from disk and validate against schema.
+
+        Returns:
+            The loaded ledger data dictionary.
+
+        Raises:
+            status.LedgerConfigNotFoundException: If ledger.json file is missing.
+            status.LedgerConfigInvalidException: If JSON parsing or validation fails.
+        """
         logging.debug(f'Loading ledger from "{self.ledger_path}"')
         if not self.ledger_path.exists():
             raise status.LedgerConfigNotFoundException
@@ -451,6 +566,15 @@ class SettingsAPI(ConfigPaths):
             raise status.LedgerConfigInvalidException from ex
 
     def load_client_secret(self) -> Dict[str, Any]:
+        """Load client_secret.json from disk and validate required OAuth fields.
+
+        Returns:
+            The loaded client secret data dictionary.
+
+        Raises:
+            FileNotFoundError: If client_secret.json file is missing.
+            status.ClientSecretInvalidException: If JSON parsing or required fields are missing.
+        """
         logging.debug(f'Loading client_secret from "{self.client_secret_path}"')
         if not self.client_secret_path.exists():
             msg: str = f'Client secret file not found: {self.client_secret_path}'
@@ -466,18 +590,16 @@ class SettingsAPI(ConfigPaths):
             raise status.ClientSecretInvalidException from ex
 
     def validate_client_secret(self, data=None) -> str:
-        """
-        Validate that the client configuration is for an OAuth client.
+        """Validate that the client configuration contains required OAuth credentials.
 
         Args:
-            data: Optional; if provided, this data will be validated instead of the loaded client_secret.
+            data (dict, optional): Client secret data to validate. Defaults to loaded client_secret_data.
 
         Returns:
-            The key used ("installed" or "web").
+            str: Section key used ('installed' or 'web').
 
         Raises:
-            RuntimeError: If neither configuration is present or required fields are missing.
-
+            status.ClientSecretInvalidException: If no valid client_secret section exists or required fields are missing.
         """
         # Use provided data if any, else use loaded client_secret_data
         if data is None:
@@ -500,9 +622,16 @@ class SettingsAPI(ConfigPaths):
         return key
 
     def validate_ledger_data(self, data: Dict[str, Any] = None) -> None:
-        """
-        Validates that data integrity.
+        """Validate ledger data against the defined LEDGER_SCHEMA.
 
+        Checks each section for required presence, correct types, and nested schema constraints.
+
+        Args:
+            data (dict, optional): Ledger data to validate. Defaults to self.ledger_data.
+
+        Raises:
+            RuntimeError: If data is empty.
+            status.LedgerConfigInvalidException: If a required section is missing or validation fails.
         """
         # Use provided data if any, else use loaded ledger_data
         if data is None:
@@ -533,8 +662,16 @@ class SettingsAPI(ConfigPaths):
         logging.debug('Ledger data is valid.')
 
     def get_section(self, section_name: str) -> Dict[str, Any]:
-        """
-        Returns data for a ledger section or 'client_secret'.
+        """Retrieve a copy of configuration data for a ledger or client_secret section.
+
+        Args:
+            section_name: Section name ('client_secret' or key from ledger schema).
+
+        Returns:
+            A copied dict of the requested section data.
+
+        Raises:
+            KeyError: If section_name is not in ledger_data.
         """
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
@@ -542,8 +679,15 @@ class SettingsAPI(ConfigPaths):
         return self.ledger_data[section_name].copy()
 
     def set_section(self, section_name: str, new_data: Dict[str, Any]) -> None:
-        """Sets data for a ledger section or 'client_secret' and commits to disk.
+        """Replace and persist a configuration section.
 
+        Args:
+            section_name: Section to update ('client_secret' or ledger key).
+            new_data: New data dict for the section.
+
+        Raises:
+            TypeError: If new_data type is invalid for the metadata section.
+            ValueError: If required metadata keys are missing or section_name is unrecognized.
         """
         from ..ui.actions import signals
 
@@ -597,8 +741,15 @@ class SettingsAPI(ConfigPaths):
             raise
 
     def reload_section(self, section_name: str) -> None:
-        """Reload the current section from disk.
+        """Reload a configuration section from its source file and emit change signal.
 
+        Args:
+            section_name: Section to reload ('client_secret' or ledger key).
+
+        Raises:
+            ValueError: If section_name is unrecognized.
+            JSONDecodeError: If parsing ledger.json fails.
+            status.LedgerConfigInvalidException: If reloaded data fails validation.
         """
         from ..ui.actions import signals
 
@@ -626,8 +777,13 @@ class SettingsAPI(ConfigPaths):
             raise
 
     def revert_section(self, section_name: str) -> None:
-        """
-        Reverts the given section from its template.
+        """Revert a configuration section to its template default and save.
+
+        Args:
+            section_name: Section to revert ('client_secret' or ledger key).
+
+        Raises:
+            ValueError: If section_name is invalid or not present in the template.
         """
         from ..ui.actions import signals
 
@@ -658,8 +814,14 @@ class SettingsAPI(ConfigPaths):
         signals.configSectionChanged.emit(section_name)
 
     def save_section(self, section_name: str) -> None:
-        """
-        Saves the given section to disk.
+        """Persist a single configuration section to its corresponding file.
+
+        Args:
+            section_name: The section to save ('client_secret' or ledger key).
+
+        Raises:
+            ValueError: If section_name is not recognized.
+            Exception: For I/O or validation errors when writing to file.
         """
 
         if section_name == 'client_secret':
@@ -694,8 +856,13 @@ class SettingsAPI(ConfigPaths):
             json.dump(new_data, f, indent=4, ensure_ascii=False)
 
     def save_all(self) -> None:
-        """
-        Saves ledger and client_secret. Rolls back ledger on validation failure.
+        """Save both ledger.json and client_secret.json atomically, with rollback on failure.
+
+        Validates data before writing. If ledger save fails, restores previous state.
+
+        Raises:
+            status.LedgerConfigInvalidException: On ledger validation failure.
+            Exception: For I/O errors writing files.
         """
         logging.debug('Saving all settings.')
         original_ledger_data: Dict[str, Any] = dict(self.ledger_data)

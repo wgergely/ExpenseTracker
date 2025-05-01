@@ -1,5 +1,9 @@
-"""Actions Module.
+"""Application-wide Qt signals and utility slots for ExpenseTracker.
 
+This module provides:
+    - open_spreadsheet slot: opens the configured Google Sheets URL in the browser.
+    - Signals: custom Qt signals for configuration changes, data fetch lifecycle,
+      category selection, UI actions (showSettings, openTransactions, showLogs), and presets.
 """
 import logging
 
@@ -32,6 +36,7 @@ def open_spreadsheet() -> None:
 
 
 class Signals(QtCore.QObject):
+    """Centralized Qt signals for application config, data, and UI events."""
     configSectionChanged = QtCore.Signal(str)  # Section, config
     metadataChanged = QtCore.Signal(str, object)
 

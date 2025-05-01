@@ -1,7 +1,14 @@
+"""Custom Qt view classes with enhanced scrolling behavior for settings UI.
+
+Provides:
+    - VerticalScrollMixin: intercept wheel events at scroll limits
+    - TableView, TreeView, ListView: integrate mixin with Qt views
+"""
 from PySide6 import QtWidgets, QtGui
 
 
 class VerticalScrollMixin:
+    """Mixin that intercepts vertical wheel events to avoid scrolling parent when at boundaries."""
     def __init__(self, *args, **kwargs):
         self._accumulated_delta = 0
         super().__init__(*args, **kwargs)

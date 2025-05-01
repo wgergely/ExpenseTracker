@@ -1,3 +1,12 @@
+"""Main window composition and UI entry points for ExpenseTracker.
+
+This module defines:
+    - show(): initialize and display the main window
+    - Edge: directional flags for window resizing
+    - TitleLabel, TitleBar: custom title components
+    - StatusIndicator: widget for cache status display
+    - InteractionState and ResizableMainWidget: support window resizing and state changes
+"""
 import dataclasses
 import enum
 import functools
@@ -17,15 +26,16 @@ from ..settings.presets.view import PresetsDockWidget
 from ..settings.settings import SettingsDockWidget
 from ..ui.actions import signals
 
-main_window = None
+widget = None
 
 
-def show_main_window():
-    global main_window
-    if main_window is None:
-        main_window = MainWindow()
-    main_window.show()
-    return main_window
+def show():
+    global widget
+
+    if widget is None:
+        widget = MainWindow()
+
+    widget.show()
 
 
 class Edge(enum.Flag):
@@ -61,7 +71,7 @@ class TitleLabel(QtWidgets.QWidget):
 
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(250, self.update_title)
+        QtCore.QTimer.singleShot(100, self.update_title)
 
     def _connect_signals(self) -> None:
         from ..ui.actions import signals

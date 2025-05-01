@@ -1,9 +1,19 @@
+"""Status definitions and exceptions for ExpenseTracker.
+
+This module provides:
+    - Status: enumeration of possible application states
+    - STATUS_MESSAGE: user-facing messages for each status
+    - get_message: retrieve the message for a status
+    - BaseStatusException: base exception carrying a Status
+    - Specific exceptions (e.g., LedgerConfigNotFoundException) for error handling in services
+"""
 import enum
 import logging
 from typing import Dict
 
 
 class Status(enum.StrEnum):
+    """Enumeration of application status codes."""
     UnknownStatus = enum.auto()
     Okay = enum.auto()
 
@@ -79,8 +89,14 @@ def get_message(status: Status) -> str:
 
 
 class BaseStatusException(Exception):
-    """Exception raised when the status is unknown.
+    """Base exception for status-based errors in ExpenseTracker.
 
+    Attributes:
+        status (Status): Status code associated with this error.
+        status_message (str): User-facing message for the status.
+
+    Args:
+        message (str): Optional additional context for the error.
     """
     status = Status.UnknownStatus
 
@@ -93,68 +109,85 @@ class BaseStatusException(Exception):
 
 
 class UnknownException(BaseStatusException):
+    """Exception for an unknown error during status processing."""
     pass
 
 
 class LedgerConfigNotFoundException(BaseStatusException):
+    """Exception raised when the ledger configuration file cannot be found."""
     status = Status.LedgerConfigNotFound
 
 
 class LedgerConfigInvalidException(BaseStatusException):
+    """Exception raised when the ledger configuration is invalid or malformed."""
     status = Status.LedgerConfigInvalid
 
 
 class ClientSecretNotFoundException(BaseStatusException):
+    """Exception raised when the Google OAuth client secret file cannot be found."""
     status = Status.ClientSecretNotFound
 
 
 class ClientSecretInvalidException(BaseStatusException):
+    """Exception raised when the Google OAuth client secret is invalid or malformed."""
     status = Status.ClientSecretInvalid
 
 
 class CredsNotFoundException(BaseStatusException):
+    """Exception raised when stored Google credentials cannot be found."""
     status = Status.CredsNotFound
 
 
 class CredsInvalidException(BaseStatusException):
+    """Exception raised when stored Google credentials are invalid or expired."""
     status = Status.CredsInvalid
 
 
 class AuthenticationExceptionException(BaseStatusException):
+    """Exception raised when user is not authenticated with Google services."""
     status = Status.NotAuthenticated
 
 
 class SpreadsheetIdNotConfiguredException(BaseStatusException):
+    """Exception raised when the spreadsheet ID is not configured in settings."""
     status = Status.SpreadsheetIdNotConfigured
 
 
 class SpreadsheetWorksheetNotConfiguredException(BaseStatusException):
+    """Exception raised when the worksheet name is not configured in settings."""
     status = Status.SpreadsheetWorksheetNotConfigured
 
 
 class SpreadsheetNotFoundException(BaseStatusException):
+    """Exception raised when the specified spreadsheet cannot be accessed."""
     status = Status.SpreadsheetNotFound
 
 
 class WorksheetNotFoundException(BaseStatusException):
+    """Exception raised when the specified worksheet cannot be accessed."""
     status = Status.WorksheetNotFound
 
 
 class ServiceUnavailableException(BaseStatusException):
+    """Exception raised when the Google Sheets service is unavailable."""
     status = Status.ServiceUnavailable
 
 
 class HeadersInvalidException(BaseStatusException):
+    """Exception raised when spreadsheet headers are invalid or misconfigured."""
     status = Status.HeadersInvalid
 
 
 class HeaderMappingInvalidException(BaseStatusException):
+    """Exception raised when header mapping configuration is invalid."""
     status = Status.HeaderMappingInvalid
 
 
 class CategoriesInvalidException(BaseStatusException):
+    """Exception raised when category configuration is invalid or incomplete."""
     status = Status.CategoriesInvalid
 
 
 class CacheInvalidException(BaseStatusException):
+    """Exception raised when the local data cache is invalid or corrupted."""
     status = Status.CacheInvalid

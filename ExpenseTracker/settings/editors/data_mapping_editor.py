@@ -1,6 +1,8 @@
-"""
-Data Mapping Editor for the 'mapping' portion of ledger.json.
+"""Data mapping editor: map spreadsheet columns to internal data roles.
 
+Provides:
+    - DataMappingModel: table model for editing mapping between spreadsheet headers and data keys
+    - Drag-and-drop and edit support for mapping entries
 """
 
 from PySide6 import QtCore, QtWidgets, QtGui
@@ -11,6 +13,7 @@ from ...ui.actions import signals
 
 
 class DataMappingModel(QtCore.QAbstractTableModel):
+    """Table model for editing mapping between spreadsheet columns and internal data roles."""
     HEADERS = ['Field To Map To', 'Spreadsheet Column to Map From']  # column 0, column 1
     MIME_HEADER = 'application/x-headeritem'
 

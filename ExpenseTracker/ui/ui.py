@@ -1,3 +1,12 @@
+"""UI styling and asset utilities for ExpenseTracker.
+
+This module provides:
+    - Font and FontDatabase: custom font loading and sizing
+    - Theme: supported UI themes (light, dark)
+    - Size: standardized size constants and scaling logic
+    - Color: standardized color palette for widgets and themes
+    - Icon asset management and retrieval functions
+"""
 import enum
 import logging
 import math

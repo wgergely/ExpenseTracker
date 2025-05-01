@@ -1,5 +1,9 @@
-"""The main settings widget for the app.
+"""Settings UI and dock widget for configuring application preferences.
 
+Provides:
+    - SettingsScrollArea: scroll area ensuring horizontal expansion without scrollbars.
+    - SettingsWidget: composite editor for all configuration sections (metadata, spreadsheet, etc.).
+    - SettingsDockWidget: dockable container wrapping the settings UI.
 """
 from typing import Optional
 

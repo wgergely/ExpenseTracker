@@ -1,4 +1,9 @@
-"""
+"""Presets view and dock widget for managing configuration snapshots.
+
+This module provides:
+    - PresetsListDelegate: delegate for editing preset entries in the list
+    - PresetsListView: table view for displaying and activating presets
+    - PresetsDockWidget: dockable UI component with toolbar actions for presets
 """
 import logging
 from typing import Optional

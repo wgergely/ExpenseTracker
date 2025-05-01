@@ -1,7 +1,8 @@
-"""Editor for setting up a Google Cloud project and Google OAuth client.
+"""Client editor: dialogs and preview for Google OAuth client secrets.
 
-This project requires a Client ID to connect to the Google API.
-
+Provides:
+    - JsonPreviewWidget: displays current client_secret.json in formatted view
+    - ImportSecretDialog: dialog to import or paste OAuth client secret
 """
 import json
 import logging
@@ -15,6 +16,7 @@ from ...ui.actions import signals
 
 
 class JsonPreviewWidget(QtWidgets.QPlainTextEdit):
+    """Widget to display and preview JSON content of the client secret configuration."""
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -60,7 +62,7 @@ class JsonPreviewWidget(QtWidgets.QPlainTextEdit):
 
 
 class ImportSecretDialog(QtWidgets.QDialog):
-
+    """Dialog for importing or pasting Google OAuth client secret data."""
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
