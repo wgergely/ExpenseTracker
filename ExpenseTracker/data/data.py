@@ -9,14 +9,13 @@ import logging
 import re
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from status.status import BaseStatusException
 from ..core import database
 from ..settings import lib
 from ..settings import locale
+from ..status.status import BaseStatusException
 
 METADATA_KEYS = [
     'hide_empty_categories',
@@ -515,7 +514,8 @@ def get_trends(
         if m < 3:
             loess_vals = vals.copy()
         else:
-            loess_vals = lowess(vals, np.arange(m), frac=loess_fraction, return_sorted=False)
+            x = pd.RangeIndex(stop=m)
+            loess_vals = lowess(vals, x, frac=loess_fraction, return_sorted=False)
         df_out = pd.DataFrame({
             'category': cat,
             'period': periods,
