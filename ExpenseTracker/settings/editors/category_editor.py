@@ -4,7 +4,6 @@ Provides:
     - IconPickerDialog: dialog for selecting category icons
     - CategoriesModel: table model for editing category properties (name, display name, icon, color, excluded)
 """
-import functools
 import logging
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -12,124 +11,13 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .. import lib
 from ...ui import ui
 from ...ui.actions import signals
+from ...ui.palette import CategoryIconColorEditorDialog, DEFAULT_ICON
 
 COL_ICON = 0
-COL_COLOR = 1
-COL_NAME = 2
-COL_DISPLAY_NAME = 3
-COL_DESCRIPTION = 4
-COL_EXCLUDED = 5
-
-DEFAULT_ICON = 'cat_unclassified'
-
-
-@functools.lru_cache(maxsize=128)
-def get_all_icons():
-    v = []
-    if lib.settings.icon_dir.exists():
-        for p in sorted(lib.settings.icon_dir.glob('cat_*.png')):
-            v.append(p.stem)
-    return v
-
-
-class IconPickerDialog(QtWidgets.QDialog):
-    """Dialog to pick an icon."""
-
-    def __init__(self, current_icon, parent=None):
-        super().__init__(parent=parent)
-
-        self.setWindowTitle('Pick Icon')
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(0.5),
-            ui.Size.DefaultWidth(0.5),
-        )
-        self._chosen_icon = None
-        self._current_icon = current_icon
-
-        self.view = None
-        self.ok_btn = None
-        self.cancel_btn = None
-
-        self._create_ui()
-        self._init_model()
-        self._connect_signals()
-
-    def _create_ui(self):
-        QtWidgets.QVBoxLayout(self)
-        o = ui.Size.Margin(1.0)
-        self.layout().setContentsMargins(o, o, o, o)
-        self.layout().setSpacing(o)
-
-        self.view = QtWidgets.QListView(self)
-        self.view.setViewMode(QtWidgets.QListView.IconMode)
-        self.view.setResizeMode(QtWidgets.QListView.Adjust)
-        self.view.setMovement(QtWidgets.QListView.Static)
-        self.view.setFlow(QtWidgets.QListView.LeftToRight)
-        self.view.setItemAlignment(QtCore.Qt.AlignCenter)
-
-        self.view.setEditTriggers(
-            QtWidgets.QAbstractItemView.DoubleClicked |
-            QtWidgets.QAbstractItemView.EditKeyPressed
-        )
-
-        self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.view.setSpacing(ui.Size.Margin(1.0))
-
-        self.layout().addWidget(self.view)
-
-        btn_lay = QtWidgets.QHBoxLayout()
-
-        self.ok_btn = QtWidgets.QPushButton('OK', self)
-        btn_lay.addWidget(self.ok_btn, 1)
-
-        self.cancel_btn = QtWidgets.QPushButton('Cancel', self)
-        btn_lay.addWidget(self.cancel_btn, 0)
-
-        self.layout().addLayout(btn_lay)
-
-    def _init_model(self):
-        model = QtGui.QStandardItemModel(self.view)
-        self.view.setModel(model)
-
-        current_idx = None
-        for i, icon_name in enumerate(get_all_icons()):
-            item = QtGui.QStandardItem()
-            icon = ui.get_icon(icon_name)
-            item.setIcon(icon)
-            item.setData(icon_name, QtCore.Qt.UserRole)
-            model.appendRow(item)
-            if icon_name == self._current_icon:
-                current_idx = i
-
-        if current_idx is not None:
-            idx = model.index(current_idx, 0)
-            self.view.setCurrentIndex(idx)
-
-    def _connect_signals(self):
-        self.ok_btn.clicked.connect(self.accept_selection)
-        self.cancel_btn.clicked.connect(self.reject)
-
-        self.view.doubleClicked.connect(self.accept_selection)
-        self.view.activated.connect(self.accept_selection)
-
-    @QtCore.Slot()
-    def accept_selection(self):
-        idx = self.view.currentIndex()
-        if idx.isValid():
-            self._chosen_icon = idx.data(QtCore.Qt.UserRole)
-        self.accept()
-
-    def chosen_icon(self):
-        """Return selected icon name or None."""
-        return self._chosen_icon
-
-    @classmethod
-    def get_icon(cls, current_icon, parent=None):
-        """Open icon picker dialog and return selected icon name."""
-        w = cls(current_icon, parent=parent)
-        if w.exec() != QtWidgets.QDialog.Accepted:
-            return None
-        return w.chosen_icon()
+COL_NAME = 1
+COL_DISPLAY_NAME = 2
+COL_DESCRIPTION = 3
+COL_EXCLUDED = 4
 
 
 class CategoriesModel(QtCore.QAbstractTableModel):
@@ -137,11 +25,10 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
     """
     HEADERS = {
+        COL_ICON: '',
         COL_NAME: 'Spreadsheet Name',
         COL_DISPLAY_NAME: 'Display Name',
         COL_DESCRIPTION: 'Description',
-        COL_ICON: '',
-        COL_COLOR: '',
         COL_EXCLUDED: ''
     }
 
@@ -205,7 +92,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         return len(self._categories) if not parent.isValid() else 0
 
     def columnCount(self, parent=QtCore.QModelIndex()):
-        return 6 if not parent.isValid() else 0
+        return 5 if not parent.isValid() else 0
 
     def data(self, index, role=QtCore.Qt.DisplayRole):
         if not index.isValid():
@@ -223,9 +110,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
             elif col == COL_DESCRIPTION:
                 return cat['description']
             elif col == COL_ICON:
-                return cat['icon'] if cat['icon'] else DEFAULT_ICON
-            elif col == COL_COLOR:
-                return cat['color'] or ui.Color.Text().name(QtGui.QColor.HexRgb)
+                return cat.get('icon', DEFAULT_ICON)
             elif col == COL_EXCLUDED:
                 return cat['excluded']
 
@@ -270,7 +155,6 @@ class CategoriesModel(QtCore.QAbstractTableModel):
             if new_name in [cat['name'] for cat in self._categories if cat != self._categories[row]]:
                 logging.warning(f'Category name "{new_name}" already exists.')
                 return False
-
             cat['name'] = new_name
         elif col == COL_DISPLAY_NAME:
             cat['display_name'] = str(value).strip()
@@ -279,13 +163,12 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         elif col == COL_ICON:
             icon_val = value if value else DEFAULT_ICON
             cat['icon'] = icon_val
-        elif col == COL_COLOR:
-            cat['color'] = str(value).strip()
         elif col == COL_EXCLUDED:
             cat['excluded'] = bool(value)
         else:
             return False
 
+        # block reload signal
         try:
             self._ignore_reload = True
             self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
@@ -383,68 +266,69 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.drawRect(option.rect)
 
         col = index.column()
-        val = index.data(QtCore.Qt.DisplayRole) or ''
-
-        if col == COL_NAME:
+        # Render text columns normally
+        if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
             super().paint(painter, option, index)
             return
-        elif col == COL_DISPLAY_NAME:
-            super().paint(painter, option, index)
-        elif col == COL_DESCRIPTION:
-            super().paint(painter, option, index)
-        elif col == COL_ICON:
-            icon_name = val if val else DEFAULT_ICON
 
-            rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
-            rect.moveCenter(option.rect.center())
+        # ICON column: draw tinted icon and label
+        if col == COL_ICON:
+            # retrieve category info from model
+            model = index.model()
+            try:
+                cat = model._categories[index.row()]
+                icon_name = cat.get('icon', DEFAULT_ICON)
+                color_str = cat.get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
+                display_name = cat.get('display_name') or cat.get('name')
+            except Exception:
+                icon_name = index.data(QtCore.Qt.DisplayRole) or DEFAULT_ICON
+                color_str = ui.Color.Text().name(QtGui.QColor.HexRgb)
+                display_name = icon_name
 
-            index = index.sibling(index.row(), COL_COLOR)
-            val = index.data(QtCore.Qt.EditRole) or ui.Color.Text().name(QtGui.QColor.HexRgb)
+            # tinted icon
+            color = QtGui.QColor(color_str)
+            icon = ui.get_icon(icon_name, color, engine=ui.CategoryIconEngine)
 
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(val)))
-            painter.setOpacity(0.2)
-            painter.drawRect(option.rect)
+            rect = option.rect
+            edge = min(rect.width(), rect.height())
+            rect = QtCore.QRect(
+                0, 0,
+                edge, edge
+            )
 
-            painter.setOpacity(1.0)
-            icon = ui.get_icon(icon_name)
-            icon.paint(painter, rect, QtCore.Qt.AlignCenter)
-        elif col == COL_COLOR:
-            rect = QtCore.QRect(0, 0, ui.Size.Margin(1.0), ui.Size.Margin(1.0))
-            rect.moveCenter(option.rect.center())
-
-            o = ui.Size.Indicator(1.0)
+            o = ui.Size.Indicator(1.5)
             rect = rect.adjusted(o, o, -o, -o)
+            rect.moveCenter(option.rect.center())
 
-            if not val:
-                val = ui.Color.Text().name(QtGui.QColor.HexRgb)
+            icon.paint(painter, rect, QtCore.Qt.AlignCenter)
+            return
 
-            painter.setRenderHint(QtGui.QPainter.Antialiasing)
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(val)))
-
-            painter.setOpacity(0.2)
-            painter.drawRect(option.rect)
-
-            painter.setOpacity(1.0)
-            o = ui.Size.Indicator(1.0)
-            painter.drawRoundedRect(rect, o, o)
-
-        elif col == COL_EXCLUDED:
-            is_excl = bool(val)
-            text_val = '❌' if is_excl else '✅'
-            painter.setPen(ui.Color.Text())
-            font = QtGui.QFont(option.font)
-            font.setWeight(QtGui.QFont.ExtraBold)
-
-            painter.drawText(option.rect, QtCore.Qt.AlignCenter, text_val)
+        # EXCLUDED column: draw checkmark
+        if col == COL_EXCLUDED:
+            is_excl = bool(index.data(QtCore.Qt.DisplayRole))
+            if is_excl:
+                icon = ui.get_icon('btn_remove', ui.Color.Red())
+            else:
+                icon = ui.get_icon('btn_ok', ui.Color.Green())
+            rect = option.rect
+            edge = min(rect.width(), rect.height())
+            rect = QtCore.QRect(
+                0, 0,
+                edge, edge
+            )
+            o = ui.Size.Indicator(1.5)
+            rect = rect.adjusted(o, o, -o, -o)
+            rect.moveCenter(option.rect.center())
+            icon.paint(painter, rect, QtCore.Qt.AlignCenter)
 
     def createEditor(self, parent, option, index):
         col = index.column()
         if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
-            e = QtWidgets.QLineEdit(parent)
+            e = QtWidgets.QLineEdit(parent=parent)
             return e
         else:
             # placeholder widget for popups
-            e = QtWidgets.QWidget(parent)
+            e = QtWidgets.QWidget(parent=parent)
             e.setAttribute(QtCore.Qt.WA_NoSystemBackground)
             e.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
             e.setAttribute(QtCore.Qt.WA_NoChildEventsForParent)
@@ -460,34 +344,20 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
         if col in (COL_NAME, COL_DISPLAY_NAME, COL_DESCRIPTION):
             editor.setText(val or "")
 
+        # For icon column, open unified editor dialog
         elif col == COL_ICON:
-            current_icon = val if val else DEFAULT_ICON
-
-            v = IconPickerDialog.get_icon(current_icon, editor.parentWidget())
-            if v is not None:
-                model.setData(index, v, QtCore.Qt.EditRole)
-
+            # Obtain the raw category key and open the unified editor
+            cat_index = index.sibling(index.row(), COL_NAME)
+            category = cat_index.data(QtCore.Qt.EditRole)
+            dlg = CategoryIconColorEditorDialog(category, editor.parentWidget())
+            # live updates: repaint table view on changes
+            view = self.parent()
+            dlg.iconChanged.connect(view.viewport().update)
+            dlg.colorChanged.connect(view.viewport().update)
+            dlg.open()
+            # close placeholder editor
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
-
-            editor.deleteLater()
-
-        elif col == COL_COLOR:
-            color_str = val or ui.Color.Text().name(QtGui.QColor.HexRgb)
-            old_color = QtGui.QColor(color_str)
-
-            new_col = QtWidgets.QColorDialog.getColor(
-                old_color,
-                editor.parentWidget(),
-                'Pick Color',
-            )
-
-            if new_col.isValid():
-                model.setData(index, new_col.name(QtGui.QColor.HexRgb), QtCore.Qt.EditRole)
-
-            self.commitData.emit(editor)
-            self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
-
             editor.deleteLater()
 
         elif col == COL_EXCLUDED:
@@ -556,8 +426,8 @@ class CategoryEditor(QtWidgets.QWidget):
         # Table
         from .views import TableView
         self.view = TableView(self)
-        # self.view = QtWidgets.QTableView(self)
-        self.view.setItemDelegate(CategoryItemDelegate())
+        # set delegate with view as parent for live updates
+        self.view.setItemDelegate(CategoryItemDelegate(self.view))
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         # Double-click editing
@@ -586,7 +456,6 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.horizontalHeader().setSectionResizeMode(COL_DESCRIPTION, QtWidgets.QHeaderView.Stretch)
 
         self.view.horizontalHeader().setSectionResizeMode(COL_ICON, QtWidgets.QHeaderView.Fixed)
-        self.view.horizontalHeader().setSectionResizeMode(COL_COLOR, QtWidgets.QHeaderView.Fixed)
         self.view.horizontalHeader().setSectionResizeMode(COL_EXCLUDED, QtWidgets.QHeaderView.Fixed)
 
         self.view.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
