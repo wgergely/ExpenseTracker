@@ -41,6 +41,33 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         painter.setOpacity(self.parent().weight_anim_value)
 
         icon.paint(painter, rect, QtCore.Qt.AlignCenter)
+    
+    def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
+                     index: QtCore.QModelIndex) -> QtWidgets.QWidget:
+        # Placeholder editor to launch the category icon/color dialog
+        editor = QtWidgets.QWidget(parent)
+        editor.setAttribute(QtCore.Qt.WA_NoSystemBackground)
+        editor.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
+        editor.setAttribute(QtCore.Qt.WA_NoChildEventsForParent)
+        editor.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        editor.setFocusPolicy(QtCore.Qt.NoFocus)
+        return editor
+
+    def setEditorData(self, editor: QtWidgets.QWidget, index: QtCore.QModelIndex) -> None:
+        # Launch the unified icon/color editor for valid categories
+        category = index.data(CategoryRole)
+        from ...ui.palette import CategoryIconColorEditorDialog
+        dlg = CategoryIconColorEditorDialog(category, editor.parentWidget())
+        # live updates: repaint the view on changes
+        # connect live-update to the table view's viewport
+        view = self.parent()
+        dlg.iconChanged.connect(view.viewport().update)
+        dlg.colorChanged.connect(view.viewport().update)
+        dlg.open()
+        # Commit and close the placeholder editor
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+        editor.deleteLater()
 
 
 class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
@@ -173,6 +200,7 @@ class ExpenseView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Exclude Category', self)
         action.setShortcuts(['Ctrl+E', 'delete'])
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_exclude'))
         action.triggered.connect(exclude_category)
         self.addAction(action)
@@ -189,6 +217,7 @@ class ExpenseView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Show All Categories', self)
         action.setShortcuts(['Ctrl+Shift+E'])
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_show_all'))
         action.triggered.connect(show_all_categories)
         self.addAction(action)
@@ -206,6 +235,7 @@ class ExpenseView(QtWidgets.QTableView):
         action.setCheckable(True)
         action.setChecked(True)
         action.setShortcut('alt+I')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Icon.value, not v))
         action_group.addAction(action)
         self.addAction(action)
@@ -214,6 +244,7 @@ class ExpenseView(QtWidgets.QTableView):
         action.setCheckable(True)
         action.setChecked(True)
         action.setShortcut('alt+C')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Category.value, not v))
         action_group.addAction(action)
         self.addAction(action)
@@ -222,6 +253,7 @@ class ExpenseView(QtWidgets.QTableView):
         action.setCheckable(True)
         action.setChecked(True)
         action.setShortcut('alt+G')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Weight.value, not v))
         action.toggled.connect(
             lambda v:
@@ -264,12 +296,14 @@ class ExpenseView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Refresh Data...', self)
         action.setShortcut('Ctrl+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_fetch', color=ui.Color.Green))
         action.triggered.connect(signals.dataFetchRequested)
         self.addAction(action)
 
         action = QtGui.QAction('Reload', self)
         action.setShortcut('Ctrl+Shift+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_reload'))
         action.triggered.connect(self.model().sourceModel().init_data)
         self.addAction(action)
@@ -281,14 +315,19 @@ class ExpenseView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Open Settings...', self)
         action.setShortcuts(['Ctrl+,', 'Ctrl+.', 'Ctrl+P'])
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_settings'))
         action.triggered.connect(signals.showSettings)
         self.addAction(action)
 
     def _connect_signals(self) -> None:
         # preserve selection across model resets
+        # flag to suppress emitting categoryChanged when restoring selection
+        self._suppress_emit = False
         self.activated.connect(signals.openTransactions)
-        self._saved_category = None
+        # initialize saved category to the default from settings
+        categories_cfg = lib.settings.get_section('categories') or {}
+        self._saved_category = next(iter(categories_cfg.keys()), '')
         src = self.model().sourceModel()
         src.modelAboutToBeReset.connect(self._save_category_selection)
         # delay restore to ensure model has finished resetting its internal state
@@ -305,6 +344,9 @@ class ExpenseView(QtWidgets.QTableView):
 
         @QtCore.Slot()
         def emit_category_selection_changed() -> None:
+            # skip when we're programmatically restoring selection
+            if getattr(self, '_suppress_emit', False):
+                return
             if not self.selectionModel().hasSelection():
                 logging.debug('No selection')
                 signals.expenseCategoryChanged.emit([])
@@ -338,38 +380,49 @@ class ExpenseView(QtWidgets.QTableView):
         self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
         self.model().sourceModel().modelReset.connect(emit_category_selection_changed)
 
+        # respond to external category selections (e.g. from pie chart)
+        @QtCore.Slot(str)
+        def _on_external_category_changed(category: str) -> None:
+            # only respond to new non-empty external selections
+            if not category or category == self._saved_category:
+                return
+            self._saved_category = category
+            QtCore.QTimer.singleShot(0, self._restore_category_selection)
+        signals.categoryChanged.connect(_on_external_category_changed)
+
     def _save_category_selection(self) -> None:
         """Save the selected category before the model is reset."""
-        if self.selectionModel().hasSelection():
-            sel_idx = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
-        else:
-            sel_idx = QtCore.QModelIndex()
-        if sel_idx.isValid():
-            self._saved_category = sel_idx.data(CategoryRole)
-        else:
-            self._saved_category = None
+        # only update when a valid category is selected; otherwise keep previous
+        idx = self.selectionModel().currentIndex()
+        if idx.isValid():
+            self._saved_category = idx.data(CategoryRole)
 
     def _restore_category_selection(self) -> None:
         """Restore the selected category after the model has been reset."""
         if not getattr(self, '_saved_category', None):
             return
-        proxy = self.model()
-        cat_col = Columns.Category.value
-        selmodel = self.selectionModel()
-        # find and select the saved category row
-        for row in range(proxy.rowCount()):
-            idx0 = proxy.index(row, 0)
-            idx = idx0.sibling(row, cat_col)
-            if idx.data(CategoryRole) == self._saved_category:
-                selmodel.clearSelection()
-                selmodel.select(
-                    idx,
-                    QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows
-                )
-                selmodel.setCurrentIndex(
-                    idx, QtCore.QItemSelectionModel.NoUpdate
-                )
-                break
+        # suppress emitting when restoring selection
+        self._suppress_emit = True
+        try:
+            proxy = self.model()
+            cat_col = Columns.Category.value
+            selmodel = self.selectionModel()
+            # find and select the saved category row
+            for row in range(proxy.rowCount()):
+                idx0 = proxy.index(row, 0)
+                idx = idx0.sibling(row, cat_col)
+                if idx.data(CategoryRole) == self._saved_category:
+                    selmodel.clearSelection()
+                    selmodel.select(
+                        idx,
+                        QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows
+                    )
+                    selmodel.setCurrentIndex(
+                        idx, QtCore.QItemSelectionModel.NoUpdate
+                    )
+                    break
+        finally:
+            self._suppress_emit = False
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
