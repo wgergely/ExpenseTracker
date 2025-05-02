@@ -17,6 +17,8 @@ from ...ui import ui
 from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
 
 
+
+
 class PopupCombobox(QtWidgets.QComboBox):
     """Combo box that expands its popup to fit content width."""
 
@@ -41,7 +43,7 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
 
     def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
                      index: QtCore.QModelIndex) -> QtWidgets.QWidget:
-        editor = PopupCombobox(parent)
+        editor = PopupCombobox(parent=parent)
         cats = lib.settings.get_section('categories') or {}
         for key, info in cats.items():
             icon_name = info.get('icon', 'cat_unclassified')
@@ -95,6 +97,27 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
             painter.setPen(pen)
             painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
             painter.restore()
+        # also draw a red border for failed edits
+        try:
+            # map through proxy to source model
+            model = index.model()
+            if isinstance(model, QtCore.QSortFilterProxyModel):
+                src_index = model.mapToSource(index)
+                src_model = model.sourceModel()
+            else:
+                src_index = index
+                src_model = model
+            if hasattr(src_model, '_failed_cells'):
+                key = (src_index.row(), src_index.column())
+                if key in src_model._failed_cells:
+                    pen = QtGui.QPen(Color.Red())
+                    pen.setWidthF(Size.Separator(2.0))
+                    painter.save()
+                    painter.setPen(pen)
+                    painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
+                    painter.restore()
+        except Exception:
+            pass
 
 
 class TransactionsView(QtWidgets.QTableView):
@@ -135,6 +158,7 @@ class TransactionsView(QtWidgets.QTableView):
         proxy.setSourceModel(model)
         self.setModel(proxy)
 
+        # category column handles pending and failure highlights
         delegate = CategoryDelegate(self)
         self.setItemDelegateForColumn(Columns.Category.value, delegate)
 
@@ -154,6 +178,7 @@ class TransactionsView(QtWidgets.QTableView):
         action.setCheckable(True)
         action.setChecked(True)
         action.setShortcut('alt+1')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Date.value, self.model().sortOrder()))
         action_group.addAction(action)
         self.addAction(action)
@@ -161,6 +186,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Amount', self)
         action.setCheckable(True)
         action.setShortcut('alt+2')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Amount.value, self.model().sortOrder()))
         action_group.addAction(action)
         self.addAction(action)
@@ -168,6 +194,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Description', self)
         action.setCheckable(True)
         action.setShortcut('alt+3')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Description.value, self.model().sortOrder()))
         action_group.addAction(action)
         self.addAction(action)
@@ -175,6 +202,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Category', self)
         action.setCheckable(True)
         action.setShortcut('alt+4')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Category.value, self.model().sortOrder()))
         action_group.addAction(action)
         self.addAction(action)
@@ -182,6 +210,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Account', self)
         action.setCheckable(True)
         action.setShortcut('alt+5')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Account.value, self.model().sortOrder()))
         action_group.addAction(action)
         self.addAction(action)
@@ -198,6 +227,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort Ascending', self)
         action.setCheckable(True)
         action.setShortcut('alt+up')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.AscendingOrder))
         action_group.addAction(action)
         self.addAction(action)
@@ -206,6 +236,7 @@ class TransactionsView(QtWidgets.QTableView):
         action.setCheckable(True)
         action.setChecked(True)
         action.setShortcut('alt+down')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.DescendingOrder))
         action_group.addAction(action)
         self.addAction(action)
@@ -269,6 +300,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Find...', self)
         action.setShortcut('ctrl+f')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(set_search_filter)
         self.addAction(action)
 
@@ -385,17 +417,25 @@ class TransactionsWidget(QtWidgets.QDockWidget):
     def _on_commit_finished(self, results) -> None:
         # Handle completion of commit, displaying success and error summary
         # Summarize results
-        successes = [lid for lid, (ok, _) in results.items() if ok]
-        failures = [(lid, msg) for lid, (ok, msg) in results.items() if not ok]
+        # summarize successes and failures by (local_id, column)
+        success_count = sum(1 for ok, _ in results.values() if ok)
+        # collect failures and log details
+        failures = [(lid, col, msg)
+                    for (lid, col), (ok, msg) in results.items()
+                    if not ok]
+        # log all failures to stderr/log
+        for lid, col, msg in failures:
+            logging.error(f'Push failed for {col} (ID {lid}): {msg}')
         parts = []
-        if successes:
-            parts.append(f'<b>{len(successes)}</b> edit(s) applied')
+        if success_count:
+            parts.append(f'<b>{success_count}</b> edit(s) applied')
         if failures:
-            parts.append(f'<b>{len(failures)}</b> failed')
-            parts.append('<ul>')
-            for lid, msg in failures:
-                parts.append(f'<li>ID {lid}: {msg}</li>')
-            parts.append('</ul>')
+            # show only the first failure in UI, summarise others
+            first_lid, first_col, first_msg = failures[0]
+            failed_count = len(failures)
+            parts.append(f'<b>{failed_count}</b> failed: {first_col} (ID {first_lid}): {first_msg}')
+            if failed_count > 1:
+                parts.append(f'… and {failed_count - 1} other edit(s) failed')
         # Update status label
         text = ' '.join(parts)
         self.status_label.setText(text)
