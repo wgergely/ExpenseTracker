@@ -209,6 +209,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('New Preset', self)
         action.setShortcut('Ctrl+N')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_add'))
         action.setStatusTip('Create a new preset from current settings')
         action.triggered.connect(new_preset)
@@ -246,6 +247,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Activate', self)
         action.setShortcut('Ctrl+A')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_ok'))
         action.setStatusTip('Activate selected preset')
         action.triggered.connect(activate_preset)
@@ -286,6 +288,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Delete', self)
         action.setShortcut('Delete')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setStatusTip('Delete selected preset')
         action.triggered.connect(delete_preset)
         self.view.addAction(action)
@@ -313,6 +316,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Rename', self)
         action.setShortcut('F2')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setStatusTip('Rename selected preset')
         action.triggered.connect(rename_preset)
         self.view.addAction(action)
@@ -342,6 +346,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Duplicate', self)
         action.setShortcut('Ctrl+D')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_fileadd'))
         action.setStatusTip('Duplicate selected preset')
         action.triggered.connect(duplicate_preset)
@@ -374,6 +379,7 @@ class PresetsDockWidget(QtWidgets.QDockWidget):
 
         action = QtGui.QAction('Save Changes', self)
         action.setShortcut('Ctrl+S')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setIcon(ui.get_icon('btn_sync'))
         action.setStatusTip('Update the selected preset with current settings')
         action.triggered.connect(save_preset)
