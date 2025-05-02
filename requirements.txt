@@ -10,6 +10,5 @@ PySide6~=6.9.0
 
 pandas~=2.2.3
 statsmodels
-numpy
 python-dateutil~=2.9.0.post0
 protobuf~=6.30.2
