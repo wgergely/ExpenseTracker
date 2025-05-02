@@ -52,7 +52,6 @@ class LogTableView(QtWidgets.QTableView):
         self.sortByColumn(Columns.Date, QtCore.Qt.DescendingOrder)
 
         header = self.verticalHeader()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.0))
         header.setHidden(True)
 
