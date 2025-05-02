@@ -320,45 +320,6 @@ if (INSTALL_REQUIREMENTS)
 endif()
 
 
-
-# ───────────────────────────────────────────────────────────
-# Python stdlib zip & DLL extraction (using vcpkg Python)
-# ───────────────────────────────────────────────────────────
-if(INSTALL_STDLIB)       
-  message(STATUS "[install-phase] Bundling Python stdlib and DLLs")
-  install(CODE [[
-    # locate stdlib directory
-    execute_process(
-      COMMAND "${Python3_EXECUTABLE}" -c "import sysconfig; print(sysconfig.get_paths()['stdlib'])"
-      OUTPUT_VARIABLE _stdlib_dir
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    # create zip of stdlib
-    set(_py_ver "${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}")
-    set(_zip_path "${CMAKE_INSTALL_PREFIX}/Python${_py_ver}.zip")
-    message(STATUS "[install-phase] Zipping stdlib ${_stdlib_dir} -> ${_zip_path}")
-    file(ARCHIVE_CREATE
-      OUTPUT "${_zip_path}"
-      PATHS "${_stdlib_dir}"
-      FORMAT zip
-    )
-
-    # install python DLLs into bin
-    get_filename_component(_py_exec_dir "${Python3_EXECUTABLE}" DIRECTORY)
-    file(GLOB _py_dlls "${_py_exec_dir}/python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}*.dll")
-    foreach(_dll IN LISTS _py_dlls)
-      message(STATUS "[install-phase] Installing DLL: ${_dll}")
-      file(INSTALL
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
-        TYPE SHARED_LIBRARY
-        FILES "${_dll}"
-      )
-    endforeach()
-  ]])
-endif()
-
-
-
 # ───────────────────────────────────────────────────────────
 # install Python module
 # ───────────────────────────────────────────────────────────
@@ -380,64 +341,22 @@ endif()
 
 
 # ───────────────────────────────────────────────────────────
-# install Python dist
+# install Python dist (external script)
 # ───────────────────────────────────────────────────────────
-if (INSTALL_STDLIB)
+if(INSTALL_STDLIB)
   message(STATUS "[App] [*] Python dist")
+
+  # Select interpreter once
   find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-  
-  install(CODE [[
-    # Find Python interpreter inside the install script to ensure variables are available
-    find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-    
-    # Get Python version information
-    set(_py_ver "${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}")
-    
-    # Get stdlib directory (Lib folder)
-    execute_process(
-      COMMAND "${Python3_EXECUTABLE}" -c "import sysconfig; print(sysconfig.get_paths()['stdlib'])"
-      OUTPUT_VARIABLE _stdlib_dir
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    
-    # Create the Python zip file in the root install directory
-    set(_zip_path "${CMAKE_INSTALL_PREFIX}/python${_py_ver}.zip")
-    message(STATUS "[install-phase] Creating Python stdlib zip: ${_zip_path}")
-    file(ARCHIVE_CREATE OUTPUT "${_zip_path}"
-      PATHS "${_stdlib_dir}"
-      FORMAT zip
-    )
-    
-    # Get Python DLLs directory using Python itself
-    if(WIN32)
-      execute_process(
-        COMMAND "${Python3_EXECUTABLE}" -c "import os, sys; print(os.path.join(os.path.dirname(sys.executable), 'DLLs'))"
-        OUTPUT_VARIABLE _dlls_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-      )
-      
-      set(_dll_dest "${CMAKE_INSTALL_PREFIX}/bin")
-      file(MAKE_DIRECTORY "${_dll_dest}")
-      
-      # Copy all files from the DLLs directory
-      if(EXISTS "${_dlls_dir}" AND IS_DIRECTORY "${_dlls_dir}")
-        message(STATUS "[install-phase] Found Python DLLs directory: ${_dlls_dir}")
-        file(GLOB _dlls "${_dlls_dir}/*.dll" "${_dlls_dir}/*.pyd")
-        foreach(_dll IN LISTS _dlls)
-          message(STATUS "[install-phase] Installing DLL/extension: ${_dll} -> ${_dll_dest}")
-          file(INSTALL
-            DESTINATION "${_dll_dest}"
-            TYPE SHARED_LIBRARY
-            FILES "${_dll}"
-            FOLLOW_SYMLINK_CHAIN
-          )
-        endforeach()
-      else()
-        message(WARNING "[install-phase] Python DLLs directory not found at: ${_dlls_dir}")
-      endif()
-  
-    endif()
-  ]])
+
+  # Configure the install-time script
+  configure_file(
+      ${CMAKE_SOURCE_DIR}/cmake/install_python_dist.cmake.in
+      ${CMAKE_BINARY_DIR}/install_python_dist.cmake
+      @ONLY)                   # only @VAR@ placeholders, keep ${...}
+
+  # Run it during `cmake --install`
+  install(SCRIPT "${CMAKE_BINARY_DIR}/install_python_dist.cmake")
 endif()
     
 

@@ -1,0 +1,73 @@
+# cmake/install_python_dist.cmake.in
+# Executed by `cmake --install …`
+# Only @…@ tokens are substituted at configure time; all ${…} are
+# evaluated at install time.
+
+#—— configure-time values ——
+set(_python_exe  "@Python3_EXECUTABLE@")
+set(_py_ver      "@Python3_VERSION_MAJOR@@Python3_VERSION_MINOR@")
+set(_py_exec_dir "@Python3_EXECUTABLE_DIR@")
+set(_py_limited_abi_dll "python@Python3_VERSION_MAJOR@.dll")
+
+#—— 1. emit helper Python script ——
+file(WRITE "${CMAKE_CURRENT_LIST_DIR}/zip_stdlib.py" 
+"import sysconfig, zipfile, os, sys
+
+stdlib = sysconfig.get_paths()['stdlib']
+
+# zip_path = r'${CMAKE_INSTALL_PREFIX}/python${_py_ver}.zip'
+zip_path = r'${CMAKE_INSTALL_PREFIX}/python.zip'
+
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(stdlib):
+        for f in files:
+            absf = os.path.join(root, f)
+            arcname = os.path.relpath(absf, stdlib)
+            zf.write(absf, arcname)
+
+print(f\"Created {zip_path}\")
+")
+
+#—— 2. run it under the *install-time* prefix ——
+execute_process(
+  COMMAND "${_python_exe}" "${CMAKE_CURRENT_LIST_DIR}/zip_stdlib.py"
+  RESULT_VARIABLE _zip_status
+  OUTPUT_VARIABLE _zip_out
+  ERROR_VARIABLE  _zip_err
+)
+
+if(NOT _zip_status EQUAL 0)
+  message(FATAL_ERROR \"Failed to zip stdlib:\n${_zip_err}\")
+else()
+  message(STATUS \"${_zip_out}\")
+endif()
+
+#—— 3. collect DLLs
+get_filename_component(_py_exec_dir "${_python_exe}" DIRECTORY)
+
+file(GLOB _py_dlls "${_py_exec_dir}/DLLs/*")
+foreach(_dll IN LISTS _py_dlls)
+    message(STATUS "[install-phase] Installing DLL: ${_dll}")
+    file(INSTALL
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+    TYPE SHARED_LIBRARY
+    FILES "${_dll}"
+    )
+endforeach()
+
+#—— 4. find the limited ABI DLLs (either in tools or tools../../bin)
+file(GLOB _limited_abi_dlls "${_py_exec_dir}/../../bin/${_py_limited_abi_dll}")
+file(GLOB _limited_abi_dlls2 "${_py_exec_dir}/${_py_limited_abi_dll}")
+list(APPEND _limited_abi_dlls ${_limited_abi_dlls2})
+
+# Install the limited ABI DLLs
+foreach(_dll IN LISTS _limited_abi_dlls)
+    if(_dll)
+        message(STATUS "[install-phase] Installing Limited ABI DLL: ${_dll}")
+        file(INSTALL
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+        TYPE SHARED_LIBRARY
+        FILES "${_dll}"
+        )
+    endif()
+endforeach()
