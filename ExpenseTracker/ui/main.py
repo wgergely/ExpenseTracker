@@ -7,8 +7,6 @@ This module defines:
     - StatusIndicator: widget for cache status display
     - InteractionState and ResizableMainWidget: support window resizing and state changes
 """
-import dataclasses
-import enum
 import functools
 
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -36,30 +34,6 @@ def show():
         widget = MainWindow()
 
     widget.show()
-
-
-class Edge(enum.Flag):
-    NONE = 0
-    LEFT = enum.auto()
-    TOP = enum.auto()
-    RIGHT = enum.auto()
-    BOTTOM = enum.auto()
-    TOP_LEFT = TOP | LEFT
-    TOP_RIGHT = TOP | RIGHT
-    BOTTOM_LEFT = BOTTOM | LEFT
-    BOTTOM_RIGHT = BOTTOM | RIGHT
-
-
-CURSOR_MAP: dict[Edge, QtCore.Qt.CursorShape] = {
-    Edge.LEFT: QtCore.Qt.SizeHorCursor,
-    Edge.RIGHT: QtCore.Qt.SizeHorCursor,
-    Edge.TOP: QtCore.Qt.SizeVerCursor,
-    Edge.BOTTOM: QtCore.Qt.SizeVerCursor,
-    Edge.TOP_LEFT: QtCore.Qt.SizeFDiagCursor,
-    Edge.BOTTOM_RIGHT: QtCore.Qt.SizeFDiagCursor,
-    Edge.TOP_RIGHT: QtCore.Qt.SizeBDiagCursor,
-    Edge.BOTTOM_LEFT: QtCore.Qt.SizeBDiagCursor,
-}
 
 
 class TitleLabel(QtWidgets.QWidget):
@@ -156,40 +130,11 @@ class TitleBar(QtWidgets.QWidget):
         self.title_label = TitleLabel(parent=self)
         self.layout().addWidget(self.title_label, 0)
 
-        # Min button
-        self.btn_min = QtWidgets.QToolButton(self)
-        self.btn_min.setIcon(ui.get_icon('btn_minimize'))
-        self.btn_min.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.btn_min.setFixedSize(o, o)
-        self.btn_min.setCursor(QtCore.Qt.ArrowCursor)
-        self.btn_min.setAutoRaise(True)
-        self.layout().addWidget(self.btn_min, 0)
-
-        # Max button
-        self.btn_max = QtWidgets.QToolButton(self)
-        self.btn_max.setIcon(ui.get_icon('btn_maximize'))
-        self.btn_max.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.btn_max.setFixedSize(o, o)
-        self.btn_max.setCursor(QtCore.Qt.ArrowCursor)
-        self.btn_max.setAutoRaise(True)
-        self.layout().addWidget(self.btn_max, 0)
-
-        # Close button
-        self.btn_close = QtWidgets.QToolButton(self)
-        self.btn_close.setIcon(ui.get_icon('btn_close'))
-        self.btn_close.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.btn_close.setFixedSize(o, o)
-        self.btn_close.setCursor(QtCore.Qt.ArrowCursor)
-        self.btn_close.setAutoRaise(True)
-        self.layout().addWidget(self.btn_close, 0)
-
     def _init_actions(self) -> None:
         pass
 
     def _connect_signals(self) -> None:
-        self.btn_min.clicked.connect(self.window().showMinimized)
-        self.btn_max.clicked.connect(self.toggle_max_restore)
-        self.btn_close.clicked.connect(self.window().close)
+        pass
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         # only start drag when not maximized
@@ -224,8 +169,6 @@ class TitleBar(QtWidgets.QWidget):
                 win.showNormal()
             else:
                 win.showMaximized()
-        # update icon (show maximize icon)
-        self.btn_max.setIcon(ui.get_icon('btn_maximize'))
 
 
 class StatusIndicator(QtWidgets.QWidget):
@@ -334,193 +277,35 @@ class StatusIndicator(QtWidgets.QWidget):
         QtWidgets.QMessageBox.information(self, 'Status', self._status.value.capitalize())
 
 
-@dataclasses.dataclass
-class InteractionState:
-    edge: Edge = Edge.NONE
-    pos: QtCore.QPointF = dataclasses.field(default_factory=QtCore.QPoint)
-    rect: QtCore.QRect = dataclasses.field(default_factory=QtCore.QRect)
-
-
 class ResizableMainWidget(QtWidgets.QMainWindow):
-    """QMainWindow subclass providing custom resize, move, and window state change batching."""
-    windowChanged = QtCore.Signal()
+    """QMainWindow subclass handling geometry state and maximize/restore behavior."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-
-        self._press_state: InteractionState = InteractionState()
-
-        self._previous_geometry: QtCore.QRect = None
-        self._default_geometry = self._get_default_geometry()
-
-        self._window_changed_timer = QtCore.QTimer(self)
-        self._window_changed_timer.setInterval(200)
-        self._window_changed_timer.setSingleShot(True)
-        self._window_changed_timer.timeout.connect(self.windowChanged)
-
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
-        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
-
+        self._previous_geometry = None
         o = ui.Size.Margin(2.0)
-        self._default_margins: tuple[int, int, int, int] = (o, o * 0.5, o, o)
-        self.setContentsMargins(*self._default_margins)
-
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
-
-        self.setGraphicsEffect(self._get_effect())
-
-    def _get_default_geometry(self) -> QtCore.QRect:
-        s = self.sizeHint()
-        screen = QtGui.QGuiApplication.primaryScreen()
-        avail = screen.availableGeometry() if screen else QtCore.QRect(0, 0, s.width(), s.height())
-        x = avail.x() + (avail.width() - s.width()) // 2
-        y = avail.y() + (avail.height() - s.height()) // 2
-        return QtCore.QRect(x, y, s.width(), s.height())
-
-    def _get_effect(self) -> QtWidgets.QGraphicsDropShadowEffect:
-        """Factory for creating a drop shadow effect."""
-        effect = QtWidgets.QGraphicsDropShadowEffect(self)
-        effect.setBlurRadius(self.contentsMargins().left() * 0.5)
-        effect.setOffset(0, 0)
-        effect.setColor(QtGui.QColor(0, 0, 0, 150))
-        return effect
-
-    def _get_edge_at_cursor(self) -> Edge:
-        """Determine the edge of the window being pressed.
-
-        """
-        if self.isMaximized():
-            return Edge.NONE
-
-        # determine cursor position in widget-local coordinates
-        pos = self.mapFromGlobal(QtGui.QCursor.pos())
-        rect = self.visible_geometry()
-        # threshold for detecting edges or corners
-        threshold = ui.Size.Margin(0.5)
-        flag = Edge.NONE
-        if abs(pos.x() - rect.left()) <= threshold:
-            flag |= Edge.LEFT
-        if abs(pos.x() - rect.right()) <= threshold:
-            flag |= Edge.RIGHT
-        if abs(pos.y() - rect.top()) <= threshold:
-            flag |= Edge.TOP
-        if abs(pos.y() - rect.bottom()) <= threshold:
-            flag |= Edge.BOTTOM
-        return flag
-
-    def set_state(self) -> None:
-        """Record state at mouse press for resizing."""
-        self._press_state.edge = self._get_edge_at_cursor()
-        self._press_state.pos = QtGui.QCursor.pos()
-        self._press_state.rect = self.geometry()
-
-    def set_cursor(self) -> None:
-        """Set the cursor shape based on the edge being pressed."""
-        if self.isMaximized():
-            self.setCursor(QtCore.Qt.ArrowCursor)
-            return
-        edge = self._get_edge_at_cursor()
-        cursor = QtGui.QCursor(CURSOR_MAP.get(edge, QtCore.Qt.ArrowCursor))
-        self.setCursor(cursor)
-
-    def reset_cursor(self) -> None:
-        """Reset cursor to default."""
-        self.setCursor(QtCore.Qt.ArrowCursor)
-
-    def reset_state(self) -> None:
-        """Reset resize state after release."""
-        self._press_state.edge = Edge.NONE
-        self._press_state.pos = QtCore.QPointF()
-        self._press_state.rect = QtCore.QRect()
-
-        self.reset_cursor()
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() != QtCore.Qt.LeftButton:
-            super().mousePressEvent(event)
-            return
-
-        if self.isMaximized():
-            super().mousePressEvent(event)
-            return
-
-        self.set_state()
-        self.set_cursor()
-
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        self.set_cursor()
-
-        if not event.buttons() & QtCore.Qt.LeftButton:
-            super().mouseMoveEvent(event)
-            return
-
-        if self.isMaximized():
-            super().mouseMoveEvent(event)
-            return
-
-        event.accept()
-        self.resize_window()
-
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        self.reset_state()
-        super().mouseReleaseEvent(event)
-
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
-        super().resizeEvent(event)
-        self.emit_window_changed()
-
-    def moveEvent(self, event: QtGui.QMoveEvent) -> None:
-        super().moveEvent(event)
-        self.emit_window_changed()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self.emit_window_changed()
-
-    def hideEvent(self, event) -> None:
-        super().hideEvent(event)
-        self.emit_window_changed()
-
-    def showMinimized(self) -> None:
-        self._previous_geometry = self.geometry()
-        super().setWindowState(QtCore.Qt.WindowMinimized)
-        super().showMinimized()
-        self.emit_window_changed()
+        default = (o, int(o * 0.25), o, o)
+        # when normal, half of the old frameless margins:
+        self._normal_margins = tuple(int(m * 0.5) for m in default)
+        # when maximized, no margins:
+        self._frameless_margins = (0, 0, 0, 0)
+        self.setContentsMargins(*self._normal_margins)
 
     def showMaximized(self) -> None:
+        """Show window maximized without frame and margins."""
         self._previous_geometry = self.geometry()
-
-        self.setGraphicsEffect(None)
-        super().setContentsMargins(0, 0, 0, 0)
-        super().setWindowState(QtCore.Qt.WindowMaximized)
+        self.setWindowFlag(QtCore.Qt.FramelessWindowHint, True)
+        self.setContentsMargins(*self._frameless_margins)
         super().showMaximized()
 
-        self.emit_window_changed()
-        self.update()
-
     def showNormal(self) -> None:
-        self.setGraphicsEffect(self._get_effect())
-        super().setContentsMargins(*self._default_margins)
-        super().setWindowState(QtCore.Qt.WindowNoState)
+        """Restore window to normal state with frame and adjusted margins."""
+        self.setWindowFlag(QtCore.Qt.FramelessWindowHint, False)
+        self.setContentsMargins(*self._normal_margins)
         super().showNormal()
-
         if self._previous_geometry is not None:
             self.setGeometry(self._previous_geometry)
-
-        self.emit_window_changed()
-        self.update()
-
-    @QtCore.Slot()
-    def emit_window_changed(self) -> None:
-        if not self._window_changed_timer.isActive():
-            self._window_changed_timer.start()
+            self._previous_geometry = None
 
     @QtCore.Slot()
     def toggle_maximised(self) -> None:
@@ -536,63 +321,12 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
         else:
             self.showMinimized()
 
-    def resize_window(self) -> None:
-        """Resize the window according to the dragged edge and global pointer."""
-        edge = self._press_state.edge
-        if edge == Edge.NONE:
-            return
-
-        global_pos = QtGui.QCursor.pos()
-        delta = global_pos - self._press_state.pos
-        if delta.x() == 0 and delta.y() == 0:
-            return
-
-        r = QtCore.QRect(self._press_state.rect)
-
-        if edge & Edge.LEFT:
-            r.setLeft(r.left() + delta.x())
-        if edge & Edge.RIGHT:
-            r.setRight(r.right() + delta.x())
-        if edge & Edge.TOP:
-            r.setTop(r.top() + delta.y())
-        if edge & Edge.BOTTOM:
-            r.setBottom(r.bottom() + delta.y())
-
-        # mw, mh = self.minimumWidth(), self.minimumHeight()
-        # if r.width() <= mw:
-        #     return
-        # if r.height() <= mh:
-        #     return
-
-        self.setGeometry(r)
-
-    def visible_geometry(self) -> QtCore.QRect:
-        if self.isMaximized():
-            return self.rect()
-        m = self.contentsMargins()
-        return self.rect().adjusted(
-            m.left() // 2.0,
-            m.top(),
-            -m.right() // 2.0,
-            -m.bottom() // 2.0
-        )
-
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-
-        color = ui.Color.VeryDarkBackground()
         painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(color)
-
-        rect = self.visible_geometry()
-
-        if self.isMaximized():
-            painter.drawRect(rect)
-            return
-
-        c = ui.Size.Indicator(2.0)
-        painter.drawRoundedRect(rect, c, c)
+        painter.setBrush(ui.Color.VeryDarkBackground())
+        painter.drawRect(self.rect())
 
 
 class MainWindow(ResizableMainWidget):
@@ -634,6 +368,7 @@ class MainWindow(ResizableMainWidget):
 
         # Action bar at the top.
         self.toolbar = QtWidgets.QToolBar(self)
+        self.toolbar.setProperty('transparent', True)
         self.toolbar.setProperty('no_background', True)
         self.toolbar.setObjectName('ExpenseTrackerActionToolBar')
         self.menuWidget().layout().insertWidget(1, self.toolbar, 1)
@@ -697,15 +432,8 @@ class MainWindow(ResizableMainWidget):
         action.setToolTip('Maximize')
         action.setStatusTip('Maximize')
         action.setShortcut('Ctrl+M')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(self.toggle_maximised)
-        self.addAction(action)
-
-        action = QtGui.QAction('Minimize', self)
-        action.setIcon(ui.get_icon('btn_minimize'))
-        action.setToolTip('Minimize')
-        action.setStatusTip('Minimize')
-        action.setShortcut('Ctrl+Shift+M')
-        action.triggered.connect(self.toggle_minimized)
         self.addAction(action)
 
         # Separator
@@ -717,7 +445,7 @@ class MainWindow(ResizableMainWidget):
         w = QtWidgets.QWidget(self)
         w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-        w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
         self.toolbar.addWidget(w)
 
         action = QtGui.QAction('Refresh Data', self)
@@ -729,6 +457,7 @@ class MainWindow(ResizableMainWidget):
 
         action = QtGui.QAction('Open Spreadsheet', self)
         action.setShortcut('Ctrl+Shift+O')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.setToolTip('Open spreadsheet in browser')
         action.setIcon(ui.get_icon('btn_ledger'))
         action.triggered.connect(signals.openSpreadsheet)
@@ -753,6 +482,7 @@ class MainWindow(ResizableMainWidget):
         action.setToolTip('Show presets...')
         action.setStatusTip('Show presets...')
         action.setShortcut('Ctrl+Shift+P')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_presets'))
         action.triggered.connect(functools.partial(toggle_vis, self.presets_view))
         self.toolbar.addAction(action)
@@ -765,6 +495,7 @@ class MainWindow(ResizableMainWidget):
         action.setToolTip('Show transactions...')
         action.setStatusTip('Show transactions...')
         action.setShortcut('Ctrl+Shift+T')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactions'))
         action.triggered.connect(signals.openTransactions)
         self.toolbar.addAction(action)
@@ -777,6 +508,7 @@ class MainWindow(ResizableMainWidget):
         action.setToolTip('Show trends chart...')
         action.setStatusTip('Show trends chart...')
         action.setShortcut('Ctrl+Shift+T')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_trend'))
         action.triggered.connect(functools.partial(toggle_vis, self.trends_view))
         self.toolbar.addAction(action)
@@ -805,6 +537,7 @@ class MainWindow(ResizableMainWidget):
         action.setToolTip('Show logs...')
         action.setStatusTip('Show logs...')
         action.setShortcut('Ctrl+Shift+L')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_log'))
         action.triggered.connect(functools.partial(toggle_vis, self.log_view))
         self.toolbar.addAction(action)
@@ -817,6 +550,7 @@ class MainWindow(ResizableMainWidget):
         action.setCheckable(True)
         action.setChecked(self.settings_view.isVisible())
         action.setShortcuts(['Ctrl+,', 'Ctrl+Shift+,', 'Ctrl+.', 'Ctrl+Shift+.', 'Ctrl+Shift+S'])
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_settings'))
         action.triggered.connect(functools.partial(toggle_vis, self.settings_view))
         self.toolbar.addAction(action)
@@ -831,13 +565,13 @@ class MainWindow(ResizableMainWidget):
 
         action = QtGui.QAction('Previous Month', self)
         action.setShortcuts(['Alt+Left', 'Ctrl+Left'])
-        action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(self.range_selector.previous_month)
         self.addAction(action)
 
         action = QtGui.QAction('Next Month', self)
         action.setShortcuts(['Alt+Right', 'Ctrl+Right'])
-        action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(self.range_selector.next_month)
         self.addAction(action)
 
@@ -870,7 +604,17 @@ class MainWindow(ResizableMainWidget):
     def load_window_settings(self) -> None:
         settings = QtCore.QSettings(app_name, app_name)
         geom_data = settings.value('MainWindow/geometry')
-        was_maximized = settings.value('MainWindow/maximized', False)
+        # correctly interpret saved maximized flag (could be bool, string, or numeric)
+        raw_max = settings.value('MainWindow/maximized', False)
+        if isinstance(raw_max, bool):
+            was_maximized = raw_max
+        elif isinstance(raw_max, str):
+            was_maximized = raw_max.lower() in ('true', '1')
+        else:
+            try:
+                was_maximized = bool(int(raw_max))
+            except Exception:
+                was_maximized = False
         primary = QtGui.QGuiApplication.primaryScreen()
         avail_primary = primary.availableGeometry()
 
