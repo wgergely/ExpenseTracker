@@ -134,6 +134,8 @@ class PieChartView(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
 
+        # currently selected category (for bi-directional selection)
+        self._selected_category: str = ''
         self._show_legend = True
         self._show_icons = True
         self._show_tooltip = True
@@ -157,7 +159,14 @@ class PieChartView(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(0, self.model.rebuild)
 
     def _create_ui(self) -> None:
-        self.setMinimumSize(ui.Size.DefaultWidth(), ui.Size.DefaultHeight())
+        self.setMinimumSize(
+            ui.Size.DefaultWidth(0.5),
+            ui.Size.DefaultWidth(0.5)
+        )
+        self.setMaximumSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultWidth(1.0)
+        )
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     def _connect_signals(self) -> None:
@@ -172,8 +181,25 @@ class PieChartView(QtWidgets.QWidget):
                 self.init_data()
 
         signals.metadataChanged.connect(metadata_changed)
-        # refresh slices when local cache is updated by sync
+
         sync_manager.dataUpdated.connect(lambda _: self.init_data())
+
+        @QtCore.Slot(str)
+        def config_changed(section: str) -> None:
+            if section == 'categories':
+                self.init_data()
+            if section == 'mapping':
+                self.init_data()
+
+        signals.configSectionChanged.connect(config_changed)
+
+        # track external category selection to highlight corresponding slice
+        @QtCore.Slot(str)
+        def _on_category_changed(category: str) -> None:
+            self._selected_category = category or ''
+            self.update()
+
+        signals.categoryChanged.connect(_on_category_changed)
 
     @QtCore.Slot()
     def init_data(self) -> None:
@@ -289,7 +315,13 @@ class PieChartView(QtWidgets.QWidget):
         for idx, sl in enumerate(self.model.slices):
             rect = sl.half_rect if idx == self._hover_index else sl.base_rect
             painter.setBrush(sl.color)
-            painter.setPen(QtCore.Qt.NoPen)
+            # highlight selected slice with a border
+            if sl.category == self._selected_category:
+                pen = QtGui.QPen(sl.color.lighter(125))
+                pen.setWidthF(ui.Size.Separator(3.0))
+                painter.setPen(pen)
+            else:
+                painter.setPen(QtCore.Qt.NoPen)
             painter.drawPie(rect, sl.start_qt, sl.span_qt)
 
     def _draw_legend(self, painter: QtGui.QPainter) -> None:
@@ -359,7 +391,7 @@ class PieChartView(QtWidgets.QWidget):
             y = centre.y() - radius * 0.5 * math.sin(theta) - size / 2
 
             icon = get_icon(sl.icon_name, color=sl.color.darker(150), engine=CategoryIconEngine)
-            painter.drawPixmap(int(x), int(y), icon.pixmap(size, size))
+            icon.paint(painter, x, y, size, size, alignment=QtCore.Qt.AlignCenter)
 
     def _draw_tooltip(self, painter: QtGui.QPainter) -> None:
         if self._hover_index < 0:
@@ -383,12 +415,12 @@ class PieChartView(QtWidgets.QWidget):
             y = cursor_pos.y() + pad
 
         bg = QtCore.QRectF(x, y, width, height)
-        painter.setBrush(ui.Color.DarkBackground())
+        painter.setBrush(ui.Color.VeryDarkBackground())
         painter.setPen(QtCore.Qt.NoPen)
         painter.drawRoundedRect(bg, pad, pad)
 
         icon = get_icon(sl.icon_name, color=sl.color, engine=CategoryIconEngine)
-        painter.drawPixmap(int(bg.x() + pad), int(bg.y() + pad), icon.pixmap(icon_size, icon_size))
+        icon.paint(painter, bg.x() + pad, bg.y() + pad, icon_size, icon_size, alignment=QtCore.Qt.AlignCenter)
 
         painter.setPen(ui.Color.Text())
         painter.drawText(
@@ -411,6 +443,21 @@ class PieChartView(QtWidgets.QWidget):
             self.hoverChanged.emit(-1)
             self.update()
         super().leaveEvent(event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        """Handle clicks on slices to select category and notify other views."""
+        idx = self._slice_at(event.pos())
+        # determine selected category (empty to clear)
+        if idx >= 0 and idx < len(self.model.slices):
+            cat = self.model.slices[idx].category
+        else:
+            cat = ''
+        # update own selection and redraw
+        self._selected_category = cat
+        self.update()
+        # emit global selection change
+        signals.categoryChanged.emit(cat)
+        super().mousePressEvent(event)
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         self._geom_sig = (-1, -1, -1)
@@ -483,4 +530,11 @@ class PieChartDockWidget(QtWidgets.QDockWidget):
         self.setWidget(chart)
 
         self.setContentsMargins(0, 0, 0, 0)
-        self.setMinimumSize(ui.Size.DefaultWidth(0.3), ui.Size.DefaultHeight(0.3))
+        self.setMinimumSize(
+            ui.Size.DefaultWidth(0.5),
+            ui.Size.DefaultWidth(0.5)
+        )
+        self.setMaximumSize(
+            ui.Size.DefaultWidth(1.0),
+            ui.Size.DefaultWidth(1.0)
+        )
