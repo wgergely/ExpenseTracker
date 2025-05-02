@@ -98,6 +98,11 @@ class SyncManager(QtCore.QObject):
                 raise ValueError(f'Mapping for stable key "{logical}" references no valid column: {raw_spec}')
             # store tuple of values for all mapped source columns
             stable[logical] = tuple(row.get(c) for c in present)
+        # include any sheet ID-like column as a primary stable key if available
+        id_aliases = {'id', '#', 'number', 'num'}
+        id_key = next((k for k in row.keys() if k.strip().lower() in id_aliases), None)
+        if id_key is not None:
+            stable['id'] = (row.get(id_key),)
         # determine the original value for the edited column
         # column is a logical name; map to actual DB column via mapping
         # determine the original value for the edited column using its mapping (first candidate)
@@ -125,12 +130,13 @@ class SyncManager(QtCore.QObject):
         self._queue.clear()
         self.queueChanged.emit(0)
 
-    def commit_queue(self) -> Dict[int, Tuple[bool, str]]:
+    def commit_queue(self) -> Dict[Tuple[int, str], Tuple[bool, str]]:
         """
         Perform optimistic‐lock commit: refetch remote stable fields, match, and batchUpdate.
-        Returns a mapping local_id → (success, message).
+        Returns a mapping (local_id, column) → (success, message).
         """
-        results: Dict[int, Tuple[bool, str]] = {}
+        # track per-operation success/failure keyed by (local_id, column)
+        results: Dict[Tuple[int, str], Tuple[bool, str]] = {}
         if not self._queue:
             return results
 
@@ -144,7 +150,7 @@ class SyncManager(QtCore.QObject):
         data_rows = max(row_count - 1, 0)
         if data_rows == 0:
             for op in self._queue:
-                results[op.local_id] = (False, 'Remote sheet has no data rows')
+                results[(op.local_id, op.column)] = (False, 'Remote sheet has no data rows')
             return results
 
         # fetch header row in one request
@@ -172,17 +178,28 @@ class SyncManager(QtCore.QObject):
         logging.debug('Header mapping verified successfully')
         header_to_idx = {h: i for i, h in enumerate(headers)}
 
-        # determine stable fields and their mapped headers for matching
-        stable_fields = list(self._queue[0].stable_keys.keys())
-        # map each stable logical to all its remote headers
-        stable_headers_map: Dict[str, List[str]] = {}
-        for logical in stable_fields:
-            raw_spec = mapping.get(logical)
-            candidates = parse_mapping_spec(raw_spec)
-            present = [c for c in candidates if c in header_to_idx]
-            if not present:
-                raise ValueError(f'Mapping for stable key "{logical}" references no valid remote header: {raw_spec}')
-            stable_headers_map[logical] = present
+        # determine stable fields: prefer a remote 'ID'-like column if present
+        headers = list(header_to_idx.keys())
+        id_aliases = {'id', '#', 'number', 'num'}
+        id_header = next((h for h in headers if h.strip().lower() in id_aliases), None)
+        stable_headers_map: Dict[str, List[str]]
+        if id_header:
+            stable_fields = ['id']
+            stable_headers_map = {'id': [id_header]}
+            logging.debug(f'Using remote sheet column "{id_header}" as primary stable key')
+        else:
+            # fallback to date, amount, description
+            stable_fields = [k for k in self._queue[0].stable_keys.keys() if k != 'id']
+            stable_headers_map = {}
+            for logical in stable_fields:
+                raw_spec = mapping.get(logical)
+                candidates = parse_mapping_spec(raw_spec)
+                present = [c for c in candidates if c in header_to_idx]
+                if not present:
+                    raise ValueError(
+                        f'Mapping for stable key "{logical}" references no valid remote header: {raw_spec}'
+                    )
+                stable_headers_map[logical] = present
         logging.debug(f'Stable headers map: {stable_headers_map}')
 
         # fetch all stable-key columns ranges
@@ -220,11 +237,23 @@ class SyncManager(QtCore.QObject):
                             nv = v
                     elif logical == 'amount':
                         try:
-                            nv = float(v)
+                            # round numeric values to 2 decimal places for robust matching
+                            nv = round(float(v), 2)
+                        except Exception:
+                            nv = v
+                    elif logical == 'id':
+                        try:
+                            nv = int(float(v))
                         except Exception:
                             nv = v
                     else:
-                        nv = v
+                        # normalize text: strip whitespace and replace blanks with empty string
+                        if v is None:
+                            nv = ''
+                        elif isinstance(v, str):
+                            nv = v.strip()
+                        else:
+                            nv = v
                     normed.append(nv)
                 col_vals_map[(logical, hdr)] = normed
 
@@ -239,7 +268,7 @@ class SyncManager(QtCore.QObject):
         logging.debug(f'Assembled {len(remote)} remote rows for matching stable keys')
 
         # build a mapping from stable key tuples to remote row indices
-        stable_fields = list(self._queue[0].stable_keys.keys())
+        # (reuse stable_fields determined earlier)
         remote_index_map: Dict[Tuple[Any, ...], List[int]] = {}
         # build a mapping from stable key tuples to remote row indices, skipping blank rows
         for idx, row in enumerate(remote):
@@ -251,7 +280,7 @@ class SyncManager(QtCore.QObject):
             ):
                 continue
             remote_index_map.setdefault(key_tuple, []).append(idx)
-        logging.debug(f'Remote index map (stable_fields={stable_fields}): {remote_index_map}')
+        logging.debug(f'Build remote index map (stable_fields={stable_fields}) of {len(remote_index_map)} entries')
 
         # match each edit operation and collect updates
         to_update: List[Tuple[EditOperation, int]] = []
@@ -259,22 +288,23 @@ class SyncManager(QtCore.QObject):
             key_tuple = tuple(op.stable_keys.get(field) for field in stable_fields)
             matches = remote_index_map.get(key_tuple, [])
             logging.debug(f'Op {op.local_id} key {key_tuple} -> matches {matches}')
+            key = (op.local_id, op.column)
             if len(matches) == 1:
                 idx = matches[0]
                 sheet_row = idx + 2
                 to_update.append((op, sheet_row))
-                results[op.local_id] = (True, '')
+                results[key] = (True, '')
             elif len(matches) > 1:
                 expected_idx = op.local_id - 1
                 if expected_idx in matches:
                     sheet_row = expected_idx + 2
                     to_update.append((op, sheet_row))
-                    results[op.local_id] = (True, 'Disambiguated by cache row order')
+                    results[key] = (True, 'Disambiguated by cache row order')
                     logging.warning(f'Ambiguous matches for op {op.local_id}, disambiguated to row {sheet_row}')
                 else:
-                    results[op.local_id] = (False, 'Ambiguous match; multiple rows match')
+                    results[key] = (False, 'Ambiguous match; multiple rows match')
             else:
-                results[op.local_id] = (False, 'No matching row; remote changed')
+                results[key] = (False, 'No matching row; remote changed')
 
         # abort if no valid updates after matching
         if not to_update:
@@ -299,7 +329,6 @@ class SyncManager(QtCore.QObject):
                 'values': [[op.new_value]],
             })
         body = {'valueInputOption': 'USER_ENTERED', 'data': data}
-        logging.debug(f'Batch update payload: {body}')
         try:
             service.spreadsheets().values().batchUpdate(
                 spreadsheetId=self.sheet_id,
@@ -314,16 +343,15 @@ class SyncManager(QtCore.QObject):
                 f'Batch update HTTPError: status={status_code}, content={content}'
             )
             for op, _ in to_update:
-                results[op.local_id] = (
-                    False,
-                    f'Batch update HTTPError: status={status_code}'
-                )
+                key = (op.local_id, op.column)
+                results[key] = (False, f'Batch update HTTPError: status={status_code}')
             self.clear_queue()
             return results
         except Exception:
             logging.exception('Batch update failed for queued edits')
             for op, _ in to_update:
-                results[op.local_id] = (False, 'Batch update failed')
+                key = (op.local_id, op.column)
+                results[key] = (False, 'Batch update failed')
             self.clear_queue()
             return results
 
