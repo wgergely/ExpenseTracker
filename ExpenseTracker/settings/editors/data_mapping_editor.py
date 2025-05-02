@@ -328,7 +328,8 @@ class DataMappingEditor(QtWidgets.QWidget):
         action.setToolTip('Save the current mapping to disk')
         action.setStatusTip('Save the current mapping to disk')
         action.setWhatsThis('Save the current mapping to disk')
-        action.setShortcut(QtGui.QKeySequence('Ctrl+S'))
+        action.setShortcut('Ctrl+S')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(save_to_disk)
         self.addAction(action)
 
@@ -355,6 +356,7 @@ class DataMappingEditor(QtWidgets.QWidget):
 
         action = QtGui.QAction('Verify Mapping...', self)
         action.setShortcut('Ctrl+M')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setStatusTip('Verify header mapping against remote sheet')
         action.setIcon(ui.get_icon('btn_ok', color=ui.Color.Green))
         action.triggered.connect(verify)
@@ -374,7 +376,8 @@ class DataMappingEditor(QtWidgets.QWidget):
         action.setToolTip('Revert to the default mapping')
         action.setStatusTip('Revert to the default mapping')
         action.setWhatsThis('Revert to the default mapping')
-        action.setShortcut(QtGui.QKeySequence('Ctrl+Shift+R'))
+        action.setShortcut('Ctrl+Shift+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(revert_to_defaults)
         self.addAction(action)
 
@@ -386,7 +389,8 @@ class DataMappingEditor(QtWidgets.QWidget):
         action.setToolTip('Reload the mapping from disk')
         action.setStatusTip('Reload the mapping from disk')
         action.setWhatsThis('Reload the mapping from disk')
-        action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
+        action.setShortcut('Ctrl+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(reload_from_disk)
         self.addAction(action)
 
