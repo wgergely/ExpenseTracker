@@ -58,6 +58,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
     def _init_actions(self):
         action = QtGui.QAction('Open Spreadsheet', self)
         action.setShortcut('Ctrl+Shift+O')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setToolTip('Open spreadsheet in browser')
         action.setIcon(ui.get_icon('btn_ledger'))
         action.triggered.connect(signals.openSpreadsheet)
@@ -71,6 +72,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         action = QtGui.QAction('Refresh', self)
         action.setShortcut('Ctrl+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setStatusTip('Reload spreadsheet config')
         action.triggered.connect(reload_action)
         self.addAction(action)
@@ -82,6 +84,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         action = QtGui.QAction('Reset', self)
         action.setShortcut('Ctrl+Shift+R')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.setStatusTip('Reset spreadsheet config')
         action.setIcon(ui.get_icon('btn_reload'))
         action.triggered.connect(reset_action)
