@@ -167,13 +167,9 @@ class PaletteView(QtWidgets.QTableView):
         self.setObjectName('ExpenseTrackerPaletteView')
         self.setProperty('rounded', True)
 
-        # Set up model
         self.setModel(PaletteModel(self))
-
-        # Set up delegate
         self.setItemDelegate(PaletteItemDelegate())
 
-        # Set up view properties
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)
         self.setShowGrid(False)
@@ -182,20 +178,16 @@ class PaletteView(QtWidgets.QTableView):
         self.setSortingEnabled(False)
         self.setAlternatingRowColors(False)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
 
-        # Set fixed cell size
         cell_size = ui.Size.RowHeight(2.0)
         self.horizontalHeader().setDefaultSectionSize(cell_size)
         self.verticalHeader().setDefaultSectionSize(cell_size)
 
-        # Hide headers
         self.horizontalHeader().setVisible(False)
         self.verticalHeader().setVisible(False)
 
-        # Calculate total padding (4px per cell - 2px on each side)
         padding = ui.Size.Indicator(2.0)
-
-        # Set fixed size based on content and include padding
         nc = self.model().columnCount()
         nr = self.model().rowCount()
         self.setFixedSize(
@@ -203,10 +195,10 @@ class PaletteView(QtWidgets.QTableView):
             (nr * cell_size) + (self.frameWidth() * 2) + (padding * 2)
         )
 
-        # Connect signals
-        self.clicked.connect(self._on_item_clicked)
+        self.clicked.connect(self.item_clicked)
 
-    def _on_item_clicked(self, index: QtCore.QModelIndex) -> None:
+    @QtCore.Slot(QtCore.QModelIndex)
+    def item_clicked(self, index: QtCore.QModelIndex) -> None:
         """Handle item click to emit the selected color."""
         if index.isValid():
             row = index.row()
@@ -304,8 +296,10 @@ class IconPickerView(QtWidgets.QTableView):
         super().__init__(parent)
         self.setObjectName('ExpenseTrackerIconPickerView')
         self.setProperty('rounded', True)
-        self.setModel(IconModel(self))
-        self.setItemDelegate(IconItemDelegate())
+
+        self.setModel(IconModel(parent=self))
+        self.setItemDelegate(IconItemDelegate(parent=self))
+
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)
         self.setShowGrid(False)
@@ -315,11 +309,14 @@ class IconPickerView(QtWidgets.QTableView):
         self.setAlternatingRowColors(False)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.setFocusPolicy(QtCore.Qt.NoFocus)
+
         cell = ui.Size.RowHeight(2.0)
         self.horizontalHeader().setDefaultSectionSize(cell)
         self.verticalHeader().setDefaultSectionSize(cell)
+
         self.horizontalHeader().setVisible(False)
         self.verticalHeader().setVisible(False)
+
         padding = ui.Size.Indicator(2.0)
         frame = self.frameWidth()
         nc = self.model().columnCount()
@@ -327,10 +324,13 @@ class IconPickerView(QtWidgets.QTableView):
         scrollbar_width = ui.Size.Margin(1.0)
         width = (nc * cell) + (frame * 2) + (padding * 2) + scrollbar_width
         height = (nr * cell) + (frame * 2) + (padding * 2)
-        self.setFixedSize(width, height)
-        self.clicked.connect(self._on_item_clicked)
 
-    def _on_item_clicked(self, index: QtCore.QModelIndex) -> None:
+        self.setFixedSize(width, height)
+
+        self.clicked.connect(self.item_clicked)
+
+    @QtCore.Slot(QtCore.QModelIndex)
+    def item_clicked(self, index: QtCore.QModelIndex) -> None:
         if index.isValid():
             name = index.data(QtCore.Qt.UserRole)
             self.iconSelected.emit(name)
@@ -345,8 +345,16 @@ class CategoryPreview(QtWidgets.QWidget):
         self._icon = icon
         self._color = color
 
-        size = ui.Size.RowHeight(2.0) * 2
-        self.setFixedSize(size, size)
+        padding = ui.Size.Indicator(2.0)
+        cell_size = ui.Size.RowHeight(2.0)
+        frame_width = ui.Size.Separator(2.0)
+        nc = 3
+        nr = max(len(palette) for palette in PALETTES.values())
+        self.setFixedSize(
+            (nc * cell_size) + (frame_width * 2) + (padding * 2),
+            (nr * cell_size) + (frame_width * 2) + (padding * 2)
+        )
+
 
     def set_color(self, color: str):
         self._color = color
@@ -359,11 +367,23 @@ class CategoryPreview(QtWidgets.QWidget):
     def paintEvent(self, event) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        ico = ui.get_icon(self._icon, self._color, engine=ui.CategoryIconEngine)
-        side = min(self.width(), self.height()) * 0.6
-        rect = QtCore.QRect(0, 0, int(side), int(side))
-        rect.moveCenter(self.rect().center())
-        ico.paint(painter, rect, QtCore.Qt.AlignCenter)
+
+        icon = ui.get_icon(self._icon, QtGui.QColor(self._color), engine=ui.CategoryIconEngine)
+
+        rect = self.rect()
+        o = ui.Size.Indicator(2.0)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(ui.Color.DarkBackground())
+        painter.drawRoundedRect(
+            rect, o, o,
+        )
+
+        side = min(self.width(), self.height())
+
+        icon_rect = QtCore.QRect(0, 0, int(side), int(side))
+        icon_rect.moveCenter(self.rect().center())
+
+        icon.paint(painter, icon_rect, QtCore.Qt.AlignCenter)
 
 
 # Dialog combining color palette and icon picker for category editing
@@ -390,8 +410,9 @@ class CategoryIconColorEditorDialog(QtWidgets.QDialog):
 
         # Title layout
         title_layout = QtWidgets.QHBoxLayout()
-        label = QtWidgets.QLabel(f'Edit Category: {self.category}', self)
-        label.setFixedHeight(ui.Size.RowHeight(1.0))
+        label = QtWidgets.QLabel(self.category.title(), self)
+        label.setProperty('rounded', True)
+        label.setProperty('h1', True)
         title_layout.addWidget(label, 1)
         self.layout().addLayout(title_layout)
 
@@ -447,3 +468,11 @@ class CategoryIconColorEditorDialog(QtWidgets.QDialog):
 
     def _init_actions(self):
         pass
+
+    def open(self) -> None:
+        """Override to prevent showing for invalid categories."""
+        from ..settings import lib
+        cats = lib.settings.get_section('categories')
+        if self.category not in cats:
+            return
+        super().open()
