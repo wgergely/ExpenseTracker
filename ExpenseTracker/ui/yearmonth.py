@@ -299,8 +299,8 @@ class RangeSelectorBar(QtWidgets.QToolBar):
     def _create_ui(self):
         prev_action = QtGui.QAction(ui.get_icon('btn_left'), '', self)
         prev_action.setToolTip('Previous month')
-        prev_action.setShortcuts([QtGui.QKeySequence('Alt+Left'), QtGui.QKeySequence('Ctrl+Left')])
-        prev_action.setShortcutContext(QtCore.Qt.WidgetShortcut)
+        prev_action.setShortcuts(['Alt+Left', 'Ctrl+Left'])
+        prev_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         prev_action.triggered.connect(self.previous_month)
         self.addAction(prev_action)
 
@@ -318,8 +318,8 @@ class RangeSelectorBar(QtWidgets.QToolBar):
 
         next_action = QtGui.QAction(ui.get_icon('btn_right'), '', self)
         next_action.setToolTip('Next month')
-        next_action.setShortcuts([QtGui.QKeySequence('Alt+Right'), QtGui.QKeySequence('Ctrl+Right')])
-        next_action.setShortcutContext(QtCore.Qt.WidgetShortcut)
+        next_action.setShortcuts(['Alt+Right', 'Ctrl+Right'])
+        next_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         next_action.triggered.connect(self.next_month)
         self.addAction(next_action)
 
