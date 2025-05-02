@@ -216,6 +216,15 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
             return self.header[section]
         return None
+    
+    def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
+        """Enable editing for the icon column."""
+        flags = super().flags(index)
+        if not index.isValid():
+            return flags
+        if index.column() == Columns.Icon:
+            return flags | QtCore.Qt.ItemIsEditable
+        return flags
 
     @QtCore.Slot()
     def init_data(self) -> None:

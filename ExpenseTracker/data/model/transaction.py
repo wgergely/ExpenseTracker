@@ -4,7 +4,7 @@ Includes classes to display, edit, sort, and filter transaction data.
 """
 import enum
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict, Tuple
 
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -35,6 +35,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
         self._pending_data = []
         self._data = []
+        # track failed edit operations per (row, column): error message
+        self._failed_cells: Dict[Tuple[int, int], str] = {}
 
         self._init_data_timer = QtCore.QTimer(self)
         self._init_data_timer.setSingleShot(True)
@@ -51,6 +53,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
 
         from ...core.sync import sync_manager
         sync_manager.dataUpdated.connect(self.on_sync_success)
+        # handle failures: commitFinished includes (local_id, column) keys with (ok, msg)
+        sync_manager.commitFinished.connect(self.on_sync_complete)
 
     @QtCore.Slot(list)
     def queue_data_init(self, data: list) -> None:
@@ -77,6 +81,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         self.beginResetModel()
         self._data = []
         self._pending_data = []
+        # clear any failure markers
+        self._failed_cells.clear()
         self.endResetModel()
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
@@ -101,6 +107,11 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         col_idx = index.column()
         if row < 0 or row >= self.rowCount():
             return None
+
+        # if this cell has a recorded failure, show its error message in statusTip/tooltip
+        if role in (QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole):
+            if (row, col_idx) in self._failed_cells:
+                return self._failed_cells[(row, col_idx)]
 
         col_key = lib.TRANSACTION_DATA_COLUMNS[col_idx]
         value = self._data[row][col_key]
@@ -264,6 +275,40 @@ class TransactionsModel(QtCore.QAbstractTableModel):
                     except Exception as ex:
                         logging.error(f'Update failed: {ex}')
                         pass
+                    break
+        # on successful sync, clear any failure markers for these ops
+        for op in ops:
+            for row_idx, rec in enumerate(self._data):
+                if rec.get('local_id') == op.local_id:
+                    try:
+                        col_idx = lib.TRANSACTION_DATA_COLUMNS.index(op.column)
+                        self._failed_cells.pop((row_idx, col_idx), None)
+                    except Exception:
+                        pass
+
+    @QtCore.Slot(object)
+    def on_sync_complete(self, results: object) -> None:
+        """Handle failures from commitFinished: mark cells dirty with error messages."""
+        for key, (ok, msg) in results.items():
+            if ok:
+                continue
+            # expect key as (local_id, column)
+            if isinstance(key, (tuple, list)) and len(key) == 2:
+                lid, col = key
+            else:
+                continue
+            # find row and column index
+            for row_idx, rec in enumerate(self._data):
+                if rec.get('local_id') == lid:
+                    try:
+                        col_idx = lib.TRANSACTION_DATA_COLUMNS.index(col)
+                        # record failure message
+                        self._failed_cells[(row_idx, col_idx)] = msg
+                        idx = self.index(row_idx, col_idx)
+                        # notify view for statusTip and redraw
+                        self.dataChanged.emit(idx, idx, [QtCore.Qt.StatusTipRole, QtCore.Qt.ToolTipRole])
+                    except Exception as ex:
+                        logging.error(f'Failed to mark failed cell: {ex}')
                     break
 
 
