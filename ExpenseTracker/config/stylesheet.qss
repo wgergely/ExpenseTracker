@@ -696,7 +696,13 @@ QWidget[rounded="true"] {
 }
 
 QLabel[h1="true"] {
-    font-size: <LargeText@1.0>px;
+    font-size: <LargeText@1.2>px;
     font-weight: 900;
     color: <Text>;
+}
+
+QToolBar[transparent="true"] {
+    background-color: <Transparent>;
+    border: none;
+    border-radius: <Indicator@1.5>px;
 }
