@@ -178,6 +178,69 @@ def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> Non
     logging.debug(f'Credentials saved to {lib.settings.creds_path}.')
 
 
+def _authenticate() -> google.oauth2.credentials.Credentials:
+    """
+    Run OAuth flow synchronously in the main GUI thread to authenticate and obtain credentials.
+
+    Returns:
+        Credentials: The authenticated credentials.
+
+    Raises:
+        status.AuthenticationExceptionException: If authentication fails or is cancelled.
+        status.CredsInvalidException: If credentials returned are invalid.
+        status.ClientSecretNotFoundException: If the client secret file is not found.
+    """
+    from ..settings import lib
+
+    scopes = DEFAULT_SCOPES
+    creds = None
+
+    # reuse valid cached credentials
+    if lib.settings.creds_path.exists():
+        creds = get_creds()
+        if creds:
+            if not set(scopes).issubset(set(creds.scopes or [])):
+                logging.debug('Cached credentials have mismatched scopes; clearing.')
+                creds = None
+            elif not creds.expired:
+                logging.debug('Using valid cached credentials.')
+                return creds
+
+    # attempt refresh if expired
+    if creds and creds.expired and creds.refresh_token:
+        logging.debug('Cached credentials expired; attempting refresh.')
+        try:
+            creds.refresh(google.auth.transport.requests.Request())
+            logging.debug('Successfully refreshed credentials.')
+            save_creds(creds)
+            return creds
+        except google.auth.exceptions.RefreshError as ex:
+            logging.error(f'Refresh failed: {ex}; will perform new flow.')
+
+    # ensure client secret is present
+    if not lib.settings.client_secret_path.exists():
+        raise status.ClientSecretNotFoundException
+    lib.settings.validate_client_secret()
+    client_config = lib.settings.get_section('client_secret')
+
+    logging.debug('Starting synchronous OAuth flow...')
+    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(client_config, scopes=scopes)
+    try:
+        creds = flow.run_local_server(port=0)
+    except Exception as ex:
+        logging.error(f'OAuth flow error: {ex}')
+        raise status.AuthenticationExceptionException(f'OAuth flow failed: {ex}')
+
+    if not creds:
+        raise status.AuthenticationExceptionException('Authentication was cancelled or no credentials obtained.')
+
+    if not creds.valid:
+        raise status.CredsInvalidException('Invalid credentials returned from OAuth flow.')
+
+    logging.debug('Saving credentials...')
+    save_creds(creds)
+    return creds
+
 def authenticate() -> google.oauth2.credentials.Credentials:
     """
     Run OAuth flow to authenticate and obtain credentials.
