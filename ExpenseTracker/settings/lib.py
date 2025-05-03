@@ -6,7 +6,7 @@ Provides:
     - Preset handling for bundling and loading client_secret.json and ledger.json.
     - Constants for column names and data schemas.
 """
-
+import copy
 import json
 import logging
 import pathlib
@@ -255,20 +255,21 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
 
 
 class ConfigPaths:
-    """Manage application file paths and ensure default templates and directories exist.
+    """Manage app file paths and ensure default templates and directories exist.
 
     This class initializes paths for configuration templates, icons, presets, database,
     and user settings. It verifies the presence of template assets and prepares
     default configuration files by copying them into the user data directory.
+
     """
 
     def __init__(self) -> None:
-        """Set up application paths and ensure required directories and templates exist.
+        """Set up app paths and ensure required directories and templates exist.
 
         Defines template, config, auth, db, presets, and user settings paths.
         Creates missing directories and copies default templates where needed.
         """
-        # Set the application name and organization
+        # Set the app name and organization
         QtWidgets.QApplication.setApplicationName(app_name)
         QtWidgets.QApplication.setOrganizationName('')
         logging.debug(f'Setting application name: {app_name}')
@@ -865,7 +866,7 @@ class SettingsAPI(ConfigPaths):
             Exception: For I/O errors writing files.
         """
         logging.debug('Saving all settings.')
-        original_ledger_data: Dict[str, Any] = dict(self.ledger_data)
+        original_ledger_data: Dict[str, Any] = copy.deepcopy(self.ledger_data)
         try:
             self.validate_ledger_data()
             with self.ledger_path.open('w', encoding='utf-8') as f:
