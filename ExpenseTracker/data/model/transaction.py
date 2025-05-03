@@ -51,10 +51,10 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         signals.expenseCategoryChanged.connect(self.queue_data_init)
         self._init_data_timer.timeout.connect(lambda: self.init_data(self._pending_data))
 
-        from ...core.sync import sync_manager
-        sync_manager.dataUpdated.connect(self.on_sync_success)
+        from ...core.sync import sync
+        sync.dataUpdated.connect(self.on_sync_success)
         # handle failures: commitFinished includes (local_id, column) keys with (ok, msg)
-        sync_manager.commitFinished.connect(self.on_sync_complete)
+        sync.commitFinished.connect(self.on_sync_complete)
 
     @QtCore.Slot(list)
     def queue_data_init(self, data: list) -> None:
@@ -250,9 +250,9 @@ class TransactionsModel(QtCore.QAbstractTableModel):
             if local_id is None:
                 return False
             # Queue the edit
-            from ...core.sync import sync_manager
+            from ...core.sync import sync
             # logical field name is 'category'
-            sync_manager.queue_edit(local_id, 'category', value)
+            sync.queue_edit(local_id, 'category', value)
             # Update the in-memory model
             rec['category'] = value
             self.dataChanged.emit(index, index, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
