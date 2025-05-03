@@ -6,7 +6,7 @@ import pandas as pd
 from PySide6 import QtCore, QtGui
 
 from ..data import get_data, SummaryMode
-from ...core.sync import sync_manager
+from ...core.sync import sync
 from ...settings import lib
 from ...settings import locale
 from ...ui import ui
@@ -66,7 +66,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         signals.metadataChanged.connect(metadata_changed)
         # refresh expense model when local cache is updated by sync
-        sync_manager.dataUpdated.connect(self.init_data)
+        sync.dataUpdated.connect(self.init_data)
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self._df)
