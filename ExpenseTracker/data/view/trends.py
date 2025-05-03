@@ -16,7 +16,7 @@ from typing import Optional
 import pandas as pd
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...core.sync import sync_manager
+from ...core.sync import sync
 from ...data.data import get_trends
 from ...settings import lib
 from ...settings import locale
@@ -124,7 +124,7 @@ class TrendGraph(QtWidgets.QWidget):
 
         signals.metadataChanged.connect(metadata_changed)
         # reload trends when local cache is updated by sync
-        sync_manager.dataUpdated.connect(lambda ops: self.start_init_data_timer())
+        sync.dataUpdated.connect(lambda ops: self.start_init_data_timer())
 
     def _init_actions(self) -> None:
         """Set up context-menu actions for toggles, span selection, and smoothing."""
