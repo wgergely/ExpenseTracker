@@ -10,6 +10,13 @@ This package provides:
 Use exec_() to launch the application.
 """
 
+import os
+import pathlib
+
+# Use internally shipped font directory for Qt font loading
+font_dir = pathlib.Path(__file__).parent / 'config' / 'font'
+os.environ.setdefault('QT_QPA_FONTDIR', str(font_dir))
+
 from .log import log
 
 log.setup_logging()
