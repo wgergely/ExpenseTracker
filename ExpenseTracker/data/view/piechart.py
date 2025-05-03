@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...core.sync import sync_manager
+from ...core.sync import sync
 from ...data import data
 from ...settings import lib, locale
 from ...ui import ui
@@ -182,7 +182,7 @@ class PieChartView(QtWidgets.QWidget):
 
         signals.metadataChanged.connect(metadata_changed)
 
-        sync_manager.dataUpdated.connect(lambda _: self.init_data())
+        sync.dataUpdated.connect(lambda _: self.init_data())
 
         @QtCore.Slot(str)
         def config_changed(section: str) -> None:
