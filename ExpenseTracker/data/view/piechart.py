@@ -18,6 +18,7 @@ from ...data import data
 from ...settings import lib, locale
 from ...ui import ui
 from ...ui.actions import signals
+from ...ui.dockable_widget import DockableWidget
 from ...ui.ui import CategoryIconEngine, get_icon
 
 
@@ -63,6 +64,13 @@ class PieChartModel:
     def rebuild(self) -> None:
         """Populate slices from the current filtered dataframe."""
         df = data.get_data()
+
+        if df.empty:
+            logging.debug('PieChart: no data available')
+            self._slices = []
+            self._version += 1
+            return
+
         df = df[(df['category'] != 'Total') & (df['category'] != '')]
 
         if not lib.settings['exclude_negative'] and not lib.settings['exclude_positive']:
@@ -459,6 +467,19 @@ class PieChartView(QtWidgets.QWidget):
         signals.categoryChanged.emit(cat)
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
+        """Open category icon/color editor on double-click of a pie segment."""
+        idx = self._slice_at(event.pos())
+        if 0 <= idx < len(self.model.slices):
+            category = self.model.slices[idx].category
+            from ...ui.palette import CategoryIconColorEditorDialog
+
+            dlg = CategoryIconColorEditorDialog(category, self)
+            dlg.iconChanged.connect(lambda _: self.init_data())
+            dlg.colorChanged.connect(lambda _: self.init_data())
+            dlg.open()
+        super().mouseDoubleClickEvent(event)
+
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         self._geom_sig = (-1, -1, -1)
         self.update()
@@ -470,7 +491,7 @@ class PieChartView(QtWidgets.QWidget):
             self._show_legend = checked
             self.update()
 
-        action = QtGui.QAction(self, 'Toggle Legend')
+        action = QtGui.QAction('Toggle Legend', self)
         action.setCheckable(True)
         action.setChecked(self._show_legend)
         action.setToolTip('Show/hide legend')
@@ -485,7 +506,7 @@ class PieChartView(QtWidgets.QWidget):
             self._show_icons = checked
             self.update()
 
-        action = QtGui.QAction(self, 'Toggle Icons')
+        action = QtGui.QAction('Toggle Icons', self)
         action.setCheckable(True)
         action.setChecked(self._show_icons)
         action.setToolTip('Show/hide icons')
@@ -500,7 +521,7 @@ class PieChartView(QtWidgets.QWidget):
             self._show_tooltip = checked
             self.update()
 
-        action = QtGui.QAction(self, 'Toggle Tooltip')
+        action = QtGui.QAction('Toggle Tooltip', self)
         action.setCheckable(True)
         action.setChecked(self._show_tooltip)
         action.setToolTip('Show/hide tooltip')
@@ -510,19 +531,39 @@ class PieChartView(QtWidgets.QWidget):
         action.triggered.connect(toggle_tooltip)
         self.addAction(action)
 
+        # separator for reload chart action
+        action = QtGui.QAction('', self)
+        action.setSeparator(True)
+        self.addAction(action)
 
-class PieChartDockWidget(QtWidgets.QDockWidget):
+        @QtCore.Slot()
+        def reload_chart() -> None:
+            """Reload pie chart data explicitly."""
+            self.init_data()
+
+        action = QtGui.QAction('Reload Chart', self)
+        action.setToolTip('Reload pie chart')
+        action.setStatusTip('Reload pie chart')
+        action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.triggered.connect(reload_chart)
+        self.addAction(action)
+
+
+class PieChartDockWidget(DockableWidget):
     """Dock widget for displaying a pie chart of expenses."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__('Pie Chart', parent)
+        super().__init__(
+            'Pie Chart',
+            parent,
+            min_width=ui.Size.DefaultWidth(0.5),
+            min_height=ui.Size.DefaultWidth(0.5),
+            max_width=ui.Size.DefaultWidth(1.0),
+            max_height=ui.Size.DefaultWidth(1.0),
+        )
 
         self.setObjectName('ExpenseTrackerPieChartDockWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
-        )
 
         chart = PieChartView(self)
         chart.setProperty('rounded', True)
@@ -530,11 +571,3 @@ class PieChartDockWidget(QtWidgets.QDockWidget):
         self.setWidget(chart)
 
         self.setContentsMargins(0, 0, 0, 0)
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(0.5),
-            ui.Size.DefaultWidth(0.5)
-        )
-        self.setMaximumSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultWidth(1.0)
-        )
