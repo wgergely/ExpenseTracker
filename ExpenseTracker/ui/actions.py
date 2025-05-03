@@ -75,7 +75,7 @@ class Signals(QtCore.QObject):
                 from . import ui
                 ui.apply_theme()
             except Exception as ex:
-                logging.error(f'Error applying theme: {ex}')
+                logging.debug(f'Error applying theme: {ex}')
 
         self.metadataChanged.connect(metadata_changed)
 
