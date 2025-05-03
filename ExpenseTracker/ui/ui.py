@@ -47,15 +47,14 @@ class Font(enum.Enum):
         return self.db.get(size, self)
 
 
-class FontDatabase(QtGui.QFontDatabase):
-    """Custom QFontDatabase used to load and provide the fonts needed by Bookmarks."""
+class FontDatabase:
+    """Custom font database used to load and provide the fonts needed by Bookmarks without instantiating QFontDatabase."""
 
     def __init__(self):
         if not QtWidgets.QApplication.instance():
             msg = 'FontDatabase must be created after a QApplication is initiated.'
             logging.error(msg)
             raise RuntimeError(msg)
-        super().__init__()
 
         self._family = None
         self.font_cache = {role: {} for role in Font}
@@ -75,10 +74,12 @@ class FontDatabase(QtGui.QFontDatabase):
         from ..settings import lib
         if not lib.settings.font_path.is_file():
             raise FileNotFoundError(f'Font file not found: {lib.settings.font_path}')
-        idx = self.addApplicationFont(str(lib.settings.font_path))
+        # Add custom font file to application font database
+        idx = QtGui.QFontDatabase.addApplicationFont(str(lib.settings.font_path))
         if idx < 0:
             raise RuntimeError(f'Could not load font file: {lib.settings.font_path}')
-        family = self.applicationFontFamilies(idx)
+        # Retrieve the loaded font family
+        family = QtGui.QFontDatabase.applicationFontFamilies(idx)
         if not family:
             raise RuntimeError(f'Could not find font family in file: {lib.settings.font_path} ({idx})')
 
@@ -121,7 +122,8 @@ class FontDatabase(QtGui.QFontDatabase):
         else:
             raise ValueError(f'Invalid font role: {role}')
 
-        font = super().font(role.value, style, size)
+        # Retrieve a font of the specified family, style, and size
+        font = QtGui.QFontDatabase.font(role.value, style, size)
         if font.family() != role.value:
             raise RuntimeError(f'Could not find font: {role.value} {style} {size}')
 
