@@ -11,12 +11,10 @@ from typing import Optional
 from PySide6 import QtWidgets, QtCore, QtGui
 
 from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyModel, Columns
-from ...core.sync import sync_manager
+from ...core.sync import sync
 from ...settings import lib
 from ...ui import ui
 from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
-
-
 
 
 class PopupCombobox(QtWidgets.QComboBox):
@@ -54,6 +52,14 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
             editor.addItem(icon, display, userData=key)
         # automatically open the dropdown on single-click
         QtCore.QTimer.singleShot(0, editor.showPopup)
+
+        def on_activated(idx: int) -> None:
+            # commit the selected category and close the editor when an item is chosen
+            self.commitData.emit(editor)
+            self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
+        editor.activated.connect(on_activated)
+
         return editor
 
     def setEditorData(self, editor: QtWidgets.QComboBox, index: QtCore.QModelIndex) -> None:
@@ -87,7 +93,7 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
                 src_model = model
             last_col = len(lib.TRANSACTION_DATA_COLUMNS) - 1
             lid = src_model.index(src_index.row(), last_col).data(QtCore.Qt.EditRole)
-            pending = any(op.local_id == lid and op.column == 'category' for op in sync_manager.get_queued_ops())
+            pending = any(op.local_id == lid and op.column == 'category' for op in sync.get_queued_ops())
         except Exception:
             pass
         if pending:
@@ -357,11 +363,11 @@ class TransactionsWidget(QtWidgets.QDockWidget):
         self._create_ui()
         self._connect_signals()
 
-        sync_manager.queueChanged.connect(self._on_queue_changed)
+        sync.queueChanged.connect(self._on_queue_changed)
 
     def _connect_signals(self):
-        sync_manager.commitFinished.connect(self._on_commit_finished)
-        self.sync_button.clicked.connect(sync_manager.commit_queue_async)
+        sync.commitFinished.connect(self._on_commit_finished)
+        self.sync_button.clicked.connect(sync.commit_queue_async)
         self.view.model().dataChanged.connect(self._update_sync_button)
 
     def _create_ui(self) -> None:
@@ -400,7 +406,7 @@ class TransactionsWidget(QtWidgets.QDockWidget):
 
     def _update_sync_button(self) -> None:
         # Enable or disable the sync button based on queued edits
-        self.sync_button.setEnabled(bool(sync_manager.get_queued_ops()))
+        self.sync_button.setEnabled(bool(sync.get_queued_ops()))
 
     @QtCore.Slot(int)
     def _on_queue_changed(self, count: int) -> None:
