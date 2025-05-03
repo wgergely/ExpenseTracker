@@ -234,7 +234,23 @@ class DatabaseAPI(QtCore.QObject):
             sqlite3.Connection: Database connection object.
         """
 
-        return sqlite3.connect(str(lib.settings.db_path))
+        conn = sqlite3.connect(str(lib.settings.db_path), timeout=2.0)
+        conn.set_progress_handler(lambda: logging.warning('Waiting on DB lock…'), 1000)
+        return conn
+
+    @staticmethod
+    def _update_state_in_conn(conn: sqlite3.Connection, state: "CacheState") -> None:
+        """
+        Update the *state* field in the metatable **using the same open connection** that
+        already owns the ongoing transaction.
+        This avoids creating a second connection (which can collide on a locked database)
+        and ensures the caller’s transaction boundaries are respected.
+
+        Args:
+            conn: An existing open `sqlite3.Connection` instance.
+            state: The new `CacheState` to write.
+        """
+        conn.execute(f'UPDATE {Table.Meta} SET state=? WHERE meta_id=1', (state.name,))
 
     @classmethod
     def table_exists(cls, table_name: str) -> bool:
@@ -261,14 +277,16 @@ class DatabaseAPI(QtCore.QObject):
     @classmethod
     def verify(cls) -> None:
         """
-        Verify that the local cache database exists with correct schema and is up-to-date.
+        Verify that the local cache database exists with correct schema and is up‑to‑date.
 
         Raises:
-            status.CacheInvalidException: On missing database, schema mismatch, or stale cache.
-            status.HeadersInvalidException: If configuration headers are invalid or missing.
+            status.CacheInvalidException
+                If the cache database is missing, its schema is wrong, or it is considered stale.
+            status.HeadersInvalidException
+                If the configured headers are missing or do not match those in the cache.
         """
-
         conn = cls.connection()
+
         if not lib.settings.db_path.exists():
             raise status.CacheInvalidException(
                 f'Could not create the local cache database at {lib.settings.db_path}'
@@ -276,68 +294,62 @@ class DatabaseAPI(QtCore.QObject):
 
         try:
             if not cls.table_exists(Table.Transactions):
+                cls._update_state_in_conn(conn, CacheState.Uninitialized)
                 conn.commit()
-                cls.set_state(CacheState.Uninitialized)
                 raise status.CacheInvalidException(
                     'Database uninitialized. No transactions table found.'
                 )
 
-            cursor = conn.execute(f"""SELECT * FROM {Table.Transactions} LIMIT 1""")
-            columns = [col[0] for col in cursor.description]
-            if 'local_id' in columns:
-                columns.remove('local_id')
-
-            logging.debug(f'Cached transactions with {len(columns)} columns: {columns}')
-            config = lib.settings.get_section('header')
-            if not config:
+            cursor = conn.execute(f'SELECT * FROM {Table.Transactions} LIMIT 1')
+            columns = [c[0] for c in cursor.description]
+            columns = [c for c in columns if c != 'local_id']  # internal PK
+            cfg_cols = lib.settings.get_section('header')
+            if not cfg_cols:
+                cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
-                cls.set_state(CacheState.Stale)
                 raise status.HeadersInvalidException(
                     'No header data found in configuration, data needs sync.'
                 )
 
-            difference = set(columns).symmetric_difference(set(config.keys()))
-            if difference:
-                logging.debug(f'Columns differ between config and cache: {difference}')
+            diff = set(columns).symmetric_difference(cfg_cols.keys())
+            if diff:
+                cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
-                cls.set_state(CacheState.Stale)
-                raise status.CacheInvalidException(f'Column mismatch: {difference}')
+                raise status.CacheInvalidException(f'Column mismatch: {diff}')
 
-            cursor = conn.execute(f"""SELECT last_sync FROM {Table.Meta} WHERE meta_id=1""")
-            row = cursor.fetchone()
-            if row and not row[0]:
+            cursor = conn.execute(f'SELECT last_sync FROM {Table.Meta} WHERE meta_id=1')
+            last_sync_raw = cursor.fetchone()
+            if not last_sync_raw or not last_sync_raw[0]:
+                cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
-                cls.set_state(CacheState.Stale)
                 raise status.CacheInvalidException('Cache is stale. Last sync date not found.')
 
             try:
-                last_sync = datetime.datetime.fromisoformat(row[0])
+                last_sync = datetime.datetime.fromisoformat(last_sync_raw[0])
             except ValueError:
-                logging.warning(f'Invalid last sync date format: {row[0]}. Defaulting to 1980-01-01.')
                 last_sync = datetime.datetime(1980, 1, 1)
 
-            if row and row[0]:
-                age = datetime.datetime.now(datetime.timezone.utc) - last_sync
-                if age.days >= CACHE_MAX_AGE_DAYS:
-                    conn.commit()
-                    cls.set_state(CacheState.Stale)
-                    raise status.CacheInvalidException(f'Cache is stale. Last sync: {last_sync}')
-
-            cursor = conn.execute(f"""SELECT COUNT(*) FROM {Table.Transactions}""")
-            row = cursor.fetchone()
-            if row and row[0] == 0:
-                logging.debug('Cache is empty. No transactions found.')
+            if (datetime.datetime.now(datetime.timezone.utc) - last_sync).days >= CACHE_MAX_AGE_DAYS:
+                cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
-                cls.set_state(CacheState.Empty)
+                raise status.CacheInvalidException(f'Cache is stale. Last sync: {last_sync}')
+
+            count = conn.execute(f'SELECT COUNT(*) FROM {Table.Transactions}').fetchone()[0]
+            if count == 0:
+                cls._update_state_in_conn(conn, CacheState.Empty)
+                conn.commit()
                 return
 
+            cls._update_state_in_conn(conn, CacheState.Valid)
             conn.commit()
-            cls.set_state(CacheState.Valid)
             logging.debug(
-                f'Cache is valid. Last sync={last_sync}, Rows={row[0]}, Columns={len(columns)}'
+                'Cache is valid: last_sync=%s rows=%d columns=%d',
+                last_sync,
+                count,
+                len(columns),
             )
+
         finally:
-            conn.commit()
             conn.close()
 
     @classmethod
@@ -349,7 +361,7 @@ class DatabaseAPI(QtCore.QObject):
         """
 
         if lib.settings.db_path.exists():
-            logging.warning('Cache database already exists. Ignoring create request.')
+            logging.debug('Cache database already exists. Ignoring create request.')
             return
 
         conn = cls.connection()
