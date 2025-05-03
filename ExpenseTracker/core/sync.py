@@ -42,7 +42,7 @@ class EditOperation:
     stable_keys: Dict[str, Tuple[Any, ...]]
 
 
-def _idx_to_col(idx: int) -> str:
+def idx_to_col(idx: int) -> str:
     """Convert zero-based column index to spreadsheet letter(s)."""
     letters = ''
     while idx >= 0:
@@ -51,7 +51,7 @@ def _idx_to_col(idx: int) -> str:
     return letters
 
 
-class SyncManager(QtCore.QObject):
+class SyncAPI(QtCore.QObject):
     """Buffer edits to transactions and commit them safely to the remote sheet."""
     commitFinished = QtCore.Signal(dict)
     dataUpdated = QtCore.Signal(list)
@@ -311,7 +311,7 @@ class SyncManager(QtCore.QObject):
         Returns:
             List of header strings.
         """
-        last_col = _idx_to_col(col_count - 1)
+        last_col = idx_to_col(col_count - 1)
         hdr_range = f'{self.worksheet}!A1:{last_col}1'
         batch = service.spreadsheets().values().batchGet(
             spreadsheetId=self.sheet_id,
@@ -402,7 +402,7 @@ class SyncManager(QtCore.QObject):
         for logical, hdrs in stable_map.items():
             for hdr in hdrs:
                 idx = header_to_idx[hdr]
-                col = _idx_to_col(idx)
+                col = idx_to_col(idx)
                 ranges.append(f'{self.worksheet}!{col}2:{col}{row_count}')
         batch = service.spreadsheets().values().batchGet(
             spreadsheetId=self.sheet_id,
@@ -465,13 +465,14 @@ class SyncManager(QtCore.QObject):
             List of row dicts mapping field to tuple of its values.
         """
         remote: List[Dict[str, Any]] = []
+        keys_by_logical: dict[str, list[str]] = {}
+        for log, hdr in col_vals:
+            keys_by_logical.setdefault(log, []).append(hdr)
+
         for i in range(data_rows):
             entry: Dict[str, Any] = {}
-            for logical in stable_fields:
-                values = tuple(
-                    col_vals[(logical, hdr)][i] for hdr in col_vals if hdr[0] == logical
-                )
-                entry[logical] = values
+            for logical, hdr_list in keys_by_logical.items():
+                entry[logical] = tuple(col_vals[(logical, h)][i] for h in hdr_list)
             remote.append(entry)
         return remote
 
@@ -563,7 +564,7 @@ class SyncManager(QtCore.QObject):
                     f'Mapping for "{op.column}" references no valid remote header'
                 )
             idx_col = header_to_idx[found]
-            col_letter = _idx_to_col(idx_col)
+            col_letter = idx_to_col(idx_col)
             data.append({
                 'range': f'{self.worksheet}!{col_letter}{sheet_row}',
                 'values': [[op.new_value]],
@@ -593,4 +594,4 @@ class SyncManager(QtCore.QObject):
                 logging.exception(f'Failed to update local cache for id {op.local_id}')
 
 
-sync_manager = SyncManager()
+sync = SyncAPI()
