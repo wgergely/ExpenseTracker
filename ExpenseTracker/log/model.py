@@ -1,10 +1,10 @@
 """Log table models and proxy for displaying and filtering in-memory logs.
 
 Provides:
-    - Columns, Level, Roles: enums for table structure and roles
-    - LogTableModel: polls TankHandler for log entries
-    - LogFilterProxyModel: filters and sorts log entries
-    - get_handler: utility to access the TankHandler
+- Columns, Level, Roles: enums for table structure and roles
+- LogTableModel: polls TankHandler for log entries
+- LogFilterProxyModel: filters and sorts log entries
+- get_handler: utility to access the TankHandler
 """
 import enum
 import logging
@@ -53,13 +53,14 @@ def get_handler():
 
 
 class LogTableModel(QtCore.QAbstractTableModel):
-    """
-    A model for displaying log messages fetched from a TankHandler.
+    """A model for displaying log messages fetched from a TankHandler.
+
     Each row includes the following fields:
-        - date (str)
-        - module (str)
-        - level_enum (Level)
-        - message (str)
+
+    - date (str)
+    - module (str)
+    - level_enum (Level)
+    - message (str)
     """
 
     re_log_pattern = re.compile(
