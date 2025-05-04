@@ -48,7 +48,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
-        signals.expenseCategoryChanged.connect(self.queue_data_init)
+        # listen for selected category transaction lists
+        signals.transactionsChanged.connect(self.queue_data_init)
         self._init_data_timer.timeout.connect(lambda: self.init_data(self._pending_data))
 
         from ...core.sync import sync
@@ -336,7 +337,7 @@ class TransactionsSortFilterProxyModel(QtCore.QSortFilterProxyModel):
             self.set_filter_string('')
             self.invalidateFilter()
 
-        signals.expenseCategoryChanged.connect(reset)
+        signals.transactionsChanged.connect(reset)
 
     def filter_string(self):
         """Get the current filter string."""
