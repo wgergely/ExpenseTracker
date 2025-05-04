@@ -6,6 +6,7 @@ This module provides:
     - TransactionsView: table view for transaction records with sorting and filtering
     - TransactionsWidget: dockable widget for viewing transactions with sync controls
 """
+import logging
 from typing import Optional
 
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -14,6 +15,7 @@ from ..model.transaction import TransactionsModel, TransactionsSortFilterProxyMo
 from ...core.sync import sync
 from ...settings import lib
 from ...ui import ui
+from ...ui.dockable_widget import DockableWidget
 from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
 
 
@@ -54,7 +56,6 @@ class CategoryDelegate(QtWidgets.QStyledItemDelegate):
         QtCore.QTimer.singleShot(0, editor.showPopup)
 
         def on_activated(idx: int) -> None:
-            # commit the selected category and close the editor when an item is chosen
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
 
@@ -338,20 +339,49 @@ class TransactionsView(QtWidgets.QTableView):
     def _connect_signals(self):
         self.model().sourceModel().modelReset.connect(
             lambda: self.model().sort(self.model().sortColumn(), self.model().sortOrder()))
-        self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
+
+        @QtCore.Slot()
+        def resize_columns():
+            self.resizeColumnToContents(Columns.Description.value)
+            self.resizeColumnToContents(Columns.Amount.value)
+            self.resizeColumnToContents(Columns.Category.value)
+            self.resizeColumnToContents(Columns.Date.value)
+            self.resizeColumnToContents(Columns.Account.value)
+
+        self.model().sourceModel().modelReset.connect(resize_columns)
+        self.model().sourceModel().dataChanged.connect(resize_columns)
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        """
+        Draw the table view and, if no rows are present, overlay a placeholder message.
+        """
+        # draw default table
+        super().paintEvent(event)
+        # show placeholder when no transactions to display
+        try:
+            model = self.model()
+            if model is None or model.rowCount() != 0:
+                return
+        except Exception:
+            return
+        # paint overlay text on viewport
+        painter = QtGui.QPainter(self.viewport())
+        # set font and color for placeholder
+        font, _ = ui.Font.MediumFont(ui.Size.MediumText(1.0))
+        painter.setFont(font)
+        painter.setPen(ui.Color.DisabledText())
+        # center the text in the viewport
+        rect = self.viewport().rect()
+        painter.drawText(rect, QtCore.Qt.AlignCenter, 'No transactions')
+        painter.end()
 
 
-class TransactionsWidget(QtWidgets.QDockWidget):
+class TransactionsWidget(DockableWidget):
     """Dock widget for displaying transactions with sync status and controls."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__('Transactions', parent=parent)
+        super().__init__('Transactions', parent=parent, min_width=Size.DefaultWidth(1.0))
         self.setObjectName('ExpenseTrackerTransactionsWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
-        )
 
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
