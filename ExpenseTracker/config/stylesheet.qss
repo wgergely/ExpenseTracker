@@ -694,6 +694,52 @@ LogTableView {
 QWidget[rounded="true"] {
     border-radius: <Indicator@2.0>px;
 }
+/* Dock Widget Tab Bar Styling */
+QTabBar {
+    background-color: <Transparent>;
+    padding: 0px;
+}
+
+QTabBar::tab {
+    background-color: <DarkBackground>;
+    color: <DisabledText>;
+    font-weight: 500;
+    border: none;
+}
+QTabBar::tab {
+    color: <SecondaryText>;
+    border-radius: <Indicator@1.5>px;
+}
+QTabBar::tab:disabled {
+    background-color: <Transparent>;
+    color: <DisabledText>;
+}
+QTabBar::tab:selected {
+    color: <SelectedText>;
+    font-weight: 900;
+    background-color: <Background>;
+}
+
+
+QTabBar::tab:top,
+QTabBar::tab:bottom {
+    height: <Margin@1.0>px;
+    padding: <Indicator@1.0>px <Indicator@3.0>px;
+    margin-left: <Indicator@0.5>px;
+    margin-right: <Indicator@0.5>px;
+    margin-top: <Indicator@0.5>px;
+    margin-bottom: <Indicator@1.0>px;
+}
+QTabBar::tab:left,
+QTabBar::tab:right {
+    width: <Margin@1.0>px;
+    padding: <Indicator@3.0>px <Indicator@1.0>px;
+    margin-left: <Indicator@1.0>px;
+    margin-right: <Indicator@0.5>px;
+    margin-top: <Indicator@0.5>px;
+    margin-bottom: <Indicator@0.5>px;
+}
+
 
 QLabel[h1="true"] {
     font-size: <LargeText@1.2>px;
