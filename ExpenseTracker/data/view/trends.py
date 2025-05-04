@@ -22,6 +22,7 @@ from ...settings import lib
 from ...settings import locale
 from ...ui import ui
 from ...ui.actions import signals
+from ...ui.dockable_widget import DockableWidget
 
 
 class Span(Enum):
@@ -99,7 +100,7 @@ class TrendGraph(QtWidgets.QWidget):
 
         self._init_data_timer = QtCore.QTimer(self)
         self._init_data_timer.setSingleShot(True)
-        self._init_data_timer.setInterval(QtWidgets.QApplication.keyboardInputInterval())
+        self._init_data_timer.setInterval(50)
 
         self._connect_signals()
         self._init_actions()
@@ -864,17 +865,17 @@ class TrendGraph(QtWidgets.QWidget):
         super().leaveEvent(event)
 
 
-class TrendDockWidget(QtWidgets.QDockWidget):
+class TrendDockWidget(DockableWidget):
     """Dockable widget wrapping the TrendGraph chart."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__('Trends', parent=parent)
-        self.setObjectName('ExpenseTrackerTrendDockWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
+        super().__init__(
+            'Trends',
+            parent,
+            min_width=ui.Size.DefaultWidth(0.3),
+            min_height=ui.Size.DefaultHeight(0.3),
         )
+        self.setObjectName('ExpenseTrackerTrendDockWidget')
 
         graph = TrendGraph(self)
         graph.setProperty('rounded', True)
@@ -882,10 +883,6 @@ class TrendDockWidget(QtWidgets.QDockWidget):
         self.setWidget(graph)
 
         self.setContentsMargins(0, 0, 0, 0)
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(0.3),
-            ui.Size.DefaultHeight(0.3),
-        )
 
         self._connect_signals()
 
