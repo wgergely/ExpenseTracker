@@ -1,219 +1,30 @@
-"""Pie chart view and model for visualizing category expense distribution.
-
-This module provides:
-    - PieChartSlice: dataclass for individual pie slices.
-    - PieChartModel: builds slices from filtered expense data.
-    - PieChartView: interactive widget rendering an exploded pie chart.
-    - PieChartDockWidget: dockable container for PieChartView.
-"""
-import logging
+"""Pie chart view for visualizing category expense distribution."""
 import math
-from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional, List
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...core.sync import sync
-from ...data import data
-from ...settings import lib, locale
 from ...ui import ui
-from ...ui.actions import signals
+from ...ui.basechart import BaseChartView
 from ...ui.dockable_widget import DockableWidget
 from ...ui.ui import CategoryIconEngine, get_icon
 
 
-@dataclass(slots=True)
-class PieChartSlice:
-    """Immutable slice data plus geometry filled by the view."""
-
-    category: str
-    amount_txt: str
-    value_abs: float
-    color: QtGui.QColor
-    icon_name: str
-    start_qt: int  # Qt angle units (1/16 °)
-    span_qt: int  # Qt angle units (1/16 °)
-
-    base_rect: QtCore.QRect = field(default_factory=QtCore.QRect, repr=False)
-    popped_rect: QtCore.QRect = field(default_factory=QtCore.QRect, repr=False)
-    half_rect: QtCore.QRect = field(default_factory=QtCore.QRect, repr=False)
-    base_path: QtGui.QPainterPath = field(default_factory=QtGui.QPainterPath, repr=False)
-    popped_path: QtGui.QPainterPath = field(default_factory=QtGui.QPainterPath, repr=False)
-    mid_deg: float = 0.0
-    dx: int = 0
-    dy: int = 0
-    dx_max: int = 0
-    dy_max: int = 0
-
-
-class PieChartModel:
-    """Model for constructing PieChartSlice instances from expense data."""
-
-    def __init__(self) -> None:
-        self._slices: List[PieChartSlice] = []
-        self._version: int = 0
-
-    @property
-    def slices(self) -> List[PieChartSlice]:
-        return self._slices
-
-    @property
-    def version(self) -> int:
-        return self._version
-
-    def rebuild(self) -> None:
-        """Populate slices from the current filtered dataframe."""
-        df = data.get_data()
-
-        if df.empty:
-            logging.debug('PieChart: no data available')
-            self._slices = []
-            self._version += 1
-            return
-
-        df = df[(df['category'] != 'Total') & (df['category'] != '')]
-
-        if not lib.settings['exclude_negative'] and not lib.settings['exclude_positive']:
-            logging.warning('PieChart requires exclusively positive or negative totals')
-            self._slices = []
-            self._version += 1
-            return
-
-        df = df[df['total'] > 0] if lib.settings['exclude_negative'] else df[df['total'] < 0]
-        df = df.reset_index(drop=True)
-
-        if df.empty or df['total'].abs().sum() == 0:
-            self._slices = []
-            self._version += 1
-            return
-
-        total_abs = df['total'].abs().sum()
-        qt_circle = 360 * 16
-        rotation_qt = 90 * 16
-        spans: List[tuple[int, int, float]] = []
-
-        for idx, row in df.iterrows():
-            span_qt = int(round(abs(row['total']) / total_abs * qt_circle))
-            spans.append((idx, span_qt, abs(row['total'])))
-
-        used = sum(span for _, span, _ in spans)
-        leftover = qt_circle - used
-        if leftover:
-            largest_idx = max(spans, key=lambda x: x[2])[0]
-            for n, (idx, span_qt, val) in enumerate(spans):
-                if idx == largest_idx:
-                    spans[n] = (idx, span_qt + leftover, val)
-                    break
-
-        cfg = lib.settings.get_section('categories') or {}
-        cursor = 0
-        new_slices: List[PieChartSlice] = []
-
-        for idx, span_qt, _ in spans:
-            row = df.loc[idx]
-            cat = row['category']
-            amount_txt = locale.format_currency_value(abs(row['total']), lib.settings['locale'])
-            col_name = cfg.get(cat, {}).get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
-            color = QtGui.QColor(col_name) if QtGui.QColor(col_name).isValid() else ui.Color.Text()
-            icon_name = cfg.get(cat, {}).get('icon', 'cat_unclassified')
-
-            new_slices.append(
-                PieChartSlice(
-                    category=cat,
-                    amount_txt=amount_txt,
-                    value_abs=abs(row['total']),
-                    color=color,
-                    icon_name=icon_name,
-                    start_qt=(cursor + rotation_qt) % qt_circle,
-                    span_qt=span_qt,
-                )
-            )
-            cursor += span_qt
-
-        self._slices = new_slices
-        self._version += 1
-
-
-class PieChartView(QtWidgets.QWidget):
+class PieChartView(BaseChartView):
     """Interactive exploded-view pie chart."""
 
     hoverChanged = QtCore.Signal(int)  # emits -1 when nothing is hovered
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-
-        # currently selected category (for bi-directional selection)
-        self._selected_category: str = ''
+        # pie-specific settings: enable legend and icons by default
         self._show_legend = True
         self._show_icons = True
         self._show_tooltip = True
-
-        self.model = PieChartModel()
-
+        # explosion offsets
         self.min_offset_px = ui.Size.Indicator(1.0)
         self.max_offset_px = ui.Size.Indicator(10.0)
         self.gap_px = self.min_offset_px
-
-        self._geom_sig: tuple[int, int, int] = (-1, -1, -1)
-        self._hover_index: int = -1
-
-        self.setMouseTracking(True)
-        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
-        self._create_ui()
-        self._connect_signals()
-        self._init_actions()
-
-        QtCore.QTimer.singleShot(0, self.model.rebuild)
-
-    def _create_ui(self) -> None:
-        self.setMinimumSize(
-            ui.Size.DefaultWidth(0.5),
-            ui.Size.DefaultWidth(0.5)
-        )
-        self.setMaximumSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultWidth(1.0)
-        )
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-
-    def _connect_signals(self) -> None:
-        signals.presetAboutToBeActivated.connect(self.init_data)
-        signals.dataAboutToBeFetched.connect(self.init_data)
-        signals.dataFetched.connect(self.init_data)
-
-        @QtCore.Slot(str, object)
-        def metadata_changed(key: str, value: object) -> None:
-            if key in ('hide_empty_categories', 'exclude_negative', 'exclude_zero', 'exclude_positive', 'span',
-                       'yearmonth'):
-                self.init_data()
-
-        signals.metadataChanged.connect(metadata_changed)
-
-        sync.dataUpdated.connect(lambda _: self.init_data())
-
-        @QtCore.Slot(str)
-        def config_changed(section: str) -> None:
-            if section == 'categories':
-                self.init_data()
-            if section == 'mapping':
-                self.init_data()
-
-        signals.configSectionChanged.connect(config_changed)
-
-        # track external category selection to highlight corresponding slice
-        @QtCore.Slot(str)
-        def _on_category_changed(category: str) -> None:
-            self._selected_category = category or ''
-            self.update()
-
-        signals.categoryChanged.connect(_on_category_changed)
-
-    @QtCore.Slot()
-    def init_data(self) -> None:
-        self.model.rebuild()
-        self._geom_sig = (-1, -1, -1)
-        self.update()
 
     @staticmethod
     def _slice_path(rect: QtCore.QRect, start_deg: float, span_deg: float) -> QtGui.QPainterPath:
@@ -289,22 +100,6 @@ class PieChartView(QtWidgets.QWidget):
                 return index
         return -1
 
-    def paintEvent(self, _: QtGui.QPaintEvent) -> None:
-        self._recalc_geometry()
-
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-
-        self._draw_background(painter)
-        self._draw_slices(painter)
-
-        if self._show_legend:
-            self._draw_legend(painter)
-        if self._show_icons:
-            self._draw_icons(painter)
-        if self._show_tooltip:
-            self._draw_tooltip(painter)
-
     def _draw_background(self, painter: QtGui.QPainter) -> None:
         if self.property('rounded'):
             painter.setBrush(ui.Color.VeryDarkBackground())
@@ -341,20 +136,29 @@ class PieChartView(QtWidgets.QWidget):
         font, metrics = ui.Font.BoldFont(ui.Size.MediumText())
         painter.setFont(font)
 
+        # prepare legend label placement
+        slices_sorted = sorted(self.model.slices, key=lambda sl: sl.mid_deg)
         placed_boxes: List[QtCore.QRectF] = []
-
-        for idx, sl in sorted(enumerate(self.model.slices), key=lambda t: t[1].mid_deg):
+        # constrain legend within inner background rectangle
+        offset = ui.Size.Margin(1.0)
+        bg_rect = self.rect().adjusted(offset, offset, -offset, -offset)
+        legend_bound = bg_rect.adjusted(pad, pad, -pad, -pad)
+        # compute placement boxes
+        for sl in slices_sorted:
+            idx = self.model.slices.index(sl)
             rect_ref = sl.half_rect if idx == self._hover_index else sl.base_rect
             centre = rect_ref.center()
             base_r = rect_ref.width() / 2.0 + pad * 2
             theta = math.radians(sl.mid_deg)
-
             text = sl.amount_txt
             txt_w = metrics.horizontalAdvance(text)
             txt_h = metrics.height()
-
+            # limit iterations to avoid infinite loop
             current_r = base_r
-            while True:
+            max_radius = math.hypot(legend_bound.width(), legend_bound.height())
+            max_iters = int(max_radius / radial_step) + 1
+            box = QtCore.QRectF()
+            for _ in range(max_iters):
                 cx = centre.x() + current_r * math.cos(theta)
                 cy = centre.y() - current_r * math.sin(theta)
                 box = QtCore.QRectF(
@@ -363,23 +167,23 @@ class PieChartView(QtWidgets.QWidget):
                     txt_w + pad * 2,
                     txt_h + pad * 2,
                 )
-
-                if all(not box.intersects(other) for other in placed_boxes):
-                    placed_boxes.append(box)
+                if all(not box.intersects(other) for other in placed_boxes) and \
+                        box.left() >= legend_bound.left() and box.right() <= legend_bound.right() and \
+                        box.top() >= legend_bound.top() and box.bottom() <= legend_bound.bottom():
                     break
-
                 current_r += radial_step
-
-        for sl, box in zip(self.model.slices, placed_boxes):
+            placed_boxes.append(box)
+        # draw legend boxes and labels in sorted order
+        for sl, box in zip(slices_sorted, placed_boxes):
             painter.save()
             painter.setOpacity(0.5)
             painter.setBrush(ui.Color.VeryDarkBackground())
             painter.setPen(QtCore.Qt.NoPen)
             painter.drawRoundedRect(box, pad, pad)
             painter.restore()
-
             painter.setPen(ui.Color.Text())
-            painter.drawText(QtCore.QPointF(box.x() + pad, box.y() + pad + metrics.ascent()), sl.amount_txt)
+            painter.drawText(
+                QtCore.QPointF(box.x() + pad, box.y() + pad + metrics.ascent()), sl.amount_txt)
 
     def _draw_icons(self, painter: QtGui.QPainter) -> None:
         if not self.model.slices:
@@ -435,119 +239,6 @@ class PieChartView(QtWidgets.QWidget):
             QtCore.QPointF(bg.x() + pad + icon_size + pad, bg.y() + pad + metrics.ascent()),
             text,
         )
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        self.update()  # smooth tooltip tracking
-        idx = self._slice_at(event.pos())
-        if idx != self._hover_index:
-            self._hover_index = idx
-            self.hoverChanged.emit(idx)
-            self.update()
-        super().mouseMoveEvent(event)
-
-    def leaveEvent(self, event: QtCore.QEvent) -> None:
-        if self._hover_index != -1:
-            self._hover_index = -1
-            self.hoverChanged.emit(-1)
-            self.update()
-        super().leaveEvent(event)
-
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        """Handle clicks on slices to select category and notify other views."""
-        idx = self._slice_at(event.pos())
-        # determine selected category (empty to clear)
-        if idx >= 0 and idx < len(self.model.slices):
-            cat = self.model.slices[idx].category
-        else:
-            cat = ''
-        # update own selection and redraw
-        self._selected_category = cat
-        self.update()
-        # emit global selection change
-        signals.categoryChanged.emit(cat)
-        super().mousePressEvent(event)
-
-    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
-        """Open category icon/color editor on double-click of a pie segment."""
-        idx = self._slice_at(event.pos())
-        if 0 <= idx < len(self.model.slices):
-            category = self.model.slices[idx].category
-            from ...ui.palette import CategoryIconColorEditorDialog
-
-            dlg = CategoryIconColorEditorDialog(category, self)
-            dlg.iconChanged.connect(lambda _: self.init_data())
-            dlg.colorChanged.connect(lambda _: self.init_data())
-            dlg.open()
-        super().mouseDoubleClickEvent(event)
-
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
-        self._geom_sig = (-1, -1, -1)
-        self.update()
-        super().resizeEvent(event)
-
-    def _init_actions(self):
-        @QtCore.Slot(bool)
-        def toggle_legend(checked: bool) -> None:
-            self._show_legend = checked
-            self.update()
-
-        action = QtGui.QAction('Toggle Legend', self)
-        action.setCheckable(True)
-        action.setChecked(self._show_legend)
-        action.setToolTip('Show/hide legend')
-        action.setStatusTip('Show/hide legend')
-        action.setWhatsThis('Show/hide legend')
-        action.setShortcut(QtGui.QKeySequence('alt+1'))
-        action.triggered.connect(toggle_legend)
-        self.addAction(action)
-
-        @QtCore.Slot(bool)
-        def toggle_icons(checked: bool) -> None:
-            self._show_icons = checked
-            self.update()
-
-        action = QtGui.QAction('Toggle Icons', self)
-        action.setCheckable(True)
-        action.setChecked(self._show_icons)
-        action.setToolTip('Show/hide icons')
-        action.setStatusTip('Show/hide icons')
-        action.setWhatsThis('Show/hide icons')
-        action.setShortcut(QtGui.QKeySequence('alt+2'))
-        action.triggered.connect(toggle_icons)
-        self.addAction(action)
-
-        @QtCore.Slot(bool)
-        def toggle_tooltip(checked: bool) -> None:
-            self._show_tooltip = checked
-            self.update()
-
-        action = QtGui.QAction('Toggle Tooltip', self)
-        action.setCheckable(True)
-        action.setChecked(self._show_tooltip)
-        action.setToolTip('Show/hide tooltip')
-        action.setStatusTip('Show/hide tooltip')
-        action.setWhatsThis('Show/hide tooltip')
-        action.setShortcut(QtGui.QKeySequence('alt+3'))
-        action.triggered.connect(toggle_tooltip)
-        self.addAction(action)
-
-        # separator for reload chart action
-        action = QtGui.QAction('', self)
-        action.setSeparator(True)
-        self.addAction(action)
-
-        @QtCore.Slot()
-        def reload_chart() -> None:
-            """Reload pie chart data explicitly."""
-            self.init_data()
-
-        action = QtGui.QAction('Reload Chart', self)
-        action.setToolTip('Reload pie chart')
-        action.setStatusTip('Reload pie chart')
-        action.setShortcut(QtGui.QKeySequence('Ctrl+R'))
-        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
-        action.triggered.connect(reload_chart)
-        self.addAction(action)
 
 
 class PieChartDockWidget(DockableWidget):
