@@ -16,6 +16,7 @@ from .editors import header_editor
 from .editors import metadata_editor
 from .editors import spreadsheet_editor
 from ..ui import ui
+from ..ui.dockable_widget import DockableWidget
 
 
 class SettingsScrollArea(QtWidgets.QScrollArea):
@@ -172,17 +173,12 @@ class SettingsWidget(QtWidgets.QWidget):
         )
 
 
-class SettingsDockWidget(QtWidgets.QDockWidget):
+class SettingsDockWidget(DockableWidget):
     """Dockable widget for editing app settings."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__('Settings', parent=parent)
+        super().__init__('Settings', parent=parent, min_width=ui.Size.DefaultWidth(1.0))
         self.setObjectName('ExpenseTrackerSettingsWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
-        )
 
         content = QtWidgets.QWidget(self)
         QtWidgets.QVBoxLayout(content)
@@ -193,6 +189,5 @@ class SettingsDockWidget(QtWidgets.QDockWidget):
         settings_widget.setWindowFlags(QtCore.Qt.Widget)
         content.layout().addWidget(settings_widget, 1)
 
-        self.setMinimumWidth(ui.Size.DefaultWidth(1.0))
 
         self.setWidget(content)
