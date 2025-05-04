@@ -235,7 +235,7 @@ class DatabaseAPI(QtCore.QObject):
         """
 
         conn = sqlite3.connect(str(lib.settings.db_path), timeout=2.0)
-        conn.set_progress_handler(lambda: logging.warning('Waiting on DB lock…'), 1000)
+        conn.set_progress_handler(lambda: logging.debug('Waiting on DB lock…'), 1000)
         return conn
 
     @staticmethod
