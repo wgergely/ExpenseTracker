@@ -12,6 +12,7 @@ from . import log
 from .model import LogFilterProxyModel, Columns
 from .model import LogTableModel, get_handler
 from ..ui import ui
+from ..ui.dockable_widget import DockableWidget
 
 
 class LogTableView(QtWidgets.QTableView):
@@ -93,17 +94,12 @@ class LogTableView(QtWidgets.QTableView):
         )
 
 
-class LogDockWidget(QtWidgets.QDockWidget):
+class LogDockWidget(DockableWidget):
     """Dockable widget for viewing app logs."""
 
     def __init__(self, parent=None) -> None:
         super().__init__('Logs', parent)
         self.setObjectName('ExpenseTrackerLogDockWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
-        )
 
         widget = QtWidgets.QWidget(self)
         widget.setProperty('rounded', True)
