@@ -14,6 +14,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from . import ui
 from .yearmonth import RangeSelectorBar
 from ..core import database
+from ..data.view.doughnut import DoughnutDockWidget
 from ..data.view.expense import ExpenseView
 from ..data.view.piechart import PieChartDockWidget
 from ..data.view.transaction import TransactionsWidget
@@ -65,7 +66,7 @@ class TitleLabel(QtWidgets.QWidget):
         painter.setBrush(ui.Color.Text())
 
         font, metrics = self.get_font()
-        x = self.rect().x() + ui.Size.Margin(0.5)
+        x = self.rect().x()
         y = self.rect().center().y() + metrics.height() / 2.0 - metrics.descent()
 
         path = QtGui.QPainterPath()
@@ -121,8 +122,8 @@ class TitleBar(QtWidgets.QWidget):
         QtWidgets.QHBoxLayout(self)
         self.setObjectName('ExpenseTrackerTitleBar')
 
-        o = ui.Size.Margin(1.5)
-        self.layout().setContentsMargins(0, 0, 0, 0)
+        o = ui.Size.Margin(1.0)
+        self.layout().setContentsMargins(o, 0, -o, 0)
         self.layout().setSpacing(ui.Size.Indicator(2.0))
         self.layout().setAlignment(QtCore.Qt.AlignCenter)
 
@@ -333,6 +334,15 @@ class MainWindow(ResizableMainWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
+        # Enable nested and animated docking behaviors
+        opts = self.dockOptions()
+        opts |= QtWidgets.QMainWindow.AllowNestedDocks | QtWidgets.QMainWindow.AnimatedDocks
+        self.setDockOptions(opts)
+        # Position dock-tabs: horizontal at top/bottom, vertical on sides
+        self.setTabPosition(QtCore.Qt.LeftDockWidgetArea, QtWidgets.QTabWidget.West)
+        self.setTabPosition(QtCore.Qt.RightDockWidgetArea, QtWidgets.QTabWidget.East)
+        self.setTabPosition(QtCore.Qt.TopDockWidgetArea, QtWidgets.QTabWidget.North)
+        self.setTabPosition(QtCore.Qt.BottomDockWidgetArea, QtWidgets.QTabWidget.South)
         self.setWindowTitle(app_name)
 
         self.setObjectName('ExpenseTrackerMainWindow')
@@ -419,6 +429,12 @@ class MainWindow(ResizableMainWidget):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.piechart_view)
         self.piechart_view.hide()
 
+        # Add doughnut chart dock (right side)
+        self.doughnut_view = DoughnutDockWidget(parent=self)
+        self.doughnut_view.setObjectName('ExpenseTrackerDoughnutDockWidget')
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.doughnut_view)
+        self.doughnut_view.hide()
+
     def _connect_signals(self):
         signals.openTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
@@ -487,6 +503,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.presets_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.presets_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_presets'))
 
         action = QtGui.QAction('Transactions', self)
         action.setCheckable(True)
@@ -500,6 +518,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(signals.openTransactions)
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.transactions_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_transactions'))
 
         action = QtGui.QAction('Trends', self)
         action.setCheckable(True)
@@ -513,6 +533,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.trends_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.trends_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_trend'))
         # Pie Chart toggle
         action = QtGui.QAction('Pie Chart', self)
         action.setCheckable(True)
@@ -522,6 +544,18 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.piechart_view.toggled.connect(action.setChecked)
+
+        # Doughnut Chart toggle
+        action = QtGui.QAction('Doughnut Chart', self)
+        action.setCheckable(True)
+        action.setChecked(self.doughnut_view.isVisible())
+        action.setToolTip('Show doughnut chart...')
+        action.setStatusTip('Show doughnut chart...')
+        action.triggered.connect(functools.partial(toggle_vis, self.doughnut_view))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+        self.doughnut_view.toggled.connect(action.setChecked)
 
         # Separator
         action = QtGui.QAction(self)
@@ -542,6 +576,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.log_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.log_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_log'))
 
         action = QtGui.QAction('Settings', self)
         action.setIcon(ui.get_icon('btn_settings', color=ui.Color.DisabledText))
@@ -555,6 +591,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.settings_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        self.settings_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_settings'))
 
         # Separator
         action = QtGui.QAction(self)
@@ -646,6 +684,8 @@ class MainWindow(ResizableMainWidget):
             self.showMaximized()
         else:
             self.clamp_window_to_screens()
+        # synchronize toolbar toggle button states with dock visibility
+        self._sync_dock_toggle_actions()
 
     def clamp_window_to_screens(self) -> None:
         frame = self.frameGeometry()
@@ -660,3 +700,15 @@ class MainWindow(ResizableMainWidget):
         y = max(avail.top(), min(frame.y(), avail.bottom() - height))
 
         self.setGeometry(x, y, width, height)
+
+    def _sync_dock_toggle_actions(self) -> None:
+        """Ensure toolbar toggle buttons reflect current dock visibility."""
+        for view in (
+                self.presets_view,
+                self.transactions_view,
+                self.trends_view,
+                self.piechart_view,
+                self.log_view,
+                self.settings_view,
+        ):
+            view.toggled.emit(view.isVisible())
