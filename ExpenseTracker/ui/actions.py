@@ -44,8 +44,11 @@ class Signals(QtCore.QObject):
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal(pandas.DataFrame)
 
-    expenseCategoryChanged = QtCore.Signal(list)
+    # Emitted when the selected category's transactions change
+    transactionsChanged = QtCore.Signal(list)
     categoryChanged = QtCore.Signal(str)
+    # Request that expense view update its category selection (slice or row)
+    categoryUpdateRequested = QtCore.Signal(str)
 
     showSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
