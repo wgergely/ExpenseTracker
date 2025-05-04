@@ -1,0 +1,101 @@
+ExpenseTracker Privacy Policy
+
+Last Updated: May 3, 2025
+
+
+TL;DR
+
+ExpenseTracker doesn't collect or store your personal data. Everything stays on your device or your Google account. No
+data is transmitted or shared with anyone else.
+
+
+POLICY
+
+This Privacy Policy explains how ExpenseTracker ("the app") handles your data and outlines your rights. By using the
+app, you agree to the practices described in this Privacy Policy.
+
+
+Introduction and Overview
+
+ExpenseTracker is an open source desktop app that helps you monitor expenses using data from a connected Google Sheets
+document. The app does not collect or share personal data. It operates entirely on your device, using Google’s official
+APIs with your permission. This policy details minimal data handling, compliance with GDPR, CCPA, and includes
+disclaimers of liability.
+
+
+No Personal Data Collected or Transmitted
+
+The app does not collect, log, or transmit any personal data or personally identifiable information (PII). The app
+contains no tracking or analytics tools. The app does not transmit any information to external servers except Google
+Sheets when explicitly requested by you. The app does not sell, trade, or share any data. All data processing is local
+on your device and in your Google Sheets. The app does store a cached, unencrypted copy of your Google Sheets data for
+local use. This data is never sent to any external servers or shared with any third parties. The app does not use
+cookies or other tracking technologies.
+
+
+Google Sheets Access via OAuth and the official Google Python API
+
+The app uses Google’s OAuth 2.0 to securely access data in Google Sheets. You authorize it directly through Google, and
+your credentials are never exposed to the developer. Only necessary permissions are requested, and OAuth tokens are
+stored locally on your device. You can revoke access anytime via Google Account settings. The app fully complies with
+Google’s policies.
+
+
+Local Data Storage and Security
+
+All app data, including Google OAuth tokens, is stored securely on your local device using standard OS-provided
+mechanisms.
+
+
+Optional Use of Custom Google Credentials
+
+
+You may use your own Google Cloud Project credentials and Client Secret instead of the default shipping one.
+
+If using the default credentials, Google provides anonymous aggregate metrics to the developer, such as the
+number of API requests but no personal or identifiable data and no aggregate data is never shared externally.
+
+
+Third-Party Services
+
+**Google Sheets API (Google LLC):** Governed by Google’s terms and privacy policy.
+**No other external APIs:** No additional third-party integrations.
+**Open-source libraries:** Included libraries do not collect data.
+
+
+Your Privacy Rights and Choices
+
+Due to no data collection, most privacy rights are inherently respected.
+
+
+GDPR (EU)
+
+No personal data is collected or processed, thus aligning fully with GDPR principles.
+
+
+CCPA (California)
+
+The app collects no personal data, thus inherently complying with CCPA.
+
+
+Other Jurisdictions
+
+Compliance with privacy laws globally by default due to no data collection.
+
+
+Disclaimer of Warranties and Liability
+
+ExpenseTracker is provided "AS IS" without any warranties or liability for damages or data loss.
+
+
+Changes to This Privacy Policy
+
+This policy may be updated. Users will be notified through appropriate channels. Your continued use signifies acceptance
+ of changes.
+
+
+Contact
+For questions or concerns, contact:
+
+**Developer:** Gergely Wootsch
+**Email:** [hello+ExpenseTracker@gergely-wootsch.com](mailto:hello+ExpenseTracker@gergely-wootsch.com)
