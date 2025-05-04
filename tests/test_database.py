@@ -31,7 +31,6 @@ from ExpenseTracker.settings import lib
 from ExpenseTracker.status import status
 from tests.base import BaseTestCase, mute_ui_signals
 
-# --------------------------------------------------------------------------- helpers
 HDR_TYPES_BASE = {
     'Date': 'date',
     'Amount': 'float',
@@ -51,7 +50,6 @@ def df(rows: List[List[Any]] | None = None) -> pd.DataFrame:
 
 
 class DatabaseAPITests(BaseTestCase):
-    # ------------------------------------------------ helpers
     def _apply_header_cfg(self, hdr_map: dict | None = None):
         lib.settings.set_section('header', hdr_map or HDR_TYPES_BASE)
 
@@ -59,7 +57,6 @@ class DatabaseAPITests(BaseTestCase):
         with mute_ui_signals():
             DatabaseAPI.cache_data(frame)
 
-    # ------------------------------------------------ cast helpers
     def test_cast_type_matrix(self):
         self._apply_header_cfg()
 
@@ -91,7 +88,6 @@ class DatabaseAPITests(BaseTestCase):
         with self.assertRaises(status.HeadersInvalidException):
             cast_type('NoSuchHeader', 1)
 
-    # ------------------------------------------------ cache & verify
     def test_cache_empty_state_empty(self):
         self._apply_header_cfg()
         self._cache_df(pd.DataFrame(columns=list(HDR_TYPES_BASE)))
@@ -107,7 +103,6 @@ class DatabaseAPITests(BaseTestCase):
         frame = DatabaseAPI.data().drop(columns=['local_id'])
         pd.testing.assert_frame_equal(frame.reset_index(drop=True), df(), check_dtype=False)
 
-    # ------------------------------------------------ header mismatch / stale
     def test_column_mismatch_marks_stale(self):
         self._apply_header_cfg()
         bad = pd.DataFrame([['x']], columns=['Wrong'])
@@ -141,7 +136,6 @@ class DatabaseAPITests(BaseTestCase):
             DatabaseAPI.verify()
         self.assertEqual(DatabaseAPI.get_state(), CacheState.Stale)
 
-    # ------------------------------------------------ row helpers
     def test_get_row_and_update_cell(self):
         self._apply_header_cfg()
         self._cache_df(df())
@@ -155,7 +149,6 @@ class DatabaseAPITests(BaseTestCase):
         with self.assertRaises(sqlite3.OperationalError):
             DatabaseAPI.update_cell(1, 'Bogus', 'x')
 
-    # ------------------------------------------------ delete retry
     def test_delete_retries(self):
         self._apply_header_cfg()
         self._cache_df(df())
@@ -176,7 +169,6 @@ class DatabaseAPITests(BaseTestCase):
 
         self.assertFalse(target.exists())
 
-    # ------------------------------------------------ verify without db / meta
     def test_verify_missing_db_file(self):
         self._apply_header_cfg()
         self._cache_df(df())
@@ -197,7 +189,6 @@ class DatabaseAPITests(BaseTestCase):
         with self.assertRaises((status.CacheInvalidException, sqlite3.OperationalError)):
             DatabaseAPI.verify()
 
-    # ------------------------------------------------ reset_cache
     def test_reset_cache_deletes_file(self):
         self._apply_header_cfg()
         self._cache_df(df())
@@ -207,7 +198,6 @@ class DatabaseAPITests(BaseTestCase):
         DatabaseAPI().reset_cache()
         self.assertFalse(db_file.exists())
 
-    # ------------------------------------------------ data() read error
     def test_data_read_sql_fails_returns_empty(self):
         self._apply_header_cfg()
         self._cache_df(df())
@@ -215,7 +205,6 @@ class DatabaseAPITests(BaseTestCase):
         with patch('ExpenseTracker.core.database.pd.read_sql_query', side_effect=sqlite3.DatabaseError):
             self.assertTrue(DatabaseAPI.data().empty)
 
-    # ------------------------------------------------ progress handler
     def test_progress_handler_warning_logged(self):
         self._apply_header_cfg()
         self._cache_df(df())
