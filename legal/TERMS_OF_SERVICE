@@ -1,0 +1,63 @@
+ExpenseTracker – Terms of Use
+
+Acceptance of Terms
+
+By downloading, installing, or using ExpenseTracker (the "Software"), you agree to be bound by these Terms of Use
+("Terms"). If you disagree with these Terms, you must uninstall the Software immediately.
+
+License and Open Source Software  
+
+ExpenseTracker is open-source software distributed under the GNU General Public License version 3 (GPL v3). Your rights
+to use, modify, and distribute the Software are governed by the GPL v3. A copy of the GPL v3 license is included with
+the Software and can be found at https://www.gnu.org/licenses/gpl-3.0.html.
+
+Under GPL v3 you may copy, distribute and modify the software as long as you track changes/dates of in source files and
+keep modifications under GPL. You can distribute your application using a GPL library commercially, but you must also
+provide the source code.
+
+Contributions
+
+By contributing code or suggestions to ExpenseTracker, you agree that such contributions will be licensed under GPL v3
+and may be freely used, modified, and incorporated into the Software without further obligation.
+
+Google API and OAuth Usage  
+
+ExpenseTracker integrates with Google APIs using OAuth credentials. Your use of Google’s services through ExpenseTracker
+ is subject to Google's Terms of Service and Privacy Policy. You must ensure compliance with Google's requirements
+ independently.
+
+Disclaimer of Warranties
+
+ExpenseTracker is provided "AS IS" without any warranties of any kind. The Developer disclaims all express or implied
+warranties, including warranties of merchantability, fitness for a particular purpose, and non-infringement. You assume
+all risks associated with the use, performance, and security of the Software.
+
+Limitation of Liability  
+
+To the fullest extent permitted by applicable law, the Developer will not be liable for any damages arising from your
+use of or inability to use the Software, including but not limited to data loss, economic loss, or damage to computer
+systems.
+
+No Support or Updates Guarantee  
+
+The Developer provides no formal support or guarantee of updates. The Software is provided without any commitment to
+future functionality or compatibility.
+
+Termination  
+
+Your rights under these Terms and the GPL v3 license remain effective until terminated. Violation of these Terms or GPL
+v3 provisions terminates your license to use the Software immediately.
+
+Changes to Terms  
+
+These Terms may be modified at any time. Continued use of the Software after changes indicates your acceptance of the
+revised Terms.
+
+Governing Law
+
+These Terms are governed by the laws applicable in your jurisdiction to the extent mandatory, or otherwise by the laws
+of the Developer’s jurisdiction.
+
+Contact  
+
+Questions or comments regarding these Terms may be directed to [hello+ExpenseTracker@gergely-wootsch.com].
