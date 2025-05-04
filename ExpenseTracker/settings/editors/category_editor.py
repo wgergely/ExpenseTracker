@@ -97,16 +97,16 @@ class CategoriesModel(QtCore.QAbstractTableModel):
     def data(self, index, role=QtCore.Qt.DisplayRole):
         if not index.isValid():
             return None
+
         row = index.row()
         col = index.column()
         cat = self._categories[row]
+
         if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
             if col == COL_NAME:
                 return cat['name']
             elif col == COL_DISPLAY_NAME:
-                if role == QtCore.Qt.DisplayRole and not cat['display_name']:
-                    return cat['name']
-                return cat['display_name']
+                return cat['display_name'] or ''
             elif col == COL_DESCRIPTION:
                 return cat['description']
             elif col == COL_ICON:
@@ -122,12 +122,14 @@ class CategoriesModel(QtCore.QAbstractTableModel):
             else:
                 font, _ = ui.Font.MediumFont(ui.Size.MediumText(1.0))
             return font
+
         if role == QtCore.Qt.TextAlignmentRole:
             if col in (COL_NAME, COL_DISPLAY_NAME):
                 return QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
             elif col == COL_DESCRIPTION:
                 return QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
             return QtCore.Qt.AlignCenter
+
         if role == QtCore.Qt.ForegroundRole:
             if col == COL_NAME:
                 return ui.Color.SecondaryText()
@@ -156,15 +158,20 @@ class CategoriesModel(QtCore.QAbstractTableModel):
                 logging.warning(f'Category name "{new_name}" already exists.')
                 return False
             cat['name'] = new_name
+
         elif col == COL_DISPLAY_NAME:
             cat['display_name'] = str(value).strip()
+
         elif col == COL_DESCRIPTION:
             cat['description'] = str(value).strip()
+
         elif col == COL_ICON:
             icon_val = value if value else DEFAULT_ICON
             cat['icon'] = icon_val
+
         elif col == COL_EXCLUDED:
             cat['excluded'] = bool(value)
+
         else:
             return False
 
@@ -440,7 +447,38 @@ class CategoryEditor(QtWidgets.QWidget):
         self.layout().addWidget(self.view)
 
     def _connect_signals(self):
-        pass
+        @QtCore.Slot()
+        def on_selection_changed():
+            if not self.view.selectionModel().hasSelection():
+                return
+
+            index = next(iter(self.view.selectionModel().selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                return
+
+            index = index.sibling(index.row(), COL_NAME)
+            if not index.isValid():
+                return
+
+            category = index.data(QtCore.Qt.EditRole)
+            signals.categoryUpdateRequested.emit(category)
+
+        self.view.selectionModel().selectionChanged.connect(on_selection_changed)
+
+        @QtCore.Slot(str)
+        def on_category_selected(category):
+            sel = self.view.selectionModel()
+
+            for i in range(self.view.model().rowCount()):
+                index = self.view.model().index(i, COL_NAME)
+                if index.data(QtCore.Qt.EditRole) == category:
+                    sel.clearSelection()
+                    sel.select(index, QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows)
+                    sel.setCurrentIndex(index, QtCore.QItemSelectionModel.NoUpdate)
+                    self.view.scrollTo(index)
+                    break
+
+        signals.categoryChanged.connect(on_category_selected)
 
     def _init_model(self):
         model = CategoriesModel(parent=self)
