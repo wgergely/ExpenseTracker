@@ -7,6 +7,7 @@ This module provides:
 """
 import logging
 from copy import deepcopy
+from typing import Optional
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
@@ -15,6 +16,7 @@ from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRol
 from ...settings import lib
 from ...ui import ui
 from ...ui.actions import signals
+from ...ui.dockable_widget import DockableWidget
 
 
 class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
@@ -41,7 +43,7 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         painter.setOpacity(self.parent().weight_anim_value)
 
         icon.paint(painter, rect, QtCore.Qt.AlignCenter)
-    
+
     def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
                      index: QtCore.QModelIndex) -> QtWidgets.QWidget:
         # Placeholder editor to launch the category icon/color dialog
@@ -141,6 +143,9 @@ class ExpenseView(QtWidgets.QTableView):
         self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
 
+        config = lib.settings.get_section('categories') or {}
+        self._saved_category = next(iter(config.keys()), '')
+
         self.weight_anim_value = 0.0
 
         self._weight_anim = QtCore.QVariantAnimation(self)
@@ -164,7 +169,6 @@ class ExpenseView(QtWidgets.QTableView):
         proxy = ExpenseSortFilterProxyModel()
         proxy.setSourceModel(model)
         self.setModel(proxy)
-
         self._init_section_sizing()
 
     def _init_delegates(self) -> None:
@@ -172,8 +176,6 @@ class ExpenseView(QtWidgets.QTableView):
         self.setItemDelegateForColumn(Columns.Weight.value, WeightColumnDelegate(self))
 
     def _init_actions(self) -> None:
-
-        # separator
         action = QtGui.QAction('', self)
         action.setSeparator(True)
         action.setEnabled(False)
@@ -321,17 +323,12 @@ class ExpenseView(QtWidgets.QTableView):
         self.addAction(action)
 
     def _connect_signals(self) -> None:
-        # preserve selection across model resets
-        # flag to suppress emitting categoryChanged when restoring selection
-        self._suppress_emit = False
         self.activated.connect(signals.openTransactions)
-        # initialize saved category to the default from settings
-        categories_cfg = lib.settings.get_section('categories') or {}
-        self._saved_category = next(iter(categories_cfg.keys()), '')
-        src = self.model().sourceModel()
-        src.modelAboutToBeReset.connect(self._save_category_selection)
-        # delay restore to ensure model has finished resetting its internal state
-        src.modelReset.connect(lambda: QtCore.QTimer.singleShot(0, self._restore_category_selection))
+
+        self.model().sourceModel().modelAboutToBeReset.connect(self.save_category_selection)
+        self.model().sourceModel().modelReset.connect(
+            lambda: QtCore.QTimer.singleShot(10, self.restore_category_selection))
+
         self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
         self.model().sourceModel().modelReset.connect(self._weight_anim.start)
 
@@ -342,87 +339,81 @@ class ExpenseView(QtWidgets.QTableView):
 
         self._weight_anim.valueChanged.connect(on_anim_value_chaged)
 
-        @QtCore.Slot()
-        def emit_category_selection_changed() -> None:
-            # skip when we're programmatically restoring selection
-            if getattr(self, '_suppress_emit', False):
-                return
-            if not self.selectionModel().hasSelection():
-                logging.debug('No selection')
-                signals.expenseCategoryChanged.emit([])
-                signals.categoryChanged.emit('')
-                return
+        # emit transaction and category changes on user selection
+        self.selectionModel().selectionChanged.connect(self.emit_category_selection_changed)
 
-            index = next(iter(self.selectionModel().selectedIndexes()), QtCore.QModelIndex())
-            if not index.isValid():
-                logging.debug('No valid index')
-                signals.expenseCategoryChanged.emit([])
-                signals.categoryChanged.emit('')
-                return
-
-            v = index.data(TransactionsRole)
-            if not v:
-                v = []
-            else:
-                v = deepcopy(v)
-            logging.debug('Category selection changed')
-            signals.expenseCategoryChanged.emit(v)
-
-            category = index.data(CategoryRole)
-            if not category:
-                logging.debug('No category selected')
-                signals.categoryChanged.emit('')
-                return
-
-            logging.debug(f'Category selected: {category}')
-            signals.categoryChanged.emit(category)
-
-        self.selectionModel().selectionChanged.connect(emit_category_selection_changed)
-        self.model().sourceModel().modelReset.connect(emit_category_selection_changed)
-
-        # respond to external category selections (e.g. from pie chart)
+        # respond to external category selection requests (e.g. from charts)
         @QtCore.Slot(str)
-        def _on_external_category_changed(category: str) -> None:
+        def _on_external_category_requested(category: str) -> None:
             # only respond to new non-empty external selections
             if not category or category == self._saved_category:
                 return
             self._saved_category = category
-            QtCore.QTimer.singleShot(0, self._restore_category_selection)
-        signals.categoryChanged.connect(_on_external_category_changed)
+            QtCore.QTimer.singleShot(0, self.restore_category_selection)
 
-    def _save_category_selection(self) -> None:
-        """Save the selected category before the model is reset."""
-        # only update when a valid category is selected; otherwise keep previous
-        idx = self.selectionModel().currentIndex()
-        if idx.isValid():
-            self._saved_category = idx.data(CategoryRole)
+        # charts emit categoryUpdateRequested to change selection in expense view
+        signals.categoryUpdateRequested.connect(_on_external_category_requested)
 
-    def _restore_category_selection(self) -> None:
-        """Restore the selected category after the model has been reset."""
-        if not getattr(self, '_saved_category', None):
+    @QtCore.Slot()
+    def emit_category_selection_changed(self) -> None:
+        """Emit signals for the selected category's transactions and key."""
+        sel = self.selectionModel()
+        if not sel.hasSelection():
+            logging.debug('No selection')
+            signals.transactionsChanged.emit([])
+            signals.categoryChanged.emit('')
             return
-        # suppress emitting when restoring selection
-        self._suppress_emit = True
-        try:
-            proxy = self.model()
-            cat_col = Columns.Category.value
-            selmodel = self.selectionModel()
-            # find and select the saved category row
-            for row in range(proxy.rowCount()):
-                idx0 = proxy.index(row, 0)
-                idx = idx0.sibling(row, cat_col)
-                if idx.data(CategoryRole) == self._saved_category:
-                    selmodel.clearSelection()
-                    selmodel.select(
-                        idx,
-                        QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows
-                    )
-                    selmodel.setCurrentIndex(
-                        idx, QtCore.QItemSelectionModel.NoUpdate
-                    )
-                    break
-        finally:
-            self._suppress_emit = False
+
+        index = next(iter(sel.selectedIndexes()), QtCore.QModelIndex())
+        if not index.isValid():
+            logging.debug('No valid index')
+            signals.transactionsChanged.emit([])
+            signals.categoryChanged.emit('')
+            return
+
+        v = index.data(TransactionsRole) or []
+        v = deepcopy(v)
+        logging.debug('Category selection changed')
+        signals.transactionsChanged.emit(v)
+        category = index.data(CategoryRole) or ''
+        logging.debug(f'Category selected: {category}')
+        signals.categoryChanged.emit(category)
+
+    @QtCore.Slot()
+    def save_category_selection(self) -> None:
+        """Save the selected category before the model is reset."""
+        logging.debug('Saving category selection')
+
+        sel = self.selectionModel()
+        if not sel.hasSelection():
+            return
+
+        index = next(iter(sel.selectedIndexes()), QtCore.QModelIndex())
+        if not index.isValid():
+            return
+
+        self._saved_category = index.data(CategoryRole)
+
+    @QtCore.Slot()
+    def restore_category_selection(self) -> None:
+        """Restore the selected category after the model has been reset."""
+
+        proxy = self.model()
+        col = Columns.Category.value
+        sel = self.selectionModel()
+
+        for row in range(proxy.rowCount()):
+            index = proxy.index(row, 0)
+            index = index.sibling(row, col)
+            if index.data(CategoryRole) == self._saved_category:
+                logging.debug(f'Restoring category selection: {self._saved_category}')
+                sel.clearSelection()
+                sel.select(index,
+                           QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows)
+                sel.setCurrentIndex(index, QtCore.QItemSelectionModel.NoUpdate)
+                break
+
+        self.emit_category_selection_changed()
 
     def _init_section_sizing(self) -> None:
         header = self.horizontalHeader()
@@ -439,3 +430,15 @@ class ExpenseView(QtWidgets.QTableView):
             ui.Size.DefaultWidth(1.0),
             ui.Size.DefaultHeight(1.0)
         )
+
+
+class ExpenseDockWidget(DockableWidget):
+    """Dockable widget for displaying the expense view. Not closeable."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__('Expenses', parent=parent, closable=False)
+
+        self.setObjectName('ExpenseTrackerExpenseDockWidget')
+        view = ExpenseView(self)
+        view.setObjectName('ExpenseTrackerExpenseView')
+        self.setWidget(view)
