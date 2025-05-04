@@ -13,6 +13,7 @@ from PySide6 import QtWidgets, QtGui, QtCore
 from .lib import PresetType
 from .model import PresetModel, PresetsSortFilterProxyModel, Columns
 from ...ui import ui
+from ...ui.dockable_widget import DockableWidget
 
 
 class PresetsListDelegate(QtWidgets.QStyledItemDelegate):
@@ -142,24 +143,18 @@ class PresetsListView(QtWidgets.QTableView):
         self.activated.connect(activated)
 
 
-class PresetsDockWidget(QtWidgets.QDockWidget):
+class PresetsDockWidget(DockableWidget):
     """
     Dockable widget for listing and managing presets.
     """
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__('Presets', parent=parent)
+        super().__init__('Presets', parent=parent, min_width=ui.Size.DefaultWidth(0.6))
         self.setObjectName('ExpenseTrackerPresetsWidget')
-        self.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFloatable |
-            QtWidgets.QDockWidget.DockWidgetClosable
-        )
 
         self.toolbar: QtWidgets.QToolBar
         self.view: PresetsListView
 
-        self.setMinimumWidth(ui.Size.DefaultWidth(0.6))
 
         self._create_ui()
         self._init_actions()
