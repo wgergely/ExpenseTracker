@@ -171,7 +171,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                     return 'Total*'
 
                 if category == '':
-                    return 'Uncategorized'
+                    return '(Uncategorized)'
 
                 categories_cfg = lib.settings.get_section('categories')
                 if not categories_cfg:
@@ -230,14 +230,21 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def init_data(self) -> None:
         logging.debug('Initializing model data')
         self.beginResetModel()
-        try:
-            df = get_data()
-            self._df = df.reset_index(drop=True)
 
+        df = get_data()
+
+        if df is None or df.empty:
+            logging.debug('No data available')
+            self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
+            return
+
+        self._df = df.reset_index(drop=True)
+
+        try:
             for k in lib.EXPENSE_DATA_COLUMNS:
                 self._cache[k] = self._df[k].tolist()
 
-            #    If your last row is a "Total" row, exclude it from stats
+            # if last row is a "Total" row, exclude it from stats
             if len(self._df) > 1 and self._df.iloc[-1]['category'] == 'Total':
                 core_df = self._df.iloc[:-1]
             else:
@@ -250,7 +257,6 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
             self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
-            raise
         finally:
             self.endResetModel()
 
