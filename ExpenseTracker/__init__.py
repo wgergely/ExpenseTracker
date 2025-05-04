@@ -1,13 +1,15 @@
-"""ExpenseTracker: desktop application for tracking and analyzing expenses from Google Sheets.
+"""
+ExpenseTracker: desktop application for tracking and analyzing expenses from Google Sheets.
 
 This package provides:
-    - Core services for authentication, data synchronization, and local caching
-    - Data analytics APIs (get_data, get_trends) and Qt table models for summaries and transactions
-    - A modern PySide6-based UI with custom views, delegates, and charts (pie, trends)
-    - Settings management, including schema validation, editors, and presets
-    - In-app logging with real-time log viewer
 
-Use exec_() to launch the application.
+- :mod:`ExpenseTracker.core` – Core services for authentication, data synchronization, and local caching.
+- :mod:`ExpenseTracker.data` – Data analytics APIs (:func:`ExpenseTracker.data.data.get_data`, :func:`ExpenseTracker.data.data.get_trends`) and Qt table models for summaries and transactions.
+- :mod:`ExpenseTracker.ui` – A modern PySide6-based UI with custom views, delegates, and charts (pie, trends).
+- :mod:`ExpenseTracker.settings` – Settings management, including schema validation, editors, and presets.
+- :mod:`ExpenseTracker.log` – In-app logging with real-time log viewer.
+
+Use :func:`ExpenseTracker.exec_` to launch the application.
 """
 
 import os
