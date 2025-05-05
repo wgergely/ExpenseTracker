@@ -5,6 +5,8 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import ui
+from ..settings.lib import category_manager
+from .actions import signals
 
 DEFAULT_ICON = 'cat_unclassified'
 
@@ -450,21 +452,21 @@ class CategoryIconColorEditorDialog(QtWidgets.QDialog):
 
     @QtCore.Slot(str)
     def color_selected(self, new_color: str):
-        from ..settings import lib
-        categories = lib.settings.get_section('categories')
-        if self.category in categories:
-            categories[self.category]['color'] = new_color
-            lib.settings.set_section('categories', categories)
+        # Delegate to CategoryManager
+        try:
+            category_manager.update_palette(self.category, color=new_color)
             self.colorChanged.emit(new_color)
+        except Exception as e:
+            logging.error(f'Failed to update category color: {e}')
 
     @QtCore.Slot(str)
     def icon_selected(self, new_icon: str):
-        from ..settings import lib
-        categories = lib.settings.get_section('categories')
-        if self.category in categories:
-            categories[self.category]['icon'] = new_icon
-            lib.settings.set_section('categories', categories)
+        # Delegate to CategoryManager
+        try:
+            category_manager.update_palette(self.category, icon=new_icon)
             self.iconChanged.emit(new_icon)
+        except Exception as e:
+            logging.error(f'Failed to update category icon: {e}')
 
     def _init_actions(self):
         pass
