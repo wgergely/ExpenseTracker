@@ -361,6 +361,12 @@ endif()
     
 
 # ───────────────────────────────────────────────────────────
+# legal documents
+# ───────────────────────────────────────────────────────────
+install(FILES "${CMAKE_SOURCE_DIR}/../LICENSE" DESTINATION .)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/legal/" DESTINATION "legal")
+
+# ───────────────────────────────────────────────────────────
 # tests
 # ───────────────────────────────────────────────────────────
 if(BUILD_TESTS)
