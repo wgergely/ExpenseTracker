@@ -11,29 +11,11 @@ jobs:
   build-and-push:
     runs-on: windows-latest
     env:
-      # Lowercase image name for GHCR
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
-      # Where we keep Buildx’s local cache inside the workspace
-      BUILD_CACHE: ${{ github.workspace }}\.buildx-cache
-      # Cache keys scoped by commit SHA
-      CACHE_KEY: buildx-${{ github.sha }}
-      CACHE_RESTORE_KEY: buildx-
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Ensure cache directory exists
-        run: |
-          New-Item -ItemType Directory -Path "${{ env.BUILD_CACHE }}" -Force
-
-      - name: Restore Buildx cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.BUILD_CACHE }}
-          key: ${{ env.CACHE_KEY }}
-          restore-keys: |
-            ${{ env.CACHE_RESTORE_KEY }}
 
       - name: Set up Docker Buildx
         id: buildx
@@ -49,7 +31,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push Docker image (with local cache)
+      - name: Build & push Docker image
         uses: docker/build-push-action@v6
         with:
           builder: ${{ steps.buildx.outputs.name }}
@@ -59,8 +41,6 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=local,src=${{ env.BUILD_CACHE }}
-          cache-to:   type=local,dest=${{ env.BUILD_CACHE }},mode=max
 
       - name: Run build script in container
         run: |
