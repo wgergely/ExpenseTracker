@@ -74,7 +74,22 @@ class Signals(QtCore.QObject):
         self.openSpreadsheet.connect(open_spreadsheet)
 
         from ..core import service
-        self.dataFetchRequested.connect(service._fetch_data)
+        # Trigger asynchronous fetch (with progress dialog) rather than direct blocking fetch
+        self.dataFetchRequested.connect(service.fetch_data)
+
+        # Handle authentication requests emitted by background workers
+        @QtCore.Slot()
+        def _on_authentication_requested() -> None:
+            try:
+                from ..core.auth import auth_manager
+                auth_manager.refresh_credentials_interactive()
+            except Exception as ex:
+                QtWidgets.QMessageBox.critical(None, 'Authentication Failed', str(ex))
+                return
+            # Retry data fetch after successful authentication
+            self.dataFetchRequested.emit()
+
+        self.authenticationRequested.connect(_on_authentication_requested)
 
         @QtCore.Slot(str, object)
         def metadata_changed(key: str, value: object) -> None:
