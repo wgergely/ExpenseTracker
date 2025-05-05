@@ -139,7 +139,7 @@ class SettingsWidget(QtWidgets.QWidget):
 
         self.header_editor = header_editor.HeaderEditor(self)
         self._add_section(
-            'Source Columns',
+            'Spreadsheet Columns',
             'Define the columns of the source spreadsheet.',
             parent,
             self.header_editor
@@ -148,7 +148,7 @@ class SettingsWidget(QtWidgets.QWidget):
         self.data_mapping_editor = data_mapping_editor.DataMappingEditor(self)
         self._add_section(
             'Column Roles',
-            'Define which source column should be used for which role.',
+            'Define which spreadsheet column should be used for which data role.',
             parent,
             self.data_mapping_editor
         )
