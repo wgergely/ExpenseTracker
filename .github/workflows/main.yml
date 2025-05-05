@@ -13,19 +13,24 @@ jobs:
     env:
       # Lowercase image name for GHCR
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
-      # Cache keys (unique per OS & commit)
-      CACHE_KEY: ${{ runner.os }}-buildx-${{ github.sha }}
-      CACHE_RESTORE_KEY: ${{ runner.os }}-buildx-
+      # Where we keep Buildx’s local cache inside the workspace
+      BUILD_CACHE: ${{ github.workspace }}\.buildx-cache
+      # Cache keys scoped by commit SHA
+      CACHE_KEY: buildx-${{ github.sha }}
+      CACHE_RESTORE_KEY: buildx-
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Ensure cache directory exists
+        run: |
+          New-Item -ItemType Directory -Path "${{ env.BUILD_CACHE }}" -Force
+
       - name: Restore Buildx cache
         uses: actions/cache@v3
         with:
-          # Use the runner’s temp directory as the cache folder
-          path: ${{ env.RUNNER_TEMP }}/buildx-cache
+          path: ${{ env.BUILD_CACHE }}
           key: ${{ env.CACHE_KEY }}
           restore-keys: |
             ${{ env.CACHE_RESTORE_KEY }}
@@ -54,27 +59,27 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=local,src=${{ env.RUNNER_TEMP }}/buildx-cache
-          cache-to: type=local,dest=${{ env.RUNNER_TEMP }}/buildx-cache,mode=max
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}
+          cache-to:   type=local,dest=${{ env.BUILD_CACHE }},mode=max
 
       - name: Run build script in container
         run: |
-          docker run --rm ^
-            --mount type=bind,source="%GITHUB_WORKSPACE%",target=C:\workspace ^
-            -w C:\workspace ^
-            ${{ env.IMAGE_NAME }}:${{ github.sha }} ^
-            powershell -NoLogo -ExecutionPolicy Bypass ^
-                       -File .\app\build.ps1 ^
-                       -Config Release ^
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
+                       -File .\app\build.ps1 `
+                       -Config Release `
                        -BuildDir C:\workspace
 
       - name: Build documentation in container
         run: |
-          docker run --rm ^
-            --mount type=bind,source="%GITHUB_WORKSPACE%",target=C:\workspace ^
-            -w C:\workspace ^
-            ${{ env.IMAGE_NAME }}:${{ github.sha }} ^
-            powershell -NoLogo -ExecutionPolicy Bypass ^
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
                        -Command "sphinx-build -M html docs docs\_build"
 
       - name: Upload build artifacts
