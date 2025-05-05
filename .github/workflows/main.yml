@@ -13,11 +13,25 @@ jobs:
     env:
       # must be lowercase
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
-      CACHE_SCOPE: expensetracker-cache  # unique name for GH Actions cache
+      # where Buildx will store its local cache
+      BUILD_CACHE: ${{ runner.temp }}/buildx-cache
+      # primary cache key (unique per commit)
+      CACHE_KEY: ${{ runner.os }}-buildx-${{ github.sha }}
+      # fallback prefix to find prior caches
+      CACHE_RESTORE_KEY: ${{ runner.os }}-buildx-
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Restore Buildx cache
+        uses: actions/cache@v3
+        id: buildx-cache
+        with:
+          path: ${{ env.BUILD_CACHE }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ env.CACHE_RESTORE_KEY }}
 
       - name: Set up Docker Buildx
         id: buildx
@@ -33,7 +47,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push Docker image (with GH cache)
+      - name: Build & push Docker image (with local cache)
         uses: docker/build-push-action@v6
         with:
           builder: ${{ steps.buildx.outputs.name }}
@@ -43,10 +57,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: |
-            type=gha,scope=${{ env.CACHE_SCOPE }}
-          cache-to: |
-            type=gha,scope=${{ env.CACHE_SCOPE }},mode=max
+          cache-from: type=local,src=${{ env.BUILD_CACHE }}
+          cache-to: type=local,dest=${{ env.BUILD_CACHE }},mode=max
 
       - name: Run build script in container
         run: |
