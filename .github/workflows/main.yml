@@ -1,4 +1,3 @@
-# CI – Build, Push & Package using GitHub Actions
 name: CI – Build, Push & Package
 
 on:
@@ -14,37 +13,37 @@ jobs:
     # Use a Windows runner to support Windows containers
     runs-on: windows-latest
     env:
-      # Lowercase the GitHub owner/repo string for a valid Docker image name
-      IMAGE_NAME: ghcr.io/${{ toLower(github.repository) }}
+      # Lowercase the owner stays dynamic, repo name must be lowercase manually
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3  # Fetch repository contents into GITHUB_WORKSPACE
+        uses: actions/checkout@v3  # Fetch repo into GITHUB_WORKSPACE
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2  # Authenticate Docker to GHCR
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}  # GITHUB_TOKEN has write permissions
+          username: ${{ github.actor }}  # GITHUB_TOKEN has write rights
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push Docker image (with layer cache)
-        uses: docker/build-push-action@v4  # Build, cache, and push your image
+        uses: docker/build-push-action@v4  # Build, cache, and push
         with:
-          context: .                   # Build context is repository root
-          file: Dockerfile            # Path to your Dockerfile
-          push: true                  # Push the resulting image tags
+          context: .                   # Repo root
+          file: Dockerfile            # Path to Dockerfile
+          push: true                  # Push tags after build
           tags: |
-            ${{ env.IMAGE_NAME }}:latest      # 'latest' tag for convenience
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}  # SHA tag for exact reproducibility
+            ${{ env.IMAGE_NAME }}:latest           # Update ‘latest’
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} # SHA for reproducibility
           cache-from: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache  # Pull existing layer cache
+            type=registry,ref=${{ env.IMAGE_NAME }}:cache  # Pull cached layers
           cache-to: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max  # Update cache in registry
+            type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max  # Push cache
 
       - name: Run build script in container
         run: |
-          # Use the SHA-specific tag to run the exact image we just built
+          # Use the SHA-tagged image to compile binaries
           docker run --rm \
             --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
             -w C:\workspace \
@@ -56,7 +55,7 @@ jobs:
 
       - name: Build documentation in container
         run: |
-          # Generate HTML docs using Sphinx in the same exact image
+          # Same image to build HTML docs via Sphinx
           docker run --rm \
             --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
             -w C:\workspace \
@@ -71,7 +70,7 @@ jobs:
           path: app/build/install/**
 
       - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v3  # Persist generated docs
+        uses: actions/upload-artifact@v3  # Persist generated HTML docs
         with:
           name: docs
           path: docs/_build/html/**
