@@ -294,7 +294,7 @@ class SyncInternalHelperTest(BaseTestCase):
     # _fetch_headers ----------------------------------------------------------
     def test_fetch_headers_returns_header_row(self):
         service = _make_service(['A', 'B'], {})
-        self.assertEqual(self.sync._fetch_headers(service, 2), ['A', 'B'])
+        self.assertEqual(self.sync._fetch_headers(2), ['A', 'B'])
 
     # _determine_stable_fields ------------------------------------------------
     def test_determine_stable_fields_prefers_id(self):

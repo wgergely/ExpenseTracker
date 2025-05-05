@@ -165,7 +165,7 @@ def with_service(func: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(func)
     def wrapper(self, *args: Any, **kwargs: Any) -> Any:
         creds = auth.get_creds()
-        service = build('sheets', 'v4', credentials=creds)
+        service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
         sheet_cfg = lib.settings.get_section('spreadsheet')
         spreadsheet_id = sheet_cfg['id']
         spreadsheet_name = sheet_cfg['worksheet']
@@ -192,7 +192,6 @@ class BaseServiceTestCase(BaseTestCase):
 
         client_secret = os.environ[TestAuthEnvKeys.TEST_CLIENT_SECRET_ENV_KEY.name]
 
-        # try loading json from string
         data = json.loads(client_secret)
         with open(lib.settings.client_secret_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)

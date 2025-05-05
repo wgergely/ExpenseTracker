@@ -4,27 +4,21 @@
     "worksheet": "Sheet1"
   },
   "header": {
-    "ID": "int",
+    "Id": "int",
     "Date":	"date",
-    "Original Description": "string",
-    "Split Type": "string",
+    "Description": "string",
     "Category": "string",
-    "$€£": "string",
-    "£££": "float",
-    "£/€": "float",
-    "€€€": "float",
-    "Comments": "string",
+    "Amount": "float",
+    "Notes": "string",
     "Reference": "string",
-    "Tax Classification": "string",
-    "Tax Year": "string",
-    "Account Name": "string"
+    "Account": "string"
   },
   "mapping": {
     "date": "Date",
-    "amount": "€€€",
-    "description": "Original Description",
+    "amount": "Amount",
+    "description": "Description|Notes|Reference",
     "category": "Category",
-    "account": "Account Name"
+    "account": "Account"
   },
   "metadata": {
     "name": "Default Ledger",
@@ -41,111 +35,5 @@
     "loess_fraction": 0.15,
     "negative_span": 24
   },
-  "categories": {
-    "Cash": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Cash transactions",
-      "icon": "cat_euro",
-      "excluded": false
-    },
-    "Charitable Giving": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Charitable donations",
-      "icon": "cat_charity",
-      "excluded": false
-    },
-    "Family": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Family expenses",
-      "icon": "cat_family",
-      "excluded": false
-    },
-    "Fees & Fines": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Fees and fines",
-      "icon": "cat_fee",
-      "excluded": false
-    },
-    "Food & Groceries": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Food and grocery expenses",
-      "icon": "cat_grocery",
-      "excluded": false
-    },
-    "Income": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Income transactions",
-      "icon": "cat_income",
-      "excluded": true
-    },
-    "Leisure & Entertainment": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Leisure and entertainment expenses",
-      "icon": "cat_restaurant",
-      "excluded": false
-    },
-    "Rent & Rates": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Rent and rates expenses",
-      "icon": "cat_home",
-      "excluded": false
-    },
-    "Shopping & Merchandise": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Shopping and merchandise expenses",
-      "icon": "cat_shoppping",
-      "excluded": false
-    },
-    "Services & Subscriptions": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Services and subscriptions expenses",
-      "icon": "cat_star",
-      "excluded": false
-    },
-    "Miscellaneous": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Miscellaneous expenses",
-        "icon": "cat_unclassified",
-      "excluded": false
-    },
-    "Tax & Social Security": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Tax and social security expenses",
-      "icon": "cat_balance",
-      "excluded": true
-    },
-    "Transfers": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Transfer transactions",
-      "icon": "cat_transfer",
-      "excluded": true
-    },
-    "Transport & Travel": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Transport and travel expenses",
-      "icon": "cat_commute",
-      "excluded": false
-    },
-    "Health": {
-      "display_name": "",
-      "color": "#BB86FC",
-      "description": "Health expenses",
-      "icon": "cat_medical",
-      "excluded": false
-    }
-  }
+  "categories": {}
 }

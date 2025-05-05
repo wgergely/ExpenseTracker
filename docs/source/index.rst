@@ -1,15 +1,31 @@
-.. ExpenseTracker documentation master file, created by
-   sphinx-quickstart on Sat May  3 15:44:38 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-ExpenseTracker documentation
+ExpenseTracker Documentation
 ============================
 
-Author: Gergely Wootsch <hello+ExpenseTracker@gergely-wootsch.com>
-Repository: https://github.com/wgergely/ExpenseTracker
+ExpenseTracker is a desktop application for visualizing expense data stored in Google Sheets.
 
-This documentation provides a user guide and API reference for ExpenseTracker, covering installation, usage, configuration, and the underlying Python modules.
+ExpenseTracker lets users view and analyze spending by category, time period, or customized presets. Users can edit
+and organize transactions, manage expense categories, and adjust visualization settings to suit their needs.
+
+
+
+
+Features
+--------
+
+
+This documentation covers installation, configuration. For immediate access, see the :doc:installation instructions
+<user_guide/installation>, the :doc:quick start guide <user_guide/quick_start>, or visit the project's download page
+<https://github .com/wgergely/ExpenseTracker/releases>_.
+
+Developers looking to extend or integrate ExpenseTracker can find comprehensive API documentation in the :doc:API
+Reference <api/index>.
+
+Credits
+-------
+
+Gergely Wootsch
+Email: [
+
 
 
 .. toctree::

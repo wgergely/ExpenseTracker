@@ -37,6 +37,10 @@ def open_spreadsheet() -> None:
 
 class Signals(QtCore.QObject):
     """Centralized Qt signals for application config, data, and UI events."""
+    initializationRequested = QtCore.Signal()
+
+    authenticationRequested = QtCore.Signal()
+
     configSectionChanged = QtCore.Signal(str)  # Section, config
     metadataChanged = QtCore.Signal(str, object)
 
@@ -44,10 +48,8 @@ class Signals(QtCore.QObject):
     dataAboutToBeFetched = QtCore.Signal()
     dataFetched = QtCore.Signal(pandas.DataFrame)
 
-    # Emitted when the selected category's transactions change
     transactionsChanged = QtCore.Signal(list)
     categoryChanged = QtCore.Signal(str)
-    # Request that expense view update its category selection (slice or row)
     categoryUpdateRequested = QtCore.Signal(str)
 
     showSettings = QtCore.Signal()
@@ -59,6 +61,11 @@ class Signals(QtCore.QObject):
     presetAboutToBeActivated = QtCore.Signal()
     presetActivated = QtCore.Signal()
 
+    categoryAdded = QtCore.Signal(str, int)
+    categoryRemoved = QtCore.Signal(str, int)
+    categoryOrderChanged = QtCore.Signal(str, int, int)
+    categoryPaletteChanged = QtCore.Signal(str)
+
     def __init__(self):
         super().__init__()
         self._connect_signals()
@@ -67,7 +74,7 @@ class Signals(QtCore.QObject):
         self.openSpreadsheet.connect(open_spreadsheet)
 
         from ..core import service
-        self.dataFetchRequested.connect(service.fetch_data)
+        self.dataFetchRequested.connect(service._fetch_data)
 
         @QtCore.Slot(str, object)
         def metadata_changed(key: str, value: object) -> None:
@@ -81,7 +88,6 @@ class Signals(QtCore.QObject):
                 logging.debug(f'Error applying theme: {ex}')
 
         self.metadataChanged.connect(metadata_changed)
-
 
 # Create a singleton instance of Signals
 signals = Signals()

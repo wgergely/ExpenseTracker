@@ -24,8 +24,6 @@ class DataMappingModel(QtCore.QAbstractTableModel):
 
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(150, self.init_data)
-
     def _connect_signals(self):
 
         @QtCore.Slot(str)
@@ -48,6 +46,8 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         self.rowsMoved.connect(
             lambda: lib.settings.set_section('mapping', self.get_current_section_data())
         )
+
+        signals.initializationRequested.connect(self.init_data)
 
     @QtCore.Slot()
     def init_data(self):

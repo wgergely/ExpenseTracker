@@ -135,7 +135,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the bars')
         action.setStatusTip('Show or hide the bars')
         action.setWhatsThis('Show or hide the bars')
-        action.setShortcut('alt+1')
+        action.setShortcut('Alt+1')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 
@@ -145,7 +145,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the trend line')
         action.setStatusTip('Show or hide the trend line')
         action.setWhatsThis('Show or hide the trend line')
-        action.setShortcut('alt+2')
+        action.setShortcut('Alt+2')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 
@@ -155,7 +155,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the axes')
         action.setStatusTip('Show or hide the axes')
         action.setWhatsThis('Show or hide the axes')
-        action.setShortcut('alt+3')
+        action.setShortcut('Alt+3')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 
@@ -165,7 +165,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the tick marks')
         action.setStatusTip('Show or hide the tick marks')
         action.setWhatsThis('Show or hide the tick marks')
-        action.setShortcut('alt+4')
+        action.setShortcut('Alt+4')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 
@@ -175,7 +175,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the labels')
         action.setStatusTip('Show or hide the labels')
         action.setWhatsThis('Show or hide the labels')
-        action.setShortcut('alt+5')
+        action.setShortcut('Alt+5')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 
@@ -185,7 +185,7 @@ class TrendGraph(QtWidgets.QWidget):
         action.setToolTip('Show or hide the tooltip')
         action.setStatusTip('Show or hide the tooltip')
         action.setWhatsThis('Show or hide the tooltip')
-        action.setShortcut('alt+6')
+        action.setShortcut('Alt+6')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.addAction(action)
 

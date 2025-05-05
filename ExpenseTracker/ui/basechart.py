@@ -149,8 +149,6 @@ class BaseChartView(QtWidgets.QWidget):
         self._connect_signals()
         self._init_actions()
 
-        self.start_init_data_timer()
-
     def _create_ui(self) -> None:
         self.setMinimumSize(
             ui.Size.DefaultWidth(0.5), ui.Size.DefaultWidth(0.5)
@@ -194,6 +192,8 @@ class BaseChartView(QtWidgets.QWidget):
         signals.categoryChanged.connect(_on_cat)
 
         self._init_data_timer.timeout.connect(self.init_data)
+
+        signals.initializationRequested.connect(self.start_init_data_timer)
 
     @QtCore.Slot()
     def start_init_data_timer(self) -> None:
@@ -317,7 +317,7 @@ class BaseChartView(QtWidgets.QWidget):
         action.setToolTip('Show/hide legend')
         action.setStatusTip('Show/hide legend')
         action.setWhatsThis('Show/hide legend')
-        action.setShortcut('alt+1')
+        action.setShortcut('Alt+1')
         action.setShortcutContext(QtCore.Qt.WidgetShortcut)
         action.triggered.connect(toggle_legend)
         self.addAction(action)
@@ -333,7 +333,7 @@ class BaseChartView(QtWidgets.QWidget):
         action.setToolTip('Show/hide icons')
         action.setStatusTip('Show/hide icons')
         action.setWhatsThis('Show/hide icons')
-        action.setShortcut('alt+2')
+        action.setShortcut('Alt+2')
         action.setShortcutContext(QtCore.Qt.WidgetShortcut)
         action.triggered.connect(toggle_icons)
         self.addAction(action)
@@ -349,7 +349,7 @@ class BaseChartView(QtWidgets.QWidget):
         action.setToolTip('Show/hide tooltip')
         action.setStatusTip('Show/hide tooltip')
         action.setWhatsThis('Show/hide tooltip')
-        action.setShortcut('alt+3')
+        action.setShortcut('Alt+3')
         action.setShortcutContext(QtCore.Qt.WidgetShortcut)
         action.triggered.connect(toggle_tooltip)
         self.addAction(action)

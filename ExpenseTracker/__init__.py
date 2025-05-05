@@ -15,6 +15,8 @@ Use :func:`ExpenseTracker.exec_` to launch the application.
 import os
 import pathlib
 
+from PySide6 import QtCore
+
 # Use internally shipped font directory for Qt font loading
 font_dir = pathlib.Path(__file__).parent / 'config' / 'font'
 os.environ.setdefault('QT_QPA_FONTDIR', str(font_dir))
@@ -32,6 +34,15 @@ def exec_() -> None:
     import sys
     from .ui import app
     from .ui import main
+    from .ui.actions import signals
     app = app.Application(sys.argv)
     main.show()
+
+    # Ask componentes to load their data
+    QtCore.QTimer.singleShot(100, signals.initializationRequested)
+
     sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    exec_()

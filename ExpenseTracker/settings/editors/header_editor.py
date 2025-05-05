@@ -28,7 +28,6 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         self._ignore_reload = False
 
         self._connect_signals()
-        QtCore.QTimer.singleShot(150, self.init_data)
 
     @QtCore.Slot()
     def init_data(self):
@@ -67,6 +66,8 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         self.rowsRemoved.connect(on_layout_changed)
         self.rowsInserted.connect(on_layout_changed)
         self.rowsMoved.connect(on_layout_changed)
+
+        signals.initializationRequested.connect(self.init_data)
 
     def rowCount(self, parent=QtCore.QModelIndex()):
         if parent.isValid():
@@ -243,6 +244,7 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
 
         self.beginMoveRows(parent, row, row, parent, dest_row)
         self._ignore_reload = True
+
         # Adjust the destination index for internal list modification.
         if dest_row > row:
             new_index = dest_row - 1

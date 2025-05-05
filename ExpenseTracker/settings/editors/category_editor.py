@@ -4,6 +4,7 @@ Provides:
     - IconPickerDialog: dialog for selecting category icons
     - CategoriesModel: table model for editing category properties (name, display name, icon, color, excluded)
 """
+import ast
 import logging
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -21,7 +22,7 @@ COL_EXCLUDED = 4
 
 
 class CategoriesModel(QtCore.QAbstractTableModel):
-    """Model responsible representing, editing and saving category items.
+    """Model responsible for representing, editing, and saving category items.
 
     """
     HEADERS = {
@@ -31,14 +32,14 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         COL_DESCRIPTION: 'Description',
         COL_EXCLUDED: ''
     }
+    MIME_INTERNAL = 'application/vnd.text.list'
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._categories = []
+        self.categories = []
         self._ignore_reload = False
 
         self._connect_signals()
-        QtCore.QTimer.singleShot(150, self.init_data)
 
     @QtCore.Slot()
     def init_data(self):
@@ -48,10 +49,10 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         d = lib.settings.get_section('categories')
 
         self.beginResetModel()
-        self._categories.clear()
+        self.categories.clear()
         try:
             for k, v in d.items():
-                self._categories.append({
+                self.categories.append({
                     'name': k,
                     'display_name': v.get('display_name', ''),
                     'description': v.get('description', ''),
@@ -77,7 +78,6 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
         @QtCore.Slot()
         def on_layout_changed():
-            # We only want to write to disk but not reset the model
             try:
                 self._ignore_reload = True
                 lib.settings.set_section('categories', self.get_current_section_data())
@@ -88,8 +88,35 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         self.rowsInserted.connect(on_layout_changed)
         self.rowsMoved.connect(on_layout_changed)
 
+        @QtCore.Slot(str)
+        def select_category(category, *args):
+            if not category:
+                return
+            if category not in [cat['name'] for cat in self.categories]:
+                return
+            sel = self.parent().view.selectionModel()
+            for i in range(self.rowCount()):
+                index = self.index(i, COL_NAME)
+                if index.data(QtCore.Qt.EditRole) == category:
+                    sel.clearSelection()
+                    sel.select(index, QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows)
+                    sel.setCurrentIndex(index, QtCore.QItemSelectionModel.NoUpdate)
+                    self.parent().view.scrollTo(index)
+                    break
+
+        signals.categoryAdded.connect(self.init_data)
+        signals.categoryAdded.connect(select_category)
+
+        signals.categoryRemoved.connect(self.init_data)
+        signals.categoryRemoved.connect(select_category)
+
+        signals.categoryOrderChanged.connect(self.init_data)
+        signals.categoryOrderChanged.connect(select_category)
+
+        signals.initializationRequested.connect(self.init_data)
+
     def rowCount(self, parent=QtCore.QModelIndex()):
-        return len(self._categories) if not parent.isValid() else 0
+        return len(self.categories) if not parent.isValid() else 0
 
     def columnCount(self, parent=QtCore.QModelIndex()):
         return 5 if not parent.isValid() else 0
@@ -100,7 +127,7 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
         row = index.row()
         col = index.column()
-        cat = self._categories[row]
+        cat = self.categories[row]
 
         if role in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
             if col == COL_NAME:
@@ -147,14 +174,14 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
         row = index.row()
         col = index.column()
-        cat = self._categories[row]
+        cat = self.categories[row]
 
         if col == COL_NAME:
             new_name = str(value).strip()
             if not new_name:
                 logging.warning('Category name cannot be empty.')
                 return False  # reject empty name
-            if new_name in [cat['name'] for cat in self._categories if cat != self._categories[row]]:
+            if new_name in [cat['name'] for cat in self.categories if cat != self.categories[row]]:
                 logging.warning(f'Category name "{new_name}" already exists.')
                 return False
             cat['name'] = new_name
@@ -186,66 +213,71 @@ class CategoriesModel(QtCore.QAbstractTableModel):
 
     def flags(self, index):
         if not index.isValid():
-            return QtCore.Qt.ItemIsEnabled
-        return (QtCore.Qt.ItemIsEnabled
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsDropEnabled
+        base_flags = super().flags(index)
+        return (base_flags
+                | QtCore.Qt.ItemIsEnabled
+                | QtCore.Qt.ItemIsSelectable
                 | QtCore.Qt.ItemIsEditable
-                | QtCore.Qt.ItemIsSelectable)
+                | QtCore.Qt.ItemIsDragEnabled
+                | QtCore.Qt.ItemIsDropEnabled)
+
+    def supportedDropActions(self):
+        return QtCore.Qt.MoveAction
+
+    def mimeTypes(self):
+        base = super().mimeTypes()
+        return list(set(base + [self.MIME_INTERNAL]))
+
+    def mimeData(self, indexes):
+        mime_data = QtCore.QMimeData()
+
+        rows = [i.row() for i in indexes if i.isValid()]
+        if not rows:
+            return mime_data
+
+        mime_data.setData(self.MIME_INTERNAL, bytearray(str(rows), 'utf-8'))
+        return mime_data
+
+    def dropMimeData(self, data, action, row, column, parent):
+        if action == QtCore.Qt.IgnoreAction:
+            return True
+
+        if not data.hasFormat(self.MIME_INTERNAL):
+            return False
+        encoded = data.data(self.MIME_INTERNAL).data()
+
+        try:
+            row = ast.literal_eval(encoded.decode('utf-8'))
+        except Exception:
+            return False
+
+        if not row:
+            return False
+
+        src_row = row[0]
+
+        if parent.isValid():
+            dest_row = parent.row()
+        else:
+            dest_row = self.rowCount()
+
+        lib.category_manager.move_category(src_row, dest_row)
+        return True
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
             if section in self.HEADERS:
                 return self.HEADERS[section]
+
         return super().headerData(section, orientation, role)
-
-    def insertRow(self, row, name="", display_name="", desc="", icon="", color="", excluded=False):
-        self.beginInsertRows(QtCore.QModelIndex(), row, row)
-        if not icon:
-            icon = DEFAULT_ICON
-        if not color:
-            color = ui.Color.Text().name(QtGui.QColor.HexRgb)
-
-        name = name if name else 'NewCategory'
-
-        # Ensure name is unique
-        names = [c['name'] for c in self._categories]
-        if name in names:
-            i = 1
-            while f'{name}_{i}' in names:
-                i += 1
-            name = f'{name}_{i}'
-
-        self._categories.insert(row, {
-            'name': name,
-            'display_name': display_name,
-            'description': desc,
-            'icon': icon,
-            'color': color,
-            'excluded': excluded
-        })
-        self.endInsertRows()
-
-    def removeRow(self, row, parent=QtCore.QModelIndex()):
-        if 0 <= row < len(self._categories):
-            self.beginRemoveRows(parent, row, row)
-            self._categories.pop(row)
-            self.endRemoveRows()
-
-    @QtCore.Slot()
-    def add_new(self):
-        """Add a new category with default values.
-        """
-        r = self.rowCount()
-        self.insertRow(r, name='NewCategory', icon=DEFAULT_ICON)
-        idx = self.index(r, COL_NAME)
-        self.dataChanged.emit(idx, idx, [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole])
-        return idx
 
     @QtCore.Slot()
     def get_current_section_data(self):
         """ Return a dictionary of all categories.
         """
         data = {}
-        for cat in self._categories:
+        for cat in self.categories:
             name = cat['name']
             data[name] = {
                 'display_name': cat['display_name'],
@@ -283,7 +315,7 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             # retrieve category info from model
             model = index.model()
             try:
-                cat = model._categories[index.row()]
+                cat = model.categories[index.row()]
                 icon_name = cat.get('icon', DEFAULT_ICON)
                 color_str = cat.get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
                 display_name = cat.get('display_name') or cat.get('name')
@@ -444,6 +476,11 @@ class CategoryEditor(QtWidgets.QWidget):
         self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
+        self.view.setDragEnabled(True)
+        self.view.setAcceptDrops(True)
+        self.view.setDropIndicatorShown(True)
+        self.view.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
+
         self.layout().addWidget(self.view)
 
     def _connect_signals(self):
@@ -467,6 +504,12 @@ class CategoryEditor(QtWidgets.QWidget):
 
         @QtCore.Slot(str)
         def on_category_selected(category):
+            if not category:
+                return
+
+            if category not in [cat['name'] for cat in self.view.model().categories]:
+                return
+
             sel = self.view.selectionModel()
 
             for i in range(self.view.model().rowCount()):
@@ -541,6 +584,72 @@ class CategoryEditor(QtWidgets.QWidget):
         self.toolbar.addAction(action)
         self.view.addAction(action)
 
+        # Separator before move actions
+        sep = QtGui.QAction(self)
+        sep.setSeparator(True)
+        sep.setEnabled(False)
+        self.toolbar.addAction(sep)
+        self.view.addAction(sep)
+
+        def move_up():
+            sel = self.view.selectionModel()
+            if not sel.hasSelection():
+                return
+
+            index = next(iter(sel.selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                return
+            index = index.sibling(index.row(), COL_NAME)
+            if not index.isValid():
+                return
+
+            row = index.row()
+            first = 0
+
+            if row <= first:
+                return
+
+            dest_row = row - 1
+            lib.category_manager.move_category(row, dest_row)
+
+        action = QtGui.QAction('Move Up', self)
+        action.setShortcut('Ctrl+Up')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setStatusTip('Move selected category up')
+        action.setIcon(ui.get_icon('btn_arrow_up'))
+        action.triggered.connect(move_up)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
+        def move_down():
+            sel = self.view.selectionModel()
+            if not sel.hasSelection():
+                return
+
+            index = next(iter(sel.selectedIndexes()), QtCore.QModelIndex())
+            if not index.isValid():
+                return
+            index = index.sibling(index.row(), COL_NAME)
+            if not index.isValid():
+                return
+
+            row = index.row()
+            last = self.view.model().rowCount() - 1
+            if row >= last:
+                return
+
+            dest_row = row + 1
+            lib.category_manager.move_category(row, dest_row)
+
+        action = QtGui.QAction('Move Down', self)
+        action.setShortcut('Ctrl+Down')
+        action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        action.setStatusTip('Move selected category down')
+        action.setIcon(ui.get_icon('btn_arrow_down'))
+        action.triggered.connect(move_down)
+        self.toolbar.addAction(action)
+        self.view.addAction(action)
+
         # separator
         action = QtGui.QAction(self)
         action.setSeparator(True)
@@ -550,7 +659,16 @@ class CategoryEditor(QtWidgets.QWidget):
 
         @QtCore.Slot()
         def add_action():
-            self.view.model().add_new()
+            # Create default new category data
+            default = {
+                'display_name': '',
+                'description': '',
+                'icon': DEFAULT_ICON,
+                'color': ui.Color.Text().name(QtGui.QColor.HexRgb),
+                'excluded': False
+            }
+            # Append at end
+            lib.category_manager.add_category('NewCategory', default)
 
         action = QtGui.QAction('Add', self)
 
@@ -563,17 +681,23 @@ class CategoryEditor(QtWidgets.QWidget):
 
         @QtCore.Slot()
         def remove_action():
-            if not self.view.selectionModel().hasSelection():
+            sel = self.view.selectionModel()
+            if not sel.hasSelection():
                 logging.warning('No category selected.')
                 return
 
-            index = next(iter(self.view.selectionModel().selectedIndexes()), QtCore.QModelIndex())
-
+            index = next(iter(sel.selectedIndexes()), QtCore.QModelIndex())
             if not index.isValid():
-                logging.warning('No category selected.')
+                return
+            index = index.sibling(index.row(), COL_NAME)
+            if not index.isValid():
                 return
 
-            self.view.model().removeRow(index.row())
+            category = index.data(QtCore.Qt.EditRole)
+            try:
+                lib.category_manager.remove_category(category)
+            except Exception as e:
+                logging.error(f'Failed to remove category {category}: {e}')
 
         action = QtGui.QAction('Remove', self)
 

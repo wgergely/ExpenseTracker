@@ -32,7 +32,13 @@ class Columns(enum.IntEnum):
 class ExpenseModel(QtCore.QAbstractTableModel):
     """Table model for displaying expense summaries."""
 
-    header = ['', 'Category', '', 'Amount']
+    HEADERS = {
+        Columns.Icon.value: '',
+        Columns.Category.value: 'Category',
+        Columns.Weight.value: '',
+        Columns.Amount.value: 'Amount'
+    }
+    MIME_INTERNAL = 'application/vnd.text.list'
 
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent=parent)
@@ -60,19 +66,31 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         @QtCore.Slot(str, object)
         def metadata_changed(key: str, value: object) -> None:
-            if key in ('hide_empty_categories', 'exclude_negative', 'exclude_zero', 'exclude_positive', 'summary_mode',
-                       'span', 'yearmonth'):
+            if key in (
+                    'hide_empty_categories',
+                    'exclude_negative',
+                    'exclude_zero',
+                    'exclude_positive',
+                    'summary_mode',
+                    'span',
+                    'yearmonth'
+            ):
                 self.init_data()
 
         signals.metadataChanged.connect(metadata_changed)
-        # refresh expense model when local cache is updated by sync
         sync.dataUpdated.connect(self.init_data)
+
+        signals.categoryAdded.connect(self.init_data)
+        signals.categoryRemoved.connect(self.init_data)
+        signals.categoryOrderChanged.connect(self.init_data)
+
+        signals.initializationRequested.connect(self.init_data)
 
     def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return len(self._df)
 
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
-        return len(self.header)
+        return len(self.HEADERS)
 
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
@@ -114,11 +132,11 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                     return []
                 return transactions
         if role == AverageRole:
-            return self._cache['mean']
+            return self._cache['mean'][row]
         if role == MaximumRole:
-            return self._cache['max']
+            return self._cache['max'][row]
         if role == MinimumRole:
-            return self._cache['min']
+            return self._cache['min'][row]
         if role == TotalRole:
             return total_value
         if role == WeightRole:
@@ -192,6 +210,14 @@ class ExpenseModel(QtCore.QAbstractTableModel):
                 if category == '':
                     return ui.Color.Yellow()
 
+            if role == QtCore.Qt.DecorationRole:
+                config = lib.settings.get_section('categories')
+                if is_total_row:
+                    return None
+                if category and category not in config:
+                    return ui.get_icon('btn_alert', color=ui.Color.Yellow)
+                return None
+
         elif col == Columns.Weight:
             return None
 
@@ -214,23 +240,22 @@ class ExpenseModel(QtCore.QAbstractTableModel):
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
                    role: int = QtCore.Qt.DisplayRole) -> Any:
         if role == QtCore.Qt.DisplayRole and orientation == QtCore.Qt.Horizontal:
-            return self.header[section]
+            return self.HEADERS.get(section, '')
         return None
-    
+
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
-        """Enable editing for the icon column."""
-        flags = super().flags(index)
         if not index.isValid():
-            return flags
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsDropEnabled
+        base_flags = super().flags(index)
+        flags = (base_flags
+                 | QtCore.Qt.ItemIsEnabled
+                 | QtCore.Qt.ItemIsSelectable)
         if index.column() == Columns.Icon:
-            return flags | QtCore.Qt.ItemIsEditable
+            flags |= QtCore.Qt.ItemIsEditable
         return flags
 
     @QtCore.Slot()
-    def init_data(self) -> None:
-        logging.debug('Initializing model data')
-        self.beginResetModel()
-
+    def _init_data(self):
         df = get_data()
 
         if df is None or df.empty:
@@ -240,20 +265,30 @@ class ExpenseModel(QtCore.QAbstractTableModel):
 
         self._df = df.reset_index(drop=True)
 
+        for k in lib.EXPENSE_DATA_COLUMNS:
+            self._cache[k] = self._df[k].tolist()
+
+        # if last row is a "Total" row, exclude it from stats
+        if len(self._df) > 1 and self._df.iloc[-1]['category'] == 'Total':
+            core_df = self._df.iloc[:-1]
+        else:
+            core_df = self._df
+
+        self._cache['mean'] = core_df['total'].mean()
+        self._cache['max'] = core_df['total'].max()
+        self._cache['min'] = core_df['total'].min()
+
+        self._cache['mean'] = [self._cache['mean']] * len(self._df)
+        self._cache['max'] = [self._cache['max']] * len(self._df)
+        self._cache['min'] = [self._cache['min']] * len(self._df)
+
+    @QtCore.Slot()
+    def init_data(self) -> None:
+        logging.debug('Initializing model data')
+        self.beginResetModel()
+
         try:
-            for k in lib.EXPENSE_DATA_COLUMNS:
-                self._cache[k] = self._df[k].tolist()
-
-            # if last row is a "Total" row, exclude it from stats
-            if len(self._df) > 1 and self._df.iloc[-1]['category'] == 'Total':
-                core_df = self._df.iloc[:-1]
-            else:
-                core_df = self._df
-
-            self._cache['mean'] = core_df['total'].mean()
-            self._cache['max'] = core_df['total'].max()
-            self._cache['min'] = core_df['total'].min()
-
+            self._init_data()
         except Exception as ex:
             logging.error(f'Failed to load transactions data: {ex}')
             self._df = pd.DataFrame(columns=lib.EXPENSE_DATA_COLUMNS)
@@ -287,18 +322,50 @@ class ExpenseSortFilterProxyModel(QtCore.QSortFilterProxyModel):
     Ensures the 'Total' row remains at the end and supports sorting by category or amount.
     """
 
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+        super().__init__(parent)
+        # sort modes: 'config', 'category', 'amount'
+        self._sort_mode = 'config'
+
+    def sort(self, column: int, order: QtCore.Qt.SortOrder = QtCore.Qt.AscendingOrder) -> None:
+        # Determine requested sort mode
+        if column < 0:
+            self._sort_mode = 'config'
+        elif column == Columns.Category:
+            self._sort_mode = 'category'
+        elif column == Columns.Amount:
+            self._sort_mode = 'amount'
+        else:
+            self._sort_mode = 'config'
+
+        super().sort(column, order)
+
     def lessThan(self, left: QtCore.QModelIndex, right: QtCore.QModelIndex) -> bool:
-        left_data = left.data(CategoryRole)
-        right_data = right.data(CategoryRole)
+        left_cat = left.data(CategoryRole)
+        right_cat = right.data(CategoryRole)
 
-        # Keep the "Total" row at the end
-        if left_data == 'Total' and right_data != 'Total':
+        if left_cat == 'Total' and right_cat != 'Total':
             return False
+        if right_cat == 'Total' and left_cat != 'Total':
+            return True
 
-        if left.column() == Columns.Category:
-            return str(left_data).lower() < str(right_data).lower()
+        if self._sort_mode == 'config':
+            config = lib.settings.get_section('categories')
+            categories = list(config.keys())
 
-        if left.column() == Columns.Amount:
-            left_data = left.data(TotalRole)
-            right_data = right.data(TotalRole)
-            return int(left_data) < int(right_data)
+            left_idx = categories.index(left_cat) if left_cat in categories else len(categories)
+            right_idx = categories.index(right_cat) if right_cat in categories else len(categories)
+
+            return left_idx < right_idx
+
+        if self._sort_mode == 'category':
+            return str(left_cat).lower() < str(right_cat).lower()
+
+        if self._sort_mode == 'amount':
+            left_val = left.data(TotalRole)
+            right_val = right.data(TotalRole)
+            try:
+                return float(left_val) < float(right_val)
+            except Exception:
+                return False
+        return super().lessThan(left, right)

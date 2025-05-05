@@ -886,3 +886,109 @@ class SettingsAPI(ConfigPaths):
 
 
 settings: SettingsAPI = SettingsAPI()
+
+
+class CategoryManager(QtCore.QObject):
+    """Unified API for modifying categories configuration with proper signal emissions."""
+
+    def add_category(self, name: str, data: dict, index: Optional[int] = None) -> None:
+        """Add a new category with provided data at given index (or append)."""
+        config = settings.get_section('categories')
+
+        if name in config:
+            n = 1
+            _name = name
+            while True:
+                name = f'{_name}_{n}'
+                if name not in config:
+                    break
+                n += 1
+                if n > 99:
+                    raise ValueError(f'Category "{name}" already exists')
+
+        keys = list(config.keys())
+        new: dict[str, dict] = {}
+
+        if index is None or index < 0 or index > len(keys):
+            insert_idx = len(keys)
+        else:
+            insert_idx = index
+
+        for i, k in enumerate(keys):
+            if i == insert_idx:
+                new[name] = data
+            new[k] = config[k]
+
+        if insert_idx == len(keys):
+            new[name] = data
+
+        settings.set_section('categories', new)
+
+        from ..ui.actions import signals
+        signals.categoryAdded.emit(name, insert_idx)
+
+    def remove_category(self, name: str) -> None:
+        """Remove an existing category by name."""
+        config = settings.get_section('categories')
+
+        keys = list(config.keys())
+        if name not in config:
+            raise KeyError(f'Category "{name}" not found')
+
+        idx = keys.index(name)
+        new = {k: config[k] for k in keys if k != name}
+
+        settings.set_section('categories', new)
+
+        from ..ui.actions import signals
+        signals.categoryRemoved.emit(name, idx)
+
+    def move_category(self, old_index: int, new_index: int) -> None:
+        """Move a category from old_index to new_index."""
+        config = settings.get_section('categories')
+        keys = list(config.keys())
+
+        if not (0 <= old_index < len(keys)):
+            raise IndexError(f'Old index {old_index} out of range')
+
+        if not (0 <= new_index <= len(keys)):
+            raise IndexError(f'New index {new_index} out of range')
+
+        name = keys[old_index]
+        keys.pop(old_index)
+
+        if new_index > len(keys):
+            insert_idx = len(keys)
+        else:
+            insert_idx = new_index
+        keys.insert(insert_idx, name)
+
+        new = {k: config[k] for k in keys}
+        settings.set_section('categories', new)
+
+        from ..ui.actions import signals
+        signals.categoryOrderChanged.emit(name, old_index, insert_idx)
+
+    def update_palette(self, name: str, icon: Optional[str] = None, color: Optional[str] = None) -> None:
+        """Update the icon and/or color of a category."""
+        config = settings.get_section('categories')
+
+        if name not in config:
+            raise KeyError(f'Category "{name}" not found')
+
+        item = config[name].copy()
+
+        if icon is not None:
+            item['icon'] = icon
+
+        if color is not None:
+            item['color'] = color
+
+        config[name] = item
+        settings.set_section('categories', config)
+
+        from ..ui.actions import signals
+        signals.categoryPaletteChanged.emit(name)
+
+
+category_manager = CategoryManager()

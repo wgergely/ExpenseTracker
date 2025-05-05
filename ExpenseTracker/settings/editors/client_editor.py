@@ -93,10 +93,26 @@ class ImportSecretDialog(QtWidgets.QDialog):
         help_widget.setFocusPolicy(QtCore.Qt.NoFocus)
 
         help_widget.document().setIndentWidth(ui.Size.Indicator(4.0))
+        help_widget.document().setDefaultFont(ui.Font.MediumFont(ui.Size.MediumText(1.1))[0])
+        help_widget.document().setDefaultStyleSheet(
+            f'* {{'
+            f'color: {ui.Color.Text(qss=True)};'
+            f'font-size: {ui.Size.MediumText(1.1)}px;'
+            f'font-weight: 700;'
+            f'font-family: {ui.Font.MediumFont(ui.Size.MediumText(1.1))[0].family()};'
+            f'}}'
+        )
+
+        app = QtWidgets.QApplication.instance()
+        palette = app.palette()
+        palette.setColor(QtGui.QPalette.Link, ui.Color.SelectedText())
+        palette.setColor(QtGui.QPalette.LinkVisited, ui.Color.Text())
+        app.setPalette(palette)
 
         help_widget.setOpenExternalLinks(True)
         with settings.gcp_help_path.open('r') as f:
             help_widget.setMarkdown(f.read())
+            help_widget.setHtml(help_widget.toHtml())
         splitter.addWidget(help_widget)
 
         # Paste and import buttons
@@ -249,15 +265,13 @@ class ClientEditor(QtWidgets.QWidget):
         self._init_actions()
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(150, self.init_data)
-
     def _create_ui(self):
         QtWidgets.QFormLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
         o = ui.Size.Indicator(1.0)
         self.layout().setSpacing(o)
 
-        self.import_secret_button = QtWidgets.QPushButton('Import Secret', self)
+        self.import_secret_button = QtWidgets.QPushButton('Setup Google Cloud Project and Client', self)
         self.import_secret_button.setIcon(ui.get_icon('btn_ledger'))
         self.import_secret_button.setToolTip('Import Google OAuth Client Secret')
         self.layout().addRow('', self.import_secret_button)
@@ -311,6 +325,8 @@ class ClientEditor(QtWidgets.QWidget):
 
         self.import_secret_button.clicked.connect(self.show_import_dialog)
         self.auth_button.clicked.connect(self.authenticate)
+
+        signals.initializationRequested.connect(self.init_data)
 
     def init_data(self):
         """

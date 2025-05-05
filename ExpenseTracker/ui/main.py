@@ -8,6 +8,7 @@ This module defines:
     - InteractionState and ResizableMainWidget: support window resizing and state changes
 """
 import functools
+import logging
 
 from PySide6 import QtWidgets, QtCore, QtGui
 
@@ -270,12 +271,33 @@ class StatusIndicator(QtWidgets.QWidget):
     @QtCore.Slot()
     def update_status(self):
         from ..core.database import database as db
-        self._status = db.get_state()
+        try:
+            self._status = db.get_state()
+        except Exception as e:
+            logging.warning(f'Failed to get database state: {e}')
+            self._status = database.CacheState.Uninitialized
 
     @QtCore.Slot()
     def action(self):
         self.update_status()
-        QtWidgets.QMessageBox.information(self, 'Status', self._status.value.capitalize())
+
+        from ..core import service
+        try:
+            service.verify_sheet_access()
+            QtWidgets.QMessageBox.information(
+                self,
+                'Status',
+                f'Spreadsheet access verified. \nStatus: {self._status.value.capitalize()}',
+                QtWidgets.QMessageBox.Ok
+            )
+        except Exception as ex:
+            QtWidgets.QMessageBox.warning(
+                self,
+                'Status',
+                f'Failed to verify spreadsheet access: {ex} \n\nStatus: {self._status.value.capitalize()}',
+                QtWidgets.QMessageBox.Ok
+            )
+
 
 
 class ResizableMainWidget(QtWidgets.QMainWindow):
@@ -464,13 +486,6 @@ class MainWindow(ResizableMainWidget):
         w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
         self.toolbar.addWidget(w)
 
-        action = QtGui.QAction('Refresh Data', self)
-        action.setIcon(ui.get_icon('btn_sync'))
-        action.setToolTip('Fetch data')
-        action.setStatusTip('Fetch data')
-        action.triggered.connect(signals.dataFetchRequested)
-        self.toolbar.addAction(action)
-
         action = QtGui.QAction('Open Spreadsheet', self)
         action.setShortcut('Ctrl+Shift+O')
         action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
@@ -487,7 +502,7 @@ class MainWindow(ResizableMainWidget):
         self.addAction(action)
 
         toggle_func = lambda a, s: a.setIcon(
-            ui.get_icon(s, color=ui.Color.SelectedText)) if a.isChecked() else a.setIcon(
+            ui.get_icon(s, color=ui.Color.Green)) if a.isChecked() else a.setIcon(
             ui.get_icon(s, color=ui.Color.DisabledText))
         toggle_vis = lambda e: e.setHidden(not e.isHidden())
 
@@ -505,6 +520,13 @@ class MainWindow(ResizableMainWidget):
         self.addAction(action)
         self.presets_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_presets'))
+
+        # Separator
+        action = QtGui.QAction(self)
+        action.setSeparator(True)
+        action.setEnabled(False)
+        self.toolbar.addAction(action)
+        self.addAction(action)
 
         action = QtGui.QAction('Transactions', self)
         action.setCheckable(True)
@@ -535,27 +557,30 @@ class MainWindow(ResizableMainWidget):
         self.addAction(action)
         self.trends_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_trend'))
+
         # Pie Chart toggle
         action = QtGui.QAction('Pie Chart', self)
         action.setCheckable(True)
         action.setChecked(self.piechart_view.isVisible())
+        action.setIcon(ui.get_icon('btn_piechart', color=ui.Color.DisabledText))
         action.setToolTip('Show pie chart...')
         action.setStatusTip('Show pie chart...')
         action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
         self.toolbar.addAction(action)
         self.addAction(action)
-        self.piechart_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_piechart'))
 
         # Doughnut Chart toggle
         action = QtGui.QAction('Doughnut Chart', self)
         action.setCheckable(True)
         action.setChecked(self.doughnut_view.isVisible())
+        action.setIcon(ui.get_icon('btn_doughnut', color=ui.Color.DisabledText))
         action.setToolTip('Show doughnut chart...')
         action.setStatusTip('Show doughnut chart...')
         action.triggered.connect(functools.partial(toggle_vis, self.doughnut_view))
         self.toolbar.addAction(action)
         self.addAction(action)
-        self.doughnut_view.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_doughnut'))
 
         # Separator
         action = QtGui.QAction(self)
@@ -612,6 +637,13 @@ class MainWindow(ResizableMainWidget):
         action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(self.range_selector.next_month)
         self.addAction(action)
+
+        action = QtGui.QAction('Refresh Data', self)
+        action.setIcon(ui.get_icon('btn_sync'))
+        action.setToolTip('Fetch data')
+        action.setStatusTip('Fetch data')
+        action.triggered.connect(signals.dataFetchRequested)
+        self.toolbar.addAction(action)
 
         self.toolbar.addWidget(self.status_indicator)
 

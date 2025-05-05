@@ -125,7 +125,7 @@ class FontDatabase:
         # Retrieve a font of the specified family, style, and size
         font = QtGui.QFontDatabase.font(role.value, style, size)
         if font.family() != role.value:
-            raise RuntimeError(f'Could not find font: {role.value} {style} {size}')
+            logging.warning(f'Font not found: {role.value} {style} {size}. Found: {font.family()}')
 
         font.setPixelSize(size)
 
@@ -369,7 +369,7 @@ def apply_theme() -> None:
     qss = init_stylesheet()
     QtWidgets.QApplication.instance().setStyleSheet(qss)
 
-    for widget in QtWidgets.QApplication.instance().allWidgets():
+    for widget in QtWidgets.QApplication.instance().topLevelWidgets():
         try:
             widget.setStyleSheet(qss)
         except:

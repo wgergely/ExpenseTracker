@@ -64,7 +64,12 @@ class YearMonthPopup(QtWidgets.QFrame):
         header_layout = QtWidgets.QHBoxLayout()
 
         self.prev_button = QtWidgets.QToolButton(self)
-        self.prev_button.setText('<')
+        self.prev_button.setToolTip('Previous year')
+        self.prev_button.setWhatsThis('Previous year')
+        self.prev_button.setShortcut('Alt+Left')
+        self.prev_button.setShortcutAutoRepeat(False)
+        self.prev_button.setIcon(ui.get_icon('btn_left'))
+        self.prev_button.setText('Previous Month')
         self.prev_button.clicked.connect(self.decrement_year)
         header_layout.addWidget(self.prev_button)
 
@@ -73,7 +78,12 @@ class YearMonthPopup(QtWidgets.QFrame):
         header_layout.addWidget(self.year_label)
 
         self.next_button = QtWidgets.QToolButton(self)
-        self.next_button.setText('>')
+        self.next_button.setToolTip('Next year')
+        self.next_button.setWhatsThis('Next year')
+        self.next_button.setShortcut('Alt+Right')
+        self.next_button.setShortcutAutoRepeat(False)
+        self.next_button.setIcon(ui.get_icon('btn_right'))
+        self.next_button.setText('Next Month')
         self.next_button.clicked.connect(self.increment_year)
         header_layout.addWidget(self.next_button)
 
@@ -279,8 +289,6 @@ class RangeSelectorBar(QtWidgets.QToolBar):
         self._connect_signals()
         self._init_actions()
 
-        QtCore.QTimer.singleShot(150, self.load_saved_state)
-
     def _connect_signals(self):
         self.start_selector.yearMonthChanged.connect(self.on_start_changed)
         self.start_selector.yearMonthChanged.connect(self.save_range)
@@ -295,6 +303,7 @@ class RangeSelectorBar(QtWidgets.QToolBar):
                 self.load_saved_state()
 
         signals.metadataChanged.connect(metadata_changed)
+        signals.initializationRequested.connect(self.load_saved_state)
 
     def _create_ui(self):
         prev_action = QtGui.QAction(ui.get_icon('btn_left'), '', self)

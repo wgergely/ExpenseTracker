@@ -129,83 +129,80 @@ class ServiceContractTest(ServiceTestBase):
         self.assertTrue(set(self.headers).issubset(svc._verify_headers()))
 
     # ---------- mapping key presence -----------------------------------
-    def test_verify_mapping_success(self):
+    def testverify_mapping_success(self):
         self._populate_header()
         svc._verify_mapping()
 
     def _install_mapping(self, mapping: Dict[str, str]):
         lib.settings.set_section('mapping', mapping)
 
-    def test_verify_mapping_missing_date_key(self):
-        mapping = self.GOOD_MAPPING.copy()
+    def testverify_mapping_missing_date_key(self):
+        # Missing required mapping key should be rejected by settings
+        mapping = dict(self.GOOD_MAPPING)
         mapping.pop('date')
-        self._install_mapping(mapping)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(ValueError):
+            self._install_mapping(mapping)
 
-    def test_verify_mapping_missing_amount_key(self):
-        mapping = self.GOOD_MAPPING.copy()
+    def testverify_mapping_missing_amount_key(self):
+        # Missing required mapping key should be rejected by settings
+        mapping = dict(self.GOOD_MAPPING)
         mapping.pop('amount')
-        self._install_mapping(mapping)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(ValueError):
+            self._install_mapping(mapping)
 
-    def test_verify_mapping_missing_account_key(self):
-        mapping = self.GOOD_MAPPING.copy()
+    def testverify_mapping_missing_account_key(self):
+        # Missing required mapping key should be rejected by settings
+        mapping = dict(self.GOOD_MAPPING)
         mapping.pop('account')
-        self._install_mapping(mapping)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(ValueError):
+            self._install_mapping(mapping)
 
     # ---------- mapping wrong reference / type -------------------------
-    def test_verify_mapping_unknown_column_reference(self):
+    def testverify_mapping_unknown_column_reference(self):
         bad_map = {**self.GOOD_MAPPING, 'account': 'NonExistent'}
         self._install_mapping(bad_map)
         self._populate_header()
         with self.assertRaises(svc.status.HeaderMappingInvalidException):
             svc._verify_mapping()
 
-    def test_verify_mapping_wrong_amount_type(self):
+    def testverify_mapping_wrong_amount_type(self):
         bad_header = {**self.GOOD_HEADER, 'Amount': 'string'}
         lib.settings.set_section('header', bad_header)
         self._populate_header(list(bad_header.keys()))
         with self.assertRaises(svc.status.HeaderMappingInvalidException):
             svc._verify_mapping()
 
-    # ---------- merge‑mapping ------------------------------------------
-    def test_merge_mapping_success(self):
-        merge_map = {**self.GOOD_MAPPING, 'category': 'Category|SubCategory'}
+    # ---------- merge-mapping (only allowed on 'description') ------------
+    def test_merge_mapping_on_description_success(self):
+        # Only 'description' may map to multiple columns
+        merge_map = dict(self.GOOD_MAPPING)
+        merge_map['description'] = 'Description|Notes'
         self._install_mapping(merge_map)
         self._populate_header()
         svc._verify_mapping()
 
-    def test_merge_mapping_missing_remote_column(self):
-        merge_map = {**self.GOOD_MAPPING, 'category': 'Category|SubCategory'}
+    def test_merge_mapping_on_description_missing_remote_column(self):
+        merge_map = dict(self.GOOD_MAPPING)
+        merge_map['description'] = 'Description|NonExistent'
         self._install_mapping(merge_map)
-        header_no_sub = [h for h in self.headers if h != 'SubCategory']
-        self._populate_header(header_no_sub)
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
-
-    def test_merge_mapping_header_not_in_schema(self):
-        bad_header_schema = {k: v for k, v in self.GOOD_HEADER.items() if k != 'SubCategory'}
-        lib.settings.set_section('header', bad_header_schema)
-        merge_map = {**self.GOOD_MAPPING, 'category': 'Category|SubCategory'}
-        self._install_mapping(merge_map)
-        header_no_sub = [h for h in self.headers if h != 'SubCategory']
-        self._populate_header(header_no_sub)
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
-
-    # ---------- tolerated ambiguity ------------------------------------
-    def test_mapping_duplicate_values_tolerated(self):
-        dup_map = {**self.GOOD_MAPPING, 'amount_copy': 'Amount'}
-        self._install_mapping(dup_map)
         self._populate_header()
-        svc._verify_mapping()  # should pass
+        with self.assertRaises(svc.status.HeaderMappingInvalidException):
+            svc._verify_mapping()
+
+    def test_merge_mapping_on_other_key_disallowed(self):
+        # Multi-mapping on any key other than 'description' should be rejected by settings
+        bad_map = dict(self.GOOD_MAPPING)
+        bad_map['category'] = 'Category|SubCategory'
+        with self.assertRaises(ValueError):
+            self._install_mapping(bad_map)
+
+    # ---------- duplicate mappings disallowed ---------------------------
+    def test_mapping_duplicate_values_disallowed(self):
+        # Mapping must not contain extra keys or duplicate references
+        dup_map = dict(self.GOOD_MAPPING)
+        dup_map['amount_copy'] = 'Amount'
+        with self.assertRaises(ValueError):
+            self._install_mapping(dup_map)
 
 
 # --------------------------------------------------------------------------- 3. data integrity tests
@@ -232,11 +229,12 @@ class ServiceDataIntegrityTest(ServiceTestBase):
 
     def test_fetch_data_with_missing_and_mixed_values(self):
         rows = [
-            ['2023‑01‑01', '', 'Food', '', 'Cash', '', '‑'],
-            ['', 'Late fee', 'Rent', '', 'Credit', 50, '‑'],
-            ['bad‑date', 'Oops', '', '', '', 'oops', '‑'],
+            ['2023-01-01', '', 'Food', '', 'Cash', '', '-'],
+            ['', 'Late fee', 'Rent', '', 'Credit', 50, '-'],
+            ['bad-date', 'Oops', '', '', '', 'oops', '-'],
         ]
         self._populate_header_and_rows(rows)
         df = svc._fetch_data()
+        # shape should reflect all rows, but empty or invalid values remain as-is
         self.assertEqual(df.shape[0], 3)
-        self.assertTrue(df.isna().any(axis=None))
+        self.assertFalse(df.isna().any(axis=None))

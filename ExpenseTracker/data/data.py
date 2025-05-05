@@ -400,8 +400,12 @@ def get_data(
     if hide_empty_categories:
         df = df[df['category'].notna() & (df['category'] != '')]
 
-    # Sort categories
-    df = df.sort_values('category', ascending=True).reset_index(drop=True)
+    # Preserve custom category order defined in configuration
+    config = lib.settings.get_section('categories')
+    order = list(config.keys())
+    # Assign ordering index, unknown categories go to end
+    df['__order'] = df['category'].apply(lambda x: order.index(x) if x in order else len(order))
+    df = df.sort_values('__order').drop(columns='__order').reset_index(drop=True)
 
     # Remove excluded categories
     config = lib.settings.get_section('categories')

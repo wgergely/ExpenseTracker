@@ -10,7 +10,7 @@ import sys
 import uuid
 from typing import Optional, Sequence
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 
 __version__ = '0.1.0'
 
@@ -27,6 +27,14 @@ def set_application_properties(app: Optional[QtWidgets.QApplication] = None) -> 
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
+
+def set_app_icon() -> None:
+    """Set application icon for all platforms."""
+    from ..settings import lib
+    icon_path = lib.settings.template_dir / 'icon.png'
+    if icon_path.exists():
+        app = QtWidgets.QApplication.instance()
+        app.setWindowIcon(QtGui.QIcon(icon_path.as_posix()))
 
 def set_model_id() -> None:
     """Set windows model id to add custom window icons on windows.
@@ -56,6 +64,9 @@ class Application(QtWidgets.QApplication):
         self.setOrganizationName('')
         self.setApplicationVersion(__version__)
         self.setQuitOnLastWindowClosed(True)
+
+        set_model_id()
+        set_app_icon()
 
         from . import ui
         ui.apply_theme()

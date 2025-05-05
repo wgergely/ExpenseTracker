@@ -162,12 +162,11 @@ class ExpenseView(QtWidgets.QTableView):
         self._init_actions()
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(0, self.model().sourceModel().init_data)
-
     def _init_model(self) -> None:
-        model = ExpenseModel()
-        proxy = ExpenseSortFilterProxyModel()
+        model = ExpenseModel(parent=self)
+        proxy = ExpenseSortFilterProxyModel(parent=self)
         proxy.setSourceModel(model)
+
         self.setModel(proxy)
         self._init_section_sizing()
 
@@ -236,7 +235,7 @@ class ExpenseView(QtWidgets.QTableView):
         action = QtGui.QAction('Show Icons', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.setShortcut('alt+I')
+        action.setShortcut('Alt+I')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Icon.value, not v))
         action_group.addAction(action)
@@ -245,7 +244,7 @@ class ExpenseView(QtWidgets.QTableView):
         action = QtGui.QAction('Show Category', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.setShortcut('alt+C')
+        action.setShortcut('Alt+C')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Category.value, not v))
         action_group.addAction(action)
@@ -254,7 +253,7 @@ class ExpenseView(QtWidgets.QTableView):
         action = QtGui.QAction('Show Graph', self)  # weights
         action.setCheckable(True)
         action.setChecked(True)
-        action.setShortcut('alt+G')
+        action.setShortcut('Alt+G')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.toggled.connect(lambda v: self.setColumnHidden(Columns.Weight.value, not v))
         action.toggled.connect(
@@ -266,28 +265,40 @@ class ExpenseView(QtWidgets.QTableView):
         action_group.addAction(action)
         self.addAction(action)
 
-        # separator
+        # separator before sort actions
         action = QtGui.QAction('', self)
         action.setSeparator(True)
         action.setEnabled(False)
         self.addAction(action)
 
-        # sort column
-        # action group
+        # sort column actions (exclusive)
         action_group = QtGui.QActionGroup(self)
         action_group.setExclusive(True)
 
-        action = QtGui.QAction('Sort by Category', self)
+        # Custom order (config-defined) - default
+        action = QtGui.QAction('Sort by Custom Order', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.triggered.connect(lambda: self.model().sort(Columns.Category.value))
+        action.setStatusTip('Sort by custom order defined in configuration')
+        action.toggled.connect(lambda checked: self.model().sort(-1))
         action_group.addAction(action)
         self.addAction(action)
 
+        # Alphabetical by Category
+        action = QtGui.QAction('Sort by Category', self)
+        action.setCheckable(True)
+        action.setChecked(False)
+        action.setStatusTip('Sort categories alphabetically')
+        action.toggled.connect(lambda checked: self.model().sort(Columns.Category.value))
+        action_group.addAction(action)
+        self.addAction(action)
+
+        # By Amount
         action = QtGui.QAction('Sort by Amount', self)
         action.setCheckable(True)
         action.setChecked(False)
-        action.triggered.connect(lambda: self.model().sort(Columns.Amount.value))
+        action.setStatusTip('Sort categories by total amount')
+        action.toggled.connect(lambda checked: self.model().sort(Columns.Amount.value))
         action_group.addAction(action)
         self.addAction(action)
 
@@ -345,14 +356,17 @@ class ExpenseView(QtWidgets.QTableView):
         # respond to external category selection requests (e.g. from charts)
         @QtCore.Slot(str)
         def _on_external_category_requested(category: str) -> None:
-            # only respond to new non-empty external selections
             if not category or category == self._saved_category:
                 return
+            indexes = [self.model().index(i, Columns.Category.value) for i in range(self.model().rowCount())]
+            if category not in [i.data(CategoryRole) for i in indexes]:
+                return
+
             self._saved_category = category
             QtCore.QTimer.singleShot(0, self.restore_category_selection)
 
-        # charts emit categoryUpdateRequested to change selection in expense view
         signals.categoryUpdateRequested.connect(_on_external_category_requested)
+        signals.categoryPaletteChanged.connect(self.viewport().update)
 
     @QtCore.Slot()
     def emit_category_selection_changed(self) -> None:
@@ -424,12 +438,6 @@ class ExpenseView(QtWidgets.QTableView):
         header = self.verticalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         header.setDefaultSectionSize(ui.Size.RowHeight(1.4))
-
-    def sizeHint(self):
-        return QtCore.QSize(
-            ui.Size.DefaultWidth(1.0),
-            ui.Size.DefaultHeight(1.0)
-        )
 
 
 class ExpenseDockWidget(DockableWidget):

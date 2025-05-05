@@ -184,7 +184,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort by Date', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.setShortcut('alt+1')
+        action.setShortcut('Alt+1')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Date.value, self.model().sortOrder()))
         action_group.addAction(action)
@@ -192,7 +192,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Sort by Amount', self)
         action.setCheckable(True)
-        action.setShortcut('alt+2')
+        action.setShortcut('Alt+2')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Amount.value, self.model().sortOrder()))
         action_group.addAction(action)
@@ -200,7 +200,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Sort by Description', self)
         action.setCheckable(True)
-        action.setShortcut('alt+3')
+        action.setShortcut('Alt+3')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Description.value, self.model().sortOrder()))
         action_group.addAction(action)
@@ -208,7 +208,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Sort by Category', self)
         action.setCheckable(True)
-        action.setShortcut('alt+4')
+        action.setShortcut('Alt+4')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Category.value, self.model().sortOrder()))
         action_group.addAction(action)
@@ -216,7 +216,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Sort by Account', self)
         action.setCheckable(True)
-        action.setShortcut('alt+5')
+        action.setShortcut('Alt+5')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(Columns.Account.value, self.model().sortOrder()))
         action_group.addAction(action)
@@ -233,7 +233,7 @@ class TransactionsView(QtWidgets.QTableView):
 
         action = QtGui.QAction('Sort Ascending', self)
         action.setCheckable(True)
-        action.setShortcut('alt+up')
+        action.setShortcut('Alt+up')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.AscendingOrder))
         action_group.addAction(action)
@@ -242,7 +242,7 @@ class TransactionsView(QtWidgets.QTableView):
         action = QtGui.QAction('Sort Descending', self)
         action.setCheckable(True)
         action.setChecked(True)
-        action.setShortcut('alt+down')
+        action.setShortcut('Alt+down')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(lambda: self.sortByColumn(self.model().sortColumn(), QtCore.Qt.DescendingOrder))
         action_group.addAction(action)
@@ -306,7 +306,7 @@ class TransactionsView(QtWidgets.QTableView):
                     self.model().set_filter_string('')
 
         action = QtGui.QAction('Find...', self)
-        action.setShortcut('ctrl+f')
+        action.setShortcut('Ctrl+f')
         action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         action.triggered.connect(set_search_filter)
         self.addAction(action)

@@ -48,13 +48,11 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
 
-        # listen for selected category transaction lists
         signals.transactionsChanged.connect(self.queue_data_init)
         self._init_data_timer.timeout.connect(lambda: self.init_data(self._pending_data))
 
         from ...core.sync import sync
         sync.dataUpdated.connect(self.on_sync_success)
-        # handle failures: commitFinished includes (local_id, column) keys with (ok, msg)
         sync.commitFinished.connect(self.on_sync_complete)
 
     @QtCore.Slot(list)

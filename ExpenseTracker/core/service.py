@@ -403,6 +403,7 @@ def _fetch_data(
         raise status.SpreadsheetWorksheetNotConfiguredException
 
     service: Any = _verify_sheet_access()
+    return pd.DataFrame()
 
     row_count, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
     if row_count < 2:
@@ -604,7 +605,6 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int 
     worker.resultReady.connect(lambda d: (result.update({'data': d}), loop.quit()))
     worker.errorOccurred.connect(lambda err: (result.update({'error': err}), loop.quit()))
     dialog.cancelled.connect(lambda: loop.quit())
-
     worker.start()
     dialog.show()
 

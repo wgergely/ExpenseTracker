@@ -37,8 +37,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         self._init_actions()
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(150, self.init_data)
-
     def _create_ui(self):
         QtWidgets.QFormLayout(self)
         self.layout().setContentsMargins(0, 0, 0, 0)
@@ -104,6 +102,8 @@ class SpreadsheetEditor(QtWidgets.QWidget):
 
         self.text_changed_timer.timeout.connect(self.verify_id)
         self.text_changed_timer.timeout.connect(self.save_section)
+
+        signals.initializationRequested.connect(self.init_data)
 
     @QtCore.Slot()
     def save_section(self):

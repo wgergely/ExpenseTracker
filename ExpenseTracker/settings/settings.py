@@ -189,5 +189,4 @@ class SettingsDockWidget(DockableWidget):
         settings_widget.setWindowFlags(QtCore.Qt.Widget)
         content.layout().addWidget(settings_widget, 1)
 
-
         self.setWidget(content)

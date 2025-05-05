@@ -294,3 +294,61 @@ class SettingsAPIBehaviour(BaseTestCase):
 
         self.api.revert_client_secret_to_template()
         self.assertTrue(self.api.client_secret_path.exists())
+
+
+class CategoryManagerTests(BaseTestCase):
+    """Tests for the CategoryManager unified API."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from ExpenseTracker.settings import lib
+        base = minimal_ledger()
+        base['categories'] = {
+            'a': {'display_name': 'A', 'description': '', 'icon': 'i', 'color': '#111111', 'excluded': False},
+            'b': {'display_name': 'B', 'description': '', 'icon': 'j', 'color': '#222222', 'excluded': False},
+            'c': {'display_name': 'C', 'description': '', 'icon': 'k', 'color': '#333333', 'excluded': False},
+        }
+        write_json(self.config_paths.ledger_path, base)
+        lib.settings.load_ledger()
+        self.manager = lib.category_manager
+        from ExpenseTracker.ui.actions import signals
+        self.signals = signals
+
+    def test_add_and_signal(self):
+        calls = []
+        self.signals.categoryAdded.connect(lambda name, idx: calls.append((name, idx)))
+        data = {'display_name': 'D', 'description': '', 'icon': 'x', 'color': '#444444', 'excluded': False}
+        self.manager.add_category('d', data, index=1)
+        cats = lib.settings.get_section('categories')
+        self.assertIn('d', cats)
+        keys = list(cats.keys())
+        self.assertEqual(keys[1], 'd')
+        self.assertEqual(calls, [('d', 1)])
+
+    def test_remove_and_signal(self):
+        calls = []
+        self.signals.categoryRemoved.connect(lambda name, idx: calls.append((name, idx)))
+        # remove middle 'b'
+        self.manager.remove_category('b')
+        cats = lib.settings.get_section('categories')
+        self.assertNotIn('b', cats)
+        self.assertEqual(calls, [('b', 1)])
+
+    def test_move_and_signal(self):
+        calls = []
+        self.signals.categoryOrderChanged.connect(lambda name, o, n: calls.append((name, o, n)))
+        # move 'a' from 0 to 2
+        self.manager.move_category(0, 2)
+        cats = lib.settings.get_section('categories')
+        keys = list(cats.keys())
+        self.assertEqual(keys, ['b', 'c', 'a'])
+        self.assertEqual(calls, [('a', 0, 2)])
+
+    def test_update_palette_and_signal(self):
+        calls = []
+        self.signals.categoryPaletteChanged.connect(lambda name: calls.append(name))
+        self.manager.update_palette('a', icon='newicon', color='#abcdef')
+        cats = lib.settings.get_section('categories')
+        self.assertEqual(cats['a']['icon'], 'newicon')
+        self.assertEqual(cats['a']['color'], '#abcdef')
+        self.assertEqual(calls, ['a'])

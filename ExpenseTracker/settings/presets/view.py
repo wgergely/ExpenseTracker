@@ -76,10 +76,6 @@ class PresetsListView(QtWidgets.QTableView):
         self.viewport().setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
         self.viewport().setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
 
-        self._init_model()
-        self._init_header()
-        # Presets actions are provided by the enclosing dock widget; skip list-level actions
-        # self._init_actions()
         self._connect_signals()
 
     def _init_model(self) -> None:
@@ -142,6 +138,11 @@ class PresetsListView(QtWidgets.QTableView):
 
         self.activated.connect(activated)
 
+        from ...ui.actions import signals
+        signals.initializationRequested.connect(self._init_model)
+        signals.initializationRequested.connect(self._init_header)
+        signals.initializationRequested.connect(self._init_actions)
+
 
 class PresetsDockWidget(DockableWidget):
     """
@@ -157,7 +158,6 @@ class PresetsDockWidget(DockableWidget):
 
 
         self._create_ui()
-        self._init_actions()
         self._connect_signals()
 
     def _create_ui(self) -> None:
@@ -381,5 +381,5 @@ class PresetsDockWidget(DockableWidget):
         self.view.addAction(action)
 
     def _connect_signals(self) -> None:
-        # No additional connections beyond view behaviors
-        pass
+        from ...ui.actions import signals
+        signals.initializationRequested.connect(self._init_actions)

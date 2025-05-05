@@ -48,8 +48,6 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
 
         self._connect_signals()
 
-        QtCore.QTimer.singleShot(150, self.init_data)
-
     def get_options(self):
         """Return a list of option tuples (display, value)."""
         return self._options
@@ -98,6 +96,7 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
             QtCore.QTimer.singleShot(0, self.init_data)
 
         signals.metadataChanged.connect(metadata_changed)
+        signals.initializationRequested.connect(self.init_data)
 
     @QtCore.Slot(int)
     def save(self, index):

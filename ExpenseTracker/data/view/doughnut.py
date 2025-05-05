@@ -16,16 +16,16 @@ class DoughnutView(BaseChartView):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-        # doughnut defaults: legend and icons off
+
         self._show_legend = False
         self._show_icons = False
         self._show_tooltip = True
-        # hole size ratio (inner radius / outer radius)
+
         self.hole_ratio = 2.0 / 3.0
-        # ensure geometry attributes exist before first paint
+
         self._outer_rect = QtCore.QRect()
         self._inner_rect = QtCore.QRect()
-        # synchronize context-menu toggle actions to defaults
+
         for act in self.actions():
             txt = act.text()
             if txt == 'Toggle Legend':
