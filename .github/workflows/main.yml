@@ -13,6 +13,7 @@ jobs:
     env:
       # must be lowercase
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
+      CACHE_SCOPE: expensetracker-cache  # unique name for GH Actions cache
 
     steps:
       - name: Checkout code
@@ -22,8 +23,8 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker       # use the host’s Docker daemon (no Linux container)
-          install: true        # ensure buildx CLI is available
+          driver: docker
+          install: true
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -32,7 +33,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push Docker image (with layer cache)
+      - name: Build & push Docker image (with GH cache)
         uses: docker/build-push-action@v6
         with:
           builder: ${{ steps.buildx.outputs.name }}
@@ -43,28 +44,28 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache
+            type=gha,scope=${{ env.CACHE_SCOPE }}
           cache-to: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max
+            type=gha,scope=${{ env.CACHE_SCOPE }},mode=max
 
       - name: Run build script in container
         run: |
-          docker run --rm \
-            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
-            -w C:\workspace \
-            ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            powershell -NoLogo -ExecutionPolicy Bypass \
-                       -File .\app\build.ps1 \
-                       -Config Release \
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
+                       -File .\app\build.ps1 `
+                       -Config Release `
                        -BuildDir C:\workspace
 
       - name: Build documentation in container
         run: |
-          docker run --rm \
-            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
-            -w C:\workspace \
-            ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            powershell -NoLogo -ExecutionPolicy Bypass \
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
                        -Command "sphinx-build -M html docs docs\_build"
 
       - name: Upload build artifacts
