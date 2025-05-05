@@ -111,6 +111,78 @@ class BaseComboBoxEditor(QtWidgets.QComboBox):
         lib.settings[self.property_name] = value_to_save
 
 
+class NameEditor(QtWidgets.QLineEdit):
+    """Edits the "name" metadata property.
+
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.setPlaceholderText('Enter name')
+        self.setClearButtonEnabled(True)
+        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Maximum)
+        self.setMinimumWidth(ui.Size.DefaultWidth(1.0))
+        self._connect_signals()
+        QtCore.QTimer.singleShot(150, self.init_data)
+
+    def init_data(self):
+        v = lib.settings['name']
+        self.blockSignals(True)
+        self.setText(v or '')
+        self.blockSignals(False)
+
+    def _connect_signals(self):
+        self.textChanged.connect(self.save)
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key != 'name':
+                return
+            self.init_data()
+
+        signals.metadataChanged.connect(metadata_changed)
+
+    @QtCore.Slot(str)
+    def save(self, text):
+        lib.settings['name'] = text
+
+
+class DescriptionEditor(QtWidgets.QLineEdit):
+    """Edits the "description" metadata property.
+
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.setPlaceholderText('Enter description')
+        self.setClearButtonEnabled(True)
+        self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Maximum)
+        self.setMinimumWidth(ui.Size.DefaultWidth(1.0))
+        self._connect_signals()
+        QtCore.QTimer.singleShot(150, self.init_data)
+
+    def init_data(self):
+        v = lib.settings['description']
+        self.blockSignals(True)
+        self.setText(v or '')
+        self.blockSignals(False)
+
+    def _connect_signals(self):
+        self.textChanged.connect(self.save)
+
+        @QtCore.Slot(str, object)
+        def metadata_changed(key: str, value: object) -> None:
+            if key != 'description':
+                return
+            self.init_data()
+
+        signals.metadataChanged.connect(metadata_changed)
+
+    @QtCore.Slot(str)
+    def save(self, text):
+        lib.settings['description'] = text
+
+
 class LocaleEditor(BaseComboBoxEditor):
     """Editor for locale.
 
@@ -216,6 +288,15 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         spacing = ui.Size.Indicator(1.0)
         layout.setSpacing(spacing)
+        layout.addRow('Name', NameEditor(self))
+        layout.addRow('Description', DescriptionEditor(self))
+        separator = QtWidgets.QFrame(self)
+        separator.setFrameShape(QtWidgets.QFrame.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        separator.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
+        separator.setFixedHeight(spacing * 2.0)
+
+        layout.addRow(separator)
         layout.addRow('Locale', LocaleEditor(self))
         layout.addRow('Summary Mode', SummaryModeEditor(self))
         layout.addRow('Hide Empty Categories', BooleanEditor('hide_empty_categories', parent=self))
