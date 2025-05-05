@@ -1,0 +1,80 @@
+name: CI – Build, Push & Package
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: windows-latest
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Run build script in container
+        run: |
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
+                       -File .\app\build.ps1 `
+                       -Config Release `
+                       -BuildDir C:\workspace
+
+      - name: Build documentation in container
+        run: |
+          docker run --rm `
+            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
+            -w C:\workspace `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            powershell -NoLogo -ExecutionPolicy Bypass `
+                       -Command "sphinx-build -M html docs docs\_build"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ github.sha }}
+          path: app/build/install/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-${{ github.sha }}
+          path: docs/_build/html/**
+          if-no-files-found: error
+          retention-days: 7

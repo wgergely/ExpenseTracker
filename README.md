@@ -1,6 +1,6 @@
 # ExpenseTracker
 
-<img src="..docs/rsc/icon.png" alt="ExpenseTracker icon" width="100" height="100"/>
+<img src="docs/rsc/icon/icon.png" alt="ExpenseTracker icon" width="100" height="100"/>
 
 
 ExpenseTracker is a desktop application that visualizes financial transactions grouped by category. The data is sourced
