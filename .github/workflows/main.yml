@@ -1,7 +1,6 @@
 name: CI – Build, Push & Package
 
 on:
-  # Trigger on pushes to main, PRs against main, or manual dispatch
   push:
     branches: [ main ]
   pull_request:
@@ -10,40 +9,38 @@ on:
 
 jobs:
   build-and-push:
-    # Use a Windows runner to support Windows containers
     runs-on: windows-latest
     env:
-      # Lowercase the owner stays dynamic, repo name must be lowercase manually
+      # Use lowercase repo name for a valid Docker image
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3  # Fetch repo into GITHUB_WORKSPACE
+        uses: actions/checkout@v3
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2  # Authenticate Docker to GHCR
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}  # GITHUB_TOKEN has write rights
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push Docker image (with layer cache)
-        uses: docker/build-push-action@v4  # Build, cache, and push
+        uses: docker/build-push-action@v4
         with:
-          context: .                   # Repo root
-          file: Dockerfile            # Path to Dockerfile
-          push: true                  # Push tags after build
+          context: .
+          file: Dockerfile
+          push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:latest           # Update ‘latest’
-            ${{ env.IMAGE_NAME }}:${{ github.sha }} # SHA for reproducibility
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache  # Pull cached layers
+            type=registry,ref=${{ env.IMAGE_NAME }}:cache
           cache-to: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max  # Push cache
+            type=registry,ref=${{ env.IMAGE_NAME }}:cache,mode=max
 
       - name: Run build script in container
         run: |
-          # Use the SHA-tagged image to compile binaries
           docker run --rm \
             --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
             -w C:\workspace \
@@ -55,7 +52,6 @@ jobs:
 
       - name: Build documentation in container
         run: |
-          # Same image to build HTML docs via Sphinx
           docker run --rm \
             --mount type=bind,source="${{ github.workspace }}",target=C:\workspace \
             -w C:\workspace \
@@ -64,13 +60,19 @@ jobs:
                        -Command "sphinx-build -M html docs docs\_build"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3  # Persist compiled binaries
+        uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: binaries-${{ github.sha }}
           path: app/build/install/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
       - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v3  # Persist generated HTML docs
+        uses: actions/upload-artifact@v4
         with:
-          name: docs
+          name: docs-${{ github.sha }}
           path: docs/_build/html/**
+          if-no-files-found: error
+          # default compression-level is fine for HTML
+          retention-days: 7
