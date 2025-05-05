@@ -56,14 +56,5 @@ RUN python -m pip install --upgrade pip; `
     python -m pip install -r requirements.txt; `
     Remove-Item -Force requirements.txt
 
-# end of context setup
-
-# Set the working directory
-WORKDIR /app
-
-# Create output directory for build artifacts
-VOLUME ["C:/artifacts"]
-
-# Create entrypoint script
-COPY scripts/entrypoint.ps1 /app/
-ENTRYPOINT ["powershell", "/app/entrypoint.ps1"]
+# Provide an empty workdir – real code will be mounted at runtime
+WORKDIR C:/workspace
