@@ -8,6 +8,7 @@ import logging
 import socket
 import ssl
 import string
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -16,6 +17,7 @@ from PySide6 import QtCore, QtWidgets
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from .auth import auth_manager, AuthExpiredError
 from ..status import status
 
 # Cached Sheets API client to avoid repeated discovery/auth costs
@@ -35,7 +37,8 @@ class AsyncWorker(QtCore.QThread):
         errorOccurred (str): Emitted with an error message on failure.
     """
     resultReady = QtCore.Signal(object)
-    errorOccurred = QtCore.Signal(str)
+    # Emits exception instance on failure (including AuthExpiredError)
+    errorOccurred = QtCore.Signal(object)
 
     def __init__(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         super().__init__()
@@ -55,6 +58,12 @@ class AsyncWorker(QtCore.QThread):
                 result = self.func(*self.args, **self.kwargs)
                 self.resultReady.emit(result)
                 return
+            except AuthExpiredError as ex:
+                # Notify GUI that interactive authentication is required
+                from ..ui.actions import signals
+                signals.authenticationRequested.emit()
+                self.errorOccurred.emit(ex)
+                return
             except (
                     status.AuthenticationExceptionException,
                     status.CredsNotFoundException,
@@ -64,12 +73,13 @@ class AsyncWorker(QtCore.QThread):
                     status.HeadersInvalidException,
                     status.HeaderMappingInvalidException
             ) as ex:
-                self.errorOccurred.emit(str(ex))
+                self.errorOccurred.emit(ex)
                 return
             except Exception as ex:
                 last_exception = ex
                 time.sleep(self.wait_seconds)
-        self.errorOccurred.emit(str(last_exception))
+        # All retries exhausted
+        self.errorOccurred.emit(last_exception)
 
 
 class SheetsFetchProgressDialog(QtWidgets.QDialog):
@@ -84,6 +94,7 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
     def __init__(self, total_timeout: int = TOTAL_TIMEOUT, parent: Optional[QtWidgets.QWidget] = None,
                  status_text: str = 'Fetching data.') -> None:
         super().__init__(parent)
+
         self.total_timeout: int = total_timeout
         self.remaining: int = total_timeout
         self.setWindowTitle('Fetching Data')
@@ -134,6 +145,21 @@ class SheetsFetchProgressDialog(QtWidgets.QDialog):
         self.reject()
 
 
+def clear_service() -> None:
+    """
+    Clears the cached Sheets API client.
+    """
+    global _cached_service
+
+    try:
+        if _cached_service:
+            _cached_service.close()
+    except Exception as ex:
+        logging.debug(f'Failed closing cached Sheets service client: {ex}')
+
+    _cached_service = None
+
+
 def get_service() -> Any:
     """
     Builds (or returns cached) Google Sheets service client.
@@ -142,9 +168,12 @@ def get_service() -> Any:
         The Sheets API Resource, reusing a single client per app run.
     """
     global _cached_service
-    from . import auth
-    # Obtain fresh credentials (with auto-refresh capability)
-    creds: Any = auth.get_creds()
+    # Obtain valid credentials (non-interactive, may raise AuthExpiredError)
+    logging.debug(
+        f"[Thread-{threading.get_ident()}] get_service: invoking auth_manager.get_valid_credentials at {time.time()}")
+    creds: Any = auth_manager.get_valid_credentials()
+    logging.debug(
+        f"[Thread-{threading.get_ident()}] get_service: returned from auth_manager.get_valid_credentials at {time.time()}")
     # Return cached client if already created
     if _cached_service is not None:
         return _cached_service
@@ -190,12 +219,13 @@ def _query_sheet_size(service: Any, spreadsheet_id: str, worksheet_name: str) ->
         A tuple (row_count, column_count).
 
     Raises:
-        WorksheetNotFoundException: If the worksheet does not exist.
+        WorksheetNotFoundException: If the worksheet doesn't exist.
     """
     result: Dict[str, Any] = service.spreadsheets().get(
         spreadsheetId=spreadsheet_id,
         fields='sheets(properties(title,gridProperties(rowCount,columnCount)))'
     ).execute()
+
     sheet: Optional[Dict[str, Any]] = next(
         (s for s in result.get('sheets', [])
          if s.get('properties', {}).get('title', '') == worksheet_name), None)
@@ -291,6 +321,7 @@ def _verify_headers(remote_headers: List[str] = None) -> Set[str]:
         raise status.HeadersInvalidException
 
     remote_headers = remote_headers or _fetch_headers()
+
     if not remote_headers:
         raise status.HeadersInvalidException('No data found in the remote sheet.')
 
@@ -403,7 +434,6 @@ def _fetch_data(
         raise status.SpreadsheetWorksheetNotConfiguredException
 
     service: Any = _verify_sheet_access()
-    return pd.DataFrame()
 
     row_count, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
     if row_count < 2:
@@ -502,6 +532,7 @@ def _fetch_headers(
 
     if not data_rows:
         raise status.UnknownException('No data found in the remote sheet.')
+
     header_row: List[Any] = data_rows[0] if data_rows[0] else []
     header_row = [str(cell) for cell in header_row]
     logging.debug(f'Found {len(header_row)} headers in the remote sheet: [{",".join(sorted(header_row))}].')
@@ -621,8 +652,19 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int 
         raise Exception('Operation cancelled or timed out.')
     dialog.close()
     if result['error']:
+        err = result['error']
+
+        # If authentication expired, notify GUI and raise authentication exception
         from ..status import status
-        raise status.UnknownException(result['error'])
+        from ..ui.actions import signals
+
+        if isinstance(err, AuthExpiredError) or isinstance(err, status.AuthenticationExceptionException):
+            if signals:
+                signals.authenticationRequested.emit()
+            raise status.AuthenticationExceptionException(str(err))
+
+        # Other errors
+        raise status.UnknownException(str(err))
     return result['data']
 
 
