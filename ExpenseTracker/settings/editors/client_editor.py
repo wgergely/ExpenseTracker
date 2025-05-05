@@ -324,7 +324,7 @@ class ClientEditor(QtWidgets.QWidget):
         signals.configSectionChanged.connect(on_section_changed)
 
         self.import_secret_button.clicked.connect(self.show_import_dialog)
-        self.auth_button.clicked.connect(self.authenticate)
+        self.auth_button.clicked.connect(auth.reauthenticate)
 
         signals.initializationRequested.connect(self.init_data)
 
@@ -352,10 +352,3 @@ class ClientEditor(QtWidgets.QWidget):
         """
         dialog = ImportSecretDialog(self)
         dialog.open()
-
-    @QtCore.Slot()
-    def authenticate(self):
-        """
-        Starts the authentication process.
-        """
-        auth.authenticate()
