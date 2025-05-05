@@ -7,7 +7,9 @@ manage credential storage, and run OAuth flows asynchronously.
 
 import json
 import logging
-from typing import Dict, Union
+import threading
+import time
+from typing import Dict, Union, Optional
 
 import google.auth.exceptions
 import google.auth.transport.requests
@@ -20,6 +22,81 @@ from ..status import status
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', ]
 
 
+class AuthExpiredError(Exception):
+    """Raised when credentials have expired and require interactive refresh."""
+    pass
+
+
+class AuthManager:
+    """Manages OAuth2 credentials with thread-safe refresh."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._creds: Optional[google.oauth2.credentials.Credentials] = None
+
+    def get_valid_credentials(self) -> google.oauth2.credentials.Credentials:
+        """
+        Return valid credentials without any UI.
+
+        Raises:
+            AuthExpiredError: if no credentials exist or a full interactive flow is required.
+            status.AuthenticationExceptionException: if an auto-refresh fails.
+            status.CredsInvalidException: if stored credentials are corrupt.
+        """
+        from ..settings import lib
+        with self._lock:
+            # Load existing credentials file
+            if self._creds is None:
+                if not lib.settings.creds_path.exists():
+                    # No saved credentials → interactive sign-in required
+                    raise AuthExpiredError(
+                        'No credentials found; interactive authentication required')
+                try:
+                    self._creds = google.oauth2.credentials.Credentials.from_authorized_user_file(
+                        str(lib.settings.creds_path))
+                except Exception as ex:
+                    # Credentials file invalid → remove and require re-authentication
+                    try:
+                        lib.settings.creds_path.unlink()
+                    except Exception:
+                        pass
+                    raise status.CredsInvalidException('Failed to load credentials') from ex
+
+            # Attempt non-interactive refresh if expired
+            if self._creds.expired:
+                if self._creds.refresh_token:
+                    try:
+                        self._creds.refresh(
+                            google.auth.transport.requests.Request())
+                        save_creds(self._creds)
+                    except Exception as ex:
+                        raise status.AuthenticationExceptionException(
+                            'Failed to auto-refresh credentials') from ex
+                else:
+                    # No refresh token → interactive sign-in required
+                    raise AuthExpiredError(
+                        'Credentials expired; interactive authentication required')
+
+            return self._creds
+
+    def refresh_credentials_interactive(self) -> google.oauth2.credentials.Credentials:
+        """Perform an interactive OAuth flow on the main GUI thread."""
+        app = QtWidgets.QApplication.instance() or QtCore.QCoreApplication.instance()
+        if not app:
+            raise RuntimeError('No Qt application instance; cannot perform interactive auth')
+        if QtCore.QThread.currentThread() != app.thread():
+            raise RuntimeError('refresh_credentials_interactive must be called from the main GUI thread')
+
+        with self._lock:
+            creds = authenticate()
+            save_creds(creds)
+            self._creds = creds
+            return creds
+
+
+auth_manager = AuthManager()
+
+
 class AuthFlowWorker(QtCore.QThread):
     """
     Runs OAuth web flow in a background thread.
@@ -29,7 +106,8 @@ class AuthFlowWorker(QtCore.QThread):
         errorOccurred (str): Emitted with an error message on failure.
     """
     resultReady = QtCore.Signal(object)
-    errorOccurred = QtCore.Signal(str)
+    # Emits exception instance on failure
+    errorOccurred = QtCore.Signal(object)
 
     def __init__(self, flow: google_auth_oauthlib.flow.InstalledAppFlow, parent=None):
         super().__init__(parent)
@@ -37,14 +115,23 @@ class AuthFlowWorker(QtCore.QThread):
         self.creds = None
 
     def run(self):
+        logging.debug(f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: called at {time.time()}")
         try:
+            logging.debug(
+                f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: flow.run_local_server start at {time.time()}")
             self.creds = self.flow.run_local_server(port=0)
+            logging.debug(
+                f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: flow.run_local_server returned at {time.time()}")
             if not self.creds or not self.creds.token:
-                self.errorOccurred.emit('Authentication did not complete successfully.')
+                # Authentication did not complete
+                ex = status.AuthenticationExceptionException('Authentication did not complete successfully.')
+                self.errorOccurred.emit(ex)
             else:
                 self.resultReady.emit(self.creds)
         except Exception as ex:
-            self.errorOccurred.emit(str(ex))
+            logging.debug(f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: exception at {time.time()}: {ex}")
+            # Emit the exception object
+            self.errorOccurred.emit(ex)
 
 
 class AuthProgressDialog(QtWidgets.QDialog):
@@ -178,6 +265,38 @@ def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> Non
     logging.debug(f'Credentials saved to {lib.settings.creds_path}.')
 
 
+def reauthenticate() -> google.oauth2.credentials.Credentials:
+    """Force reauthentication and service reset regardless of creds state.
+
+    Returns:
+        google.oauth2.credentials.Credentials: The authenticated credentials.
+
+    """
+    logging.info('Re-authenticating...')
+
+    from ..settings import lib
+    if not lib.settings.client_secret_path.exists():
+        raise status.ClientSecretNotFoundException
+
+    if lib.settings.creds_path.exists():
+        logging.debug(f'Deleting {lib.settings.creds_path}...')
+        lib.settings.creds_path.unlink()
+
+    # Ensure client secret is present
+    lib.settings.validate_client_secret()
+
+    # Reset service
+    from . import service
+    service.clear_service()
+
+    # Run authentication flow
+    logging.debug('Starting re-authentication...')
+    authenticate()
+
+    service.get_service()
+    return get_creds()
+
+
 def _authenticate() -> google.oauth2.credentials.Credentials:
     """
     Run OAuth flow synchronously in the main GUI thread to authenticate and obtain credentials.
@@ -241,6 +360,7 @@ def _authenticate() -> google.oauth2.credentials.Credentials:
     save_creds(creds)
     return creds
 
+
 def authenticate() -> google.oauth2.credentials.Credentials:
     """
     Run OAuth flow to authenticate and obtain credentials.
@@ -252,6 +372,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
         status.AuthenticationExceptionException: If authentication fails or is cancelled.
         status.CredsInvalidException: If credentials returned are invalid.
     """
+    logging.debug(f"[Thread-{threading.get_ident()}] authenticate: start at {time.time()}")
     scopes = DEFAULT_SCOPES
 
     creds = None
