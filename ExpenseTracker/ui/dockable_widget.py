@@ -58,11 +58,51 @@ class DockableWidget(QtWidgets.QDockWidget):
 
         self.visibilityChanged.connect(self.toggled.emit)
         self.topLevelChanged.connect(self.refresh_main_dock_options)
+        # ensure active when shown
+        self.visibilityChanged.connect(self._on_visibility_changed)
 
     def sizeHint(self) -> QtCore.QSize:
         if self._size_hint:
             return self._size_hint  # type: ignore[return-value]
         return super().sizeHint()
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        """Override to ensure widget is visible and active when shown."""
+        super().showEvent(event)
+        # schedule after event loop to raise and focus
+        QtCore.QTimer.singleShot(0, self._ensure_visible_and_active)
+
+    def _on_visibility_changed(self, visible: bool) -> None:
+        """Handle visibility toggled to true by user actions."""
+        if visible:
+            # ensure visible and active when toggled on
+            QtCore.QTimer.singleShot(0, self._ensure_visible_and_active)
+
+    def _ensure_visible_and_active(self) -> None:
+        """Bring this dock widget to the front, activate its tab or window, and ensure on-screen."""
+        # find main window if any
+        app = QtWidgets.QApplication.instance()
+        main_win = None
+        if app:
+            for w in app.topLevelWidgets():
+                if isinstance(w, QtWidgets.QMainWindow):
+                    main_win = w
+                    break
+        # if floating, ensure on-screen over main window
+        if self.isFloating() and main_win:
+            mw_geom = main_win.frameGeometry()
+            fw_geom = self.frameGeometry()
+            if not mw_geom.intersects(fw_geom):
+                # center over main window
+                x = mw_geom.center().x() - fw_geom.width() // 2
+                y = mw_geom.center().y() - fw_geom.height() // 2
+                self.move(x, y)
+        # bring to front and activate
+        try:
+            self.raise_()
+            self.activateWindow()
+        except Exception:
+            pass
 
     def moveEvent(self, event: QtGui.QMoveEvent) -> None:
         """Override to refresh main window dock options when floating and moved."""
