@@ -19,6 +19,7 @@ from ..data.view.doughnut import DoughnutDockWidget
 from ..data.view.expense import ExpenseView
 from ..data.view.piechart import PieChartDockWidget
 from ..data.view.transaction import TransactionsWidget
+from ..data.view.transactionpreview import TransactionPreviewView
 from ..data.view.trends import TrendDockWidget
 from ..log.view import LogDockWidget
 from ..settings.lib import app_name
@@ -420,6 +421,11 @@ class MainWindow(ResizableMainWidget):
         self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
         self.transactions_view.hide()
+        # Add transaction preview dock (right side)
+        self.transaction_preview = TransactionPreviewView(parent=self)
+        self.transaction_preview.setObjectName('ExpenseTrackerTransactionPreviewDockWidget')
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transaction_preview)
+        self.transaction_preview.hide()
 
         # Add presets dock (left side)
         self.presets_view = PresetsDockWidget(parent=self)
@@ -512,7 +518,7 @@ class MainWindow(ResizableMainWidget):
         action.setIcon(ui.get_icon('btn_presets', color=ui.Color.DisabledText))
         action.setToolTip('Show presets...')
         action.setStatusTip('Show presets...')
-        action.setShortcut('Ctrl+Shift+P')
+        action.setShortcut('Ctrl+Shift+V')
         action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_presets'))
         action.triggered.connect(functools.partial(toggle_vis, self.presets_view))
@@ -520,6 +526,24 @@ class MainWindow(ResizableMainWidget):
         self.addAction(action)
         self.presets_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_presets'))
+
+        # Transaction Preview toggle
+        action = QtGui.QAction('Preview', self)
+        action.setCheckable(True)
+        action.setChecked(self.transaction_preview.isVisible())
+        action.setIcon(ui.get_icon('btn_transactionpreview', color=ui.Color.DisabledText))
+        action.setToolTip('Show transaction preview...')
+        action.setStatusTip('Show transaction preview...')
+        action.setShortcut('Ctrl+Shift+V')
+        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
+        # toggle icon color
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactionpreview'))
+        # toggle visibility
+        action.triggered.connect(functools.partial(toggle_vis, self.transaction_preview))
+        self.toolbar.addAction(action)
+        self.addAction(action)
+        self.transaction_preview.toggled.connect(action.setChecked)
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_transactionpreview'))
 
         # Separator
         action = QtGui.QAction(self)
@@ -568,6 +592,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        # sync action checked state when view visibility changes
+        self.piechart_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_piechart'))
 
         # Doughnut Chart toggle
@@ -580,6 +606,8 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.doughnut_view))
         self.toolbar.addAction(action)
         self.addAction(action)
+        # sync action checked state when view visibility changes
+        self.doughnut_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_doughnut'))
 
         # Separator
@@ -738,8 +766,10 @@ class MainWindow(ResizableMainWidget):
         for view in (
                 self.presets_view,
                 self.transactions_view,
+                self.transaction_preview,
                 self.trends_view,
                 self.piechart_view,
+                self.doughnut_view,
                 self.log_view,
                 self.settings_view,
         ):
