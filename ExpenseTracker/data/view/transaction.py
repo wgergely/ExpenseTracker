@@ -17,6 +17,7 @@ from ...settings import lib
 from ...ui import ui
 from ...ui.dockable_widget import DockableWidget
 from ...ui.ui import get_icon, CategoryIconEngine, Color, Size
+from ...ui.actions import signals
 
 
 class PopupCombobox(QtWidgets.QComboBox):
@@ -350,6 +351,13 @@ class TransactionsView(QtWidgets.QTableView):
 
         self.model().sourceModel().modelReset.connect(resize_columns)
         self.model().sourceModel().dataChanged.connect(resize_columns)
+        # update column sizes when category configuration changes (e.g., display name)
+        @QtCore.Slot(str)
+        def _on_config_section_changed(section: str) -> None:
+            if section == 'categories':
+                resize_columns()
+                self.viewport().update()
+        signals.configSectionChanged.connect(_on_config_section_changed)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         """
@@ -399,6 +407,16 @@ class TransactionsWidget(DockableWidget):
         sync.commitFinished.connect(self._on_commit_finished)
         self.sync_button.clicked.connect(sync.commit_queue_async)
         self.view.model().dataChanged.connect(self._update_sync_button)
+
+        @QtCore.Slot(str)
+        def category_changed(category: str) -> None:
+            title = 'Transactions' if not category else f'Transactions: {category}'
+            self.setWindowTitle(title)
+
+        from ...ui.actions import signals
+        signals.categoryChanged.connect(category_changed)
+        # Emit preview selection signal when the user selects/deselects a transaction
+        self.view.selectionModel().selectionChanged.connect(self._on_view_selection_changed)
 
     def _create_ui(self) -> None:
         content = QtWidgets.QWidget(self)
@@ -478,3 +496,25 @@ class TransactionsWidget(DockableWidget):
         self.status_label.setVisible(True)
         # Hide sync button after commit
         self.sync_button.setVisible(False)
+        
+    @QtCore.Slot(QtCore.QItemSelection, QtCore.QItemSelection)
+    def _on_view_selection_changed(self, selected: QtCore.QItemSelection, deselected: QtCore.QItemSelection) -> None:
+        """Emit the selected transaction's internal ID, or 0 if none."""
+        indexes = selected.indexes()
+        if indexes:
+            idx = indexes[0]
+            proxy = self.view.model()
+            # Map proxy index to source model index
+            src_index = proxy.mapToSource(idx)
+            # Determine the column for local_id (last in TRANSACTION_DATA_COLUMNS)
+            lid_col = len(lib.TRANSACTION_DATA_COLUMNS) - 1
+            # Get the sibling in the source model representing the local_id
+            lid_index = src_index.sibling(src_index.row(), lid_col)
+            lid_value = lid_index.data(QtCore.Qt.EditRole)
+            try:
+                lid = int(lid_value)
+            except Exception:
+                lid = 0
+            signals.transactionItemSelected.emit(lid)
+        else:
+            signals.transactionItemSelected.emit(0)
