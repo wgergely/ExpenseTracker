@@ -116,7 +116,7 @@ class SettingsWidget(QtWidgets.QWidget):
         self.metadata_editor = metadata_editor.MetadataWidget(self)
         self._add_section(
             'General Settings',
-            'Settings for locale, theme, and summary mode.',
+            '',
             parent,
             self.metadata_editor
         )
@@ -124,7 +124,7 @@ class SettingsWidget(QtWidgets.QWidget):
         self.client_editor = client_editor.ClientEditor(self)
         self._add_section(
             'Google Authentication',
-            '',
+            'Google authentication settings',
             parent,
             self.client_editor
         )
