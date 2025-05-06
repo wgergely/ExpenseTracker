@@ -232,7 +232,9 @@ class DoughnutView(BaseChartView):
         sl = self.model.slices[self._hover_index]
         cursor_pos = self.mapFromGlobal(QtGui.QCursor.pos())
 
-        text = f'{sl.category}: {sl.amount_txt}'
+        # Determine display name or fallback to raw category key
+        name = sl.display_name if sl.display_name else sl.category
+        text = f'{name}: {sl.amount_txt}'
         font, metrics = ui.Font.BoldFont(ui.Size.MediumText())
         painter.setFont(font)
 
