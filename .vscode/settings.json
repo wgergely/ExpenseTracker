@@ -106,5 +106,6 @@
         "valarray": "cpp",
         "variant": "cpp",
         "xhash": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "Y:/code/ExpenseTracker/app"
 }
