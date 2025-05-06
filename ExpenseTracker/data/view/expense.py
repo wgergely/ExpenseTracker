@@ -368,6 +368,17 @@ class ExpenseView(QtWidgets.QTableView):
         signals.categoryUpdateRequested.connect(_on_external_category_requested)
         signals.categoryPaletteChanged.connect(self.viewport().update)
 
+        @QtCore.Slot(str, object)
+        def _on_metadata_changed(key: str, value: object) -> None:
+            """Repaint and resize amount column when locale changes."""
+            if key != 'locale':
+                return
+            # Adjust amount column width to fit new locale formatting
+            self.resizeColumnToContents(Columns.Amount.value)
+            self.viewport().update()
+
+        signals.metadataChanged.connect(_on_metadata_changed)
+
     @QtCore.Slot()
     def emit_category_selection_changed(self) -> None:
         """Emit signals for the selected category's transactions and key."""
