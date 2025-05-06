@@ -49,6 +49,7 @@ class Signals(QtCore.QObject):
     dataFetched = QtCore.Signal(pandas.DataFrame)
 
     transactionsChanged = QtCore.Signal(list)
+    transactionItemSelected = QtCore.Signal(int)  # Emitted when a transaction is selected (by its internal ID)
     categoryChanged = QtCore.Signal(str)
     categoryUpdateRequested = QtCore.Signal(str)
 
