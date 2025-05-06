@@ -15,13 +15,14 @@ from ..settings import lib, locale
 @dataclass(slots=True)
 class ChartSlice:
     """Immutable slice data plus optional geometry."""
-    category: str
+    category: str  # raw category key
     amount_txt: str
     value_abs: float
     color: QtGui.QColor
     icon_name: str
     start_qt: int
     span_qt: int
+    display_name: str = ''  # human-readable category name
     # geometry fields for slice rendering
     base_rect: QtCore.QRect = field(default_factory=QtCore.QRect, repr=False)
     popped_rect: QtCore.QRect = field(default_factory=QtCore.QRect, repr=False)
@@ -91,16 +92,24 @@ class ChartModel(QtCore.QObject):
                     spans[n] = (idx, span_qt + leftover, val)
                     break
 
-        cfg = lib.settings.get_section('categories') or {}
         cursor = 0
         new_slices: List[ChartSlice] = []
+
+        config = lib.settings.get_section('categories') or {}
+
         for idx, span_qt, _ in spans:
             row = df.loc[idx]
             cat = row['category']
+            display = cat
+
+            if config and cat in config:
+                display = config[cat].get('display_name', cat)
+
             amount_txt = locale.format_currency_value(abs(row['total']), lib.settings['locale'])
-            col_name = cfg.get(cat, {}).get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
+            col_name = config.get(cat, {}).get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
             color = QtGui.QColor(col_name) if QtGui.QColor(col_name).isValid() else ui.Color.Text()
-            icon_name = cfg.get(cat, {}).get('icon', 'cat_unclassified')
+            icon_name = config.get(cat, {}).get('icon', 'cat_unclassified')
+
             new_slices.append(
                 ChartSlice(
                     category=cat,
@@ -110,6 +119,7 @@ class ChartModel(QtCore.QObject):
                     icon_name=icon_name,
                     start_qt=(cursor + rotation_qt) % qt_circle,
                     span_qt=span_qt,
+                    display_name=display,
                 )
             )
             cursor += span_qt
