@@ -291,10 +291,11 @@ class MetadataWidget(QtWidgets.QWidget):
         layout.addRow('Name', NameEditor(self))
         layout.addRow('Description', DescriptionEditor(self))
         separator = QtWidgets.QFrame(self)
+
         separator.setFrameShape(QtWidgets.QFrame.HLine)
         separator.setFrameShadow(QtWidgets.QFrame.Sunken)
         separator.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
-        separator.setFixedHeight(spacing * 2.0)
+        separator.setFixedHeight(spacing * 1.0)
 
         layout.addRow(separator)
         layout.addRow('Locale', LocaleEditor(self))
