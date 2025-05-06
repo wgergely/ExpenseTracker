@@ -7,7 +7,6 @@ using asynchronous workers and progress dialogs.
 import logging
 import socket
 import ssl
-import string
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -440,7 +439,8 @@ def _fetch_data(
         logging.warning(f'No data rows found in "{worksheet_name}".')
         return pd.DataFrame()
 
-    last_col: str = string.ascii_uppercase[col_count - 1]
+    from .sync import idx_to_col
+    last_col: str = idx_to_col(col_count - 1)
     data_ranges: List[str] = []
     data_start: int = 1
     while data_start <= row_count:
@@ -512,7 +512,8 @@ def _fetch_headers(
     service: Any = _verify_sheet_access()
 
     _, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
-    end_col: str = string.ascii_uppercase[col_count - 1]
+    from .sync import idx_to_col
+    end_col: str = idx_to_col(col_count - 1)
     range_ = f'{worksheet_name}!A1:{end_col}1'
 
     logging.debug(f'Fetching headers from range "{range_}".')
@@ -575,7 +576,8 @@ def _fetch_categories(
         raise status.HeaderMappingInvalidException(f'Category "{category_column}" not found.')
 
     idx: int = header_names.index(category_column)
-    column_letter: str = string.ascii_uppercase[idx]
+    from .sync import idx_to_col
+    column_letter: str = idx_to_col(idx)
     range_: str = f'{worksheet_name}!{column_letter}2:{column_letter}'
 
     logging.debug(f'Fetching categories from range "{range_}".')
