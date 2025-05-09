@@ -170,7 +170,8 @@ def with_service(func: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(func)
     def wrapper(self, *args: Any, **kwargs: Any) -> Any:
-        creds = auth.get_creds()
+        # Obtain credentials via AuthManager
+        creds = auth.auth_manager.get_valid_credentials()
         service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
         sheet_cfg = lib.settings.get_section('spreadsheet')
         spreadsheet_id = sheet_cfg['id']
@@ -232,8 +233,11 @@ class BaseServiceTestCase(BaseTestCase):
         sync.sync = None
         sync.sync = sync.SyncAPI()
 
-        # Patch the auth.get_creds() method to return the service account credentials
-        patch('ExpenseTracker.core.auth.get_creds', new=patch_get_creds).start()
+        # Patch AuthManager.get_valid_credentials to return service account credentials
+        patch.object(auth.auth_manager, 'get_valid_credentials', new=patch_get_creds).start()
+
+        # Delay and wait so that the tests don't exceed the api quota
+        QtCore.QThread.msleep(300)
 
     def tearDown(self) -> None:
         super().tearDown()
@@ -258,8 +262,8 @@ class BaseServiceTestCase(BaseTestCase):
         self.assertEqual(config_data['worksheet'], env_data, 'Spreadsheet name does not match.')
 
     def test_authenticate(self):
-        # verify that the authentication works
-        creds = auth.get_creds()
+        # verify authentication via AuthManager returns service account credentials
+        creds = auth.auth_manager.get_valid_credentials()
         self.assertIsNotNone(creds, 'Failed to authenticate with service account credentials.')
         self.assertTrue(creds.valid, 'Service account credentials are not valid.')
 

@@ -21,8 +21,6 @@ class DoughnutView(BaseChartView):
         self._show_icons = False
         self._show_tooltip = True
 
-        self.hole_ratio = 2.0 / 3.0
-
         self._outer_rect = QtCore.QRect()
         self._inner_rect = QtCore.QRect()
 
@@ -36,7 +34,7 @@ class DoughnutView(BaseChartView):
                 act.setChecked(self._show_tooltip)
 
     def _recalc_geometry(self) -> None:
-        sig = (self.model.version, self.width(), self.height())
+        sig = (self.model.version, self.width(), self.height(), self._anim_progress)
         if sig == self._geom_sig:
             return
 
@@ -57,7 +55,7 @@ class DoughnutView(BaseChartView):
         )
 
         radius = outer.width() / 2.0
-        inner_r = radius * self.hole_ratio
+        inner_r = radius * (2.0 * self._anim_progress) / 3.0
         thickness = radius - inner_r
 
         inner = outer.adjusted(

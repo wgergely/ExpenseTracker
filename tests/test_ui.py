@@ -146,9 +146,9 @@ class TestDataView(UIBaseTestCase):
         self.assertIsNotNone(TrendDockWidget(None))
 
     def test_TransactionsView_and_Widget_init(self):
-        from ExpenseTracker.data.view.transaction import TransactionsView, TransactionsWidget
+        from ExpenseTracker.data.view.transaction import TransactionsView, TransactionsDockWidget
         self.assertIsNotNone(TransactionsView(None))
-        self.assertIsNotNone(TransactionsWidget(None))
+        self.assertIsNotNone(TransactionsDockWidget(None))
 
 
 @unittest.skip("Skipping UI tests")

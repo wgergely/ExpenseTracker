@@ -115,21 +115,27 @@ LEDGER_SCHEMA: Dict[str, Any] = {
 }
 
 
-def parse_mapping_spec(spec: str) -> list[str]:
-    """Split a mapping specification string into individual header names.
+def parse_merge_mapping(key: str) -> list[str]:
+    """Split a merge mapping string into individual header names.
 
     Splits on configured separator characters, strips whitespace, and drops empty segments.
 
     Args:
-        spec (str): Mapping specification (e.g., 'ColA|ColB').
+        key (str): Merge mepped columns (for example, 'ColA|ColB').
 
     Returns:
-        list[str]: List of header names extracted from spec.
+        list[str]: List of header names extracted from key.
     """
     import re
     pattern = '|'.join(map(re.escape, DATA_MAPPING_SEPARATOR_CHARS))
-    parts = re.split(pattern, spec or '')
-    return [hdr.strip() for hdr in parts if hdr and hdr.strip()]
+    parts = re.split(pattern, key or '')
+    return [f.strip() for f in parts if f and f.strip()]
+
+
+def is_merge_mapped(key: str) -> bool:
+    """Check if the given key is a merge-mapped key."""
+    return (len(parse_merge_mapping(key)) > 1)
+
 
 
 def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:

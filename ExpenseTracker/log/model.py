@@ -237,6 +237,17 @@ class LogTableModel(QtCore.QAbstractTableModel):
         self._logs.clear()
         self.endResetModel()
 
+    def get_entry(self, row: int) -> dict[str, Any]:  # noqa: D102
+        """
+        Retrieve the parsed log entry at the given row.
+        """
+        # Return a copy to prevent external mutation
+        try:
+            entry = self._logs[row]
+        except IndexError:
+            raise IndexError(f'Log entry row {row} out of range')
+        return entry.copy()
+
 
 class LogFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
@@ -314,3 +325,86 @@ class LogFilterProxyModel(QtCore.QSortFilterProxyModel):
         if right_str is None:
             right_str = ''
         return left_str < right_str
+
+
+class LogEntryModel(QtCore.QAbstractTableModel):
+    """Model for displaying a single log entry."""
+
+    def __init__(self, entry: dict[str, Any], parent: Any = None) -> None:
+        super().__init__(parent=parent)
+        self._entry: dict[str, Any] = entry
+
+    def rowCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return 1
+
+    def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return len(Columns)
+
+    def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlag:
+        return super().flags(index) | QtCore.Qt.ItemIsEditable
+
+    def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
+        if not index.isValid() or index.row() != 0:
+            return None
+        log_data = self._entry
+        if role == QtCore.Qt.TextAlignmentRole:
+            return QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+        if role == QtCore.Qt.DisplayRole:
+            col = index.column()
+            if col == Columns.Date:
+                return log_data.get('date', '')
+            if col == Columns.Module:
+                return log_data.get('module', '')
+            if col == Columns.Level:
+                lvl = log_data.get('level_enum')
+                return lvl.name if lvl is not None else ''
+            if col == Columns.Message:
+                return log_data.get('message', '')
+        if role == QtCore.Qt.FontRole:
+            font, _ = ui.Font.BoldFont(ui.Size.MediumText(1.0))
+            return font
+        if role == QtCore.Qt.ForegroundRole:
+            lvl = log_data.get('level_enum')
+            if lvl == Level.WARNING:
+                return ui.Color.Yellow()
+            if lvl and lvl >= Level.ERROR:
+                return ui.Color.Red()
+            if lvl == Level.DEBUG:
+                return ui.Color.Blue()
+        if role == QtCore.Qt.DecorationRole and index.column() == Columns.Level:
+            lvl = log_data.get('level_enum')
+            if lvl and lvl >= Level.ERROR:
+                return ui.get_icon('btn_error', color=ui.Color.Red)
+            if lvl == Level.WARNING:
+                return ui.get_icon('btn_warning', color=ui.Color.Yellow)
+            return None
+        if role == Roles.LOG_LEVEL:
+            lvl = log_data.get('level_enum')
+            return lvl.value if lvl is not None else None
+        if role == QtCore.Qt.EditRole:
+            if index.column() == Columns.Date:
+                return log_data.get('date', '')
+            if index.column() == Columns.Module:
+                return log_data.get('module', '')
+            if index.column() == Columns.Level:
+                lvl = log_data.get('level_enum')
+                return lvl.name if lvl is not None else ''
+            if index.column() == Columns.Message:
+                return log_data.get('message', '')
+        return None
+
+    def headerData(self, section: int, orientation, role: int = QtCore.Qt.DisplayRole) -> Any:
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+            if section == Columns.Date:
+                return 'Date'
+            if section == Columns.Module:
+                return 'Module'
+            if section == Columns.Level:
+                return 'Level'
+            if section == Columns.Message:
+                return 'Message'
+        return super().headerData(section, orientation, role)

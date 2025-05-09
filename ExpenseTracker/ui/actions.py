@@ -3,7 +3,7 @@
 This module provides:
     - open_spreadsheet slot: opens the configured Google Sheets URL in the browser.
     - Signals: custom Qt signals for configuration changes, data fetch lifecycle,
-      category selection, UI actions (showSettings, openTransactions, showLogs), and presets.
+      category selection, UI actions (showSettings, showTransactions, showLogs), and presets.
 """
 import logging
 
@@ -49,14 +49,17 @@ class Signals(QtCore.QObject):
     dataFetched = QtCore.Signal(pandas.DataFrame)
 
     transactionsChanged = QtCore.Signal(list)
-    transactionItemSelected = QtCore.Signal(int)  # Emitted when a transaction is selected (by its internal ID)
+    transactionItemSelected = QtCore.Signal(int)
+
     categoryChanged = QtCore.Signal(str)
     categoryUpdateRequested = QtCore.Signal(str)
 
-    showSettings = QtCore.Signal()
     openSpreadsheet = QtCore.Signal()
-    openTransactions = QtCore.Signal()
+
+    showSettings = QtCore.Signal()
+    showTransactions = QtCore.Signal()
     showLogs = QtCore.Signal()
+    showTransactionPreview = QtCore.Signal()
 
     presetsChanged = QtCore.Signal()
     presetAboutToBeActivated = QtCore.Signal()
@@ -66,6 +69,9 @@ class Signals(QtCore.QObject):
     categoryRemoved = QtCore.Signal(str, int)
     categoryOrderChanged = QtCore.Signal(str, int, int)
     categoryPaletteChanged = QtCore.Signal(str)
+    categoryExcluded = QtCore.Signal(str)
+
+    error = QtCore.Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -105,5 +111,5 @@ class Signals(QtCore.QObject):
 
         self.metadataChanged.connect(metadata_changed)
 
-# Create a singleton instance of Signals
+
 signals = Signals()

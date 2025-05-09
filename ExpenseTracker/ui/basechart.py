@@ -146,6 +146,8 @@ class BaseChartView(QtWidgets.QWidget):
         self._geom_sig: tuple[int, int, int] = (-1, -1, -1)
         self._hover_index: int = -1
 
+        self._anim_progress = 0.0
+
         self._init_data_timer = QtCore.QTimer(self)
         self._init_data_timer.setSingleShot(True)
         self._init_data_timer.setInterval(50)
@@ -154,6 +156,15 @@ class BaseChartView(QtWidgets.QWidget):
 
         self.setMouseTracking(True)
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+        self._animation = QtCore.QVariantAnimation(self)
+        self._animation.setDuration(400)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(1.0)
+        self._animation.setEasingCurve(QtCore.QEasingCurve.OutQuad)
+        self._animation.setLoopCount(1)
+        self._animation.setDirection(QtCore.QAbstractAnimation.Forward)
+        self._animation.finished.connect(self._animation.stop)
 
         self._create_ui()
         self._connect_signals()
@@ -205,6 +216,15 @@ class BaseChartView(QtWidgets.QWidget):
 
         signals.initializationRequested.connect(self.start_init_data_timer)
 
+        self._init_data_timer.timeout.connect(self._animation.start)
+
+        def on_anim_value_chaged(value: float) -> None:
+            self._anim_progress = value
+            self._recalc_geometry()
+            self.repaint()
+
+        self._animation.valueChanged.connect(on_anim_value_chaged)
+
     @QtCore.Slot()
     def start_init_data_timer(self) -> None:
         self._init_data_timer.start(self._init_data_timer.interval())
@@ -221,13 +241,14 @@ class BaseChartView(QtWidgets.QWidget):
         self._geom_sig = (-1, -1, -1)
         self.update()
 
-    def paintEvent(self, _: QtGui.QPaintEvent) -> None:
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         self._recalc_geometry()
 
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         self._draw_background(painter)
+
         self._draw_slices(painter)
 
         if self._show_legend:

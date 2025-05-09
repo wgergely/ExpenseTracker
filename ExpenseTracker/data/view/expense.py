@@ -11,8 +11,14 @@ from typing import Optional
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
-from ..model.expense import ExpenseModel, ExpenseSortFilterProxyModel, WeightRole, Columns, CategoryRole, \
+from ..model.expense import (
+    ExpenseModel,
+    ExpenseSortFilterProxyModel,
+    WeightRole,
+    Columns,
+    CategoryRole,
     TransactionsRole
+)
 from ...settings import lib
 from ...ui import ui
 from ...ui.actions import signals
@@ -46,7 +52,6 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
 
     def createEditor(self, parent: QtWidgets.QWidget, option: QtWidgets.QStyleOptionViewItem,
                      index: QtCore.QModelIndex) -> QtWidgets.QWidget:
-        # Placeholder editor to launch the category icon/color dialog
         editor = QtWidgets.QWidget(parent)
         editor.setAttribute(QtCore.Qt.WA_NoSystemBackground)
         editor.setAttribute(QtCore.Qt.WA_OpaquePaintEvent)
@@ -59,21 +64,24 @@ class IconColumnDelegate(QtWidgets.QStyledItemDelegate):
         # Launch the unified icon/color editor for valid categories
         category = index.data(CategoryRole)
         from ...ui.palette import CategoryIconColorEditorDialog
-        dlg = CategoryIconColorEditorDialog(category, editor.parentWidget())
-        # live updates: repaint the view on changes
-        # connect live-update to the table view's viewport
+        dialog = CategoryIconColorEditorDialog(category, editor.parentWidget())
+
         view = self.parent()
-        dlg.iconChanged.connect(view.viewport().update)
-        dlg.colorChanged.connect(view.viewport().update)
-        dlg.open()
-        # Commit and close the placeholder editor
+        dialog.iconChanged.connect(view.viewport().update)
+        dialog.colorChanged.connect(view.viewport().update)
+        dialog.open()
+
         self.commitData.emit(editor)
         self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
         editor.deleteLater()
 
 
-class WeightColumnDelegate(QtWidgets.QStyledItemDelegate):
+class WeightColumnDelegate(ui.RoundedRowDelegate):
     """Delegate to draw a bar chart in the weight column."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(first_column=1, parent=parent)
 
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
               index: QtCore.QModelIndex) -> None:
@@ -148,14 +156,17 @@ class ExpenseView(QtWidgets.QTableView):
 
         self.weight_anim_value = 0.0
 
-        self._weight_anim = QtCore.QVariantAnimation(self)
-        self._weight_anim.setDuration(400)
-        self._weight_anim.setStartValue(0.0)
-        self._weight_anim.setEndValue(1.0)
-        self._weight_anim.setEasingCurve(QtCore.QEasingCurve.OutQuad)
-        self._weight_anim.setLoopCount(1)
-        self._weight_anim.setDirection(QtCore.QAbstractAnimation.Forward)
-        self._weight_anim.finished.connect(self._weight_anim.stop)
+        self._animation = QtCore.QVariantAnimation(self)
+        self._animation.setDuration(400)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(1.0)
+        self._animation.setEasingCurve(QtCore.QEasingCurve.OutQuad)
+        self._animation.setLoopCount(1)
+        self._animation.setDirection(QtCore.QAbstractAnimation.Forward)
+        self._animation.finished.connect(self._animation.stop)
+
+        self.setItemDelegate(ui.RoundedRowDelegate(first_column=1, parent=self))
+        self.setProperty('noitembackground', True)
 
         self._init_delegates()
         self._init_model()
@@ -198,6 +209,7 @@ class ExpenseView(QtWidgets.QTableView):
 
             config[category]['excluded'] = True
             lib.settings.set_section('categories', config)
+
 
         action = QtGui.QAction('Exclude Category', self)
         action.setShortcuts(['Ctrl+E', 'delete'])
@@ -334,21 +346,21 @@ class ExpenseView(QtWidgets.QTableView):
         self.addAction(action)
 
     def _connect_signals(self) -> None:
-        self.activated.connect(signals.openTransactions)
+        self.activated.connect(signals.showTransactions)
 
         self.model().sourceModel().modelAboutToBeReset.connect(self.save_category_selection)
         self.model().sourceModel().modelReset.connect(
             lambda: QtCore.QTimer.singleShot(10, self.restore_category_selection))
 
         self.model().sourceModel().modelReset.connect(self.resizeColumnsToContents)
-        self.model().sourceModel().modelReset.connect(self._weight_anim.start)
+        self.model().sourceModel().modelReset.connect(self._animation.start)
 
         @QtCore.Slot(float)
         def on_anim_value_chaged(value):
             self.weight_anim_value = value
-            self.viewport().update()
+            self.viewport().repaint()
 
-        self._weight_anim.valueChanged.connect(on_anim_value_chaged)
+        self._animation.valueChanged.connect(on_anim_value_chaged)
 
         # emit transaction and category changes on user selection
         self.selectionModel().selectionChanged.connect(self.emit_category_selection_changed)
@@ -456,8 +468,6 @@ class ExpenseDockWidget(DockableWidget):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__('Expenses', parent=parent, closable=False)
-
         self.setObjectName('ExpenseTrackerExpenseDockWidget')
         view = ExpenseView(self)
-        view.setObjectName('ExpenseTrackerExpenseView')
         self.setWidget(view)

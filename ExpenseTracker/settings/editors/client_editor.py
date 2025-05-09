@@ -324,7 +324,8 @@ class ClientEditor(QtWidgets.QWidget):
         signals.configSectionChanged.connect(on_section_changed)
 
         self.import_secret_button.clicked.connect(self.show_import_dialog)
-        self.auth_button.clicked.connect(auth.reauthenticate)
+        # Force reauthentication via AuthManager
+        self.auth_button.clicked.connect(auth.auth_manager.force_reauthenticate)
 
         signals.initializationRequested.connect(self.init_data)
 

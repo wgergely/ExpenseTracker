@@ -18,8 +18,8 @@ from ..core import database
 from ..data.view.doughnut import DoughnutDockWidget
 from ..data.view.expense import ExpenseView
 from ..data.view.piechart import PieChartDockWidget
-from ..data.view.transaction import TransactionsWidget
-from ..data.view.transactionpreview import TransactionPreviewView
+from ..data.view.transaction import TransactionsDockWidget
+from ..data.view.transactiondetails import TransactionDetailsDockWidget
 from ..data.view.trends import TrendDockWidget
 from ..log.view import LogDockWidget
 from ..settings.lib import app_name
@@ -300,7 +300,6 @@ class StatusIndicator(QtWidgets.QWidget):
             )
 
 
-
 class ResizableMainWidget(QtWidgets.QMainWindow):
     """QMainWindow subclass handling geometry state and maximize/restore behavior."""
 
@@ -417,13 +416,13 @@ class MainWindow(ResizableMainWidget):
         self.status_indicator = StatusIndicator(parent=self)
 
         # Add transactions dock (right side)
-        self.transactions_view = TransactionsWidget(parent=self)
+        self.transactions_view = TransactionsDockWidget(parent=self)
         self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
         self.transactions_view.hide()
         # Add transaction preview dock (right side)
-        self.transaction_preview = TransactionPreviewView(parent=self)
-        self.transaction_preview.setObjectName('ExpenseTrackerTransactionPreviewDockWidget')
+        self.transaction_preview = TransactionDetailsDockWidget(parent=self)
+        self.transaction_preview.setObjectName('ExpenseTrackerTransactionDetailsDockWidget')
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transaction_preview)
         self.transaction_preview.hide()
 
@@ -464,11 +463,12 @@ class MainWindow(ResizableMainWidget):
         self.doughnut_view.hide()
 
     def _connect_signals(self):
-        signals.openTransactions.connect(
+        signals.showTransactions.connect(
             lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
         signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
 
         signals.showSettings.connect(self.settings_view.show)
+        signals.showTransactionPreview.connect(self.transaction_preview.show)
 
     def _init_actions(self):
         action = QtGui.QAction('Maximize', self)
@@ -531,19 +531,19 @@ class MainWindow(ResizableMainWidget):
         action = QtGui.QAction('Preview', self)
         action.setCheckable(True)
         action.setChecked(self.transaction_preview.isVisible())
-        action.setIcon(ui.get_icon('btn_transactionpreview', color=ui.Color.DisabledText))
+        action.setIcon(ui.get_icon('btn_TransactionDetails', color=ui.Color.DisabledText))
         action.setToolTip('Show transaction preview...')
         action.setStatusTip('Show transaction preview...')
         action.setShortcut('Ctrl+Shift+V')
         action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         # toggle icon color
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactionpreview'))
+        action.triggered.connect(functools.partial(toggle_func, action, 'btn_TransactionDetails'))
         # toggle visibility
         action.triggered.connect(functools.partial(toggle_vis, self.transaction_preview))
         self.toolbar.addAction(action)
         self.addAction(action)
         self.transaction_preview.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_transactionpreview'))
+        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_TransactionDetails'))
 
         # Separator
         action = QtGui.QAction(self)
@@ -561,7 +561,7 @@ class MainWindow(ResizableMainWidget):
         action.setShortcut('Ctrl+Shift+T')
         action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
         action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactions'))
-        action.triggered.connect(signals.openTransactions)
+
         self.toolbar.addAction(action)
         self.addAction(action)
         self.transactions_view.toggled.connect(action.setChecked)
@@ -592,7 +592,6 @@ class MainWindow(ResizableMainWidget):
         action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
         self.toolbar.addAction(action)
         self.addAction(action)
-        # sync action checked state when view visibility changes
         self.piechart_view.toggled.connect(action.setChecked)
         action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_piechart'))
 
@@ -693,7 +692,7 @@ class MainWindow(ResizableMainWidget):
     def activate_action(self, index: QtCore.QModelIndex) -> None:
         """
         Slot called on double-clicking or pressing Enter on a row.
-        Opens a dockable TransactionsWidget on the right side.
+        Opens a dockable TransactionsDockWidget on the right side.
         """
         if not index.isValid():
             return

@@ -286,7 +286,9 @@ class HeaderItemModel(QtCore.QAbstractTableModel):
         return {item['name']: item['type'] for item in self._headers}
 
 
-class HeaderItemDelegate(QtWidgets.QStyledItemDelegate):
+class HeaderItemDelegate(ui.RoundedRowDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
 
     def createEditor(self, parent, option, index):
         if not index.isValid():
@@ -376,10 +378,10 @@ class HeaderEditor(QtWidgets.QWidget):
         from .views import TableView
         self.view = TableView(parent=self)
 
-        delegate = HeaderItemDelegate(self.view)
-        self.view.setItemDelegate(delegate)
-        self.view.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
+        self.view.setItemDelegate(HeaderItemDelegate(parent=self.view))
+        self.setProperty('noitembackground', True)
 
+        self.view.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
         self.view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
         self.view.setEditTriggers(

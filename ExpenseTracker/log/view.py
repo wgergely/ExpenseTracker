@@ -10,7 +10,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 from . import log
 from .model import LogFilterProxyModel, Columns
-from .model import LogTableModel, get_handler
+from .model import LogTableModel, get_handler, LogEntryModel
 from ..ui import ui
 from ..ui.dockable_widget import DockableWidget
 
@@ -25,7 +25,10 @@ class LogTableView(QtWidgets.QTableView):
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
         self.setWordWrap(True)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+        self.setItemDelegate(ui.RoundedRowDelegate(parent=self))
+        self.setProperty('noitembackground', True)
 
         self._init_model()
         self._init_headers()
@@ -60,7 +63,11 @@ class LogTableView(QtWidgets.QTableView):
         pass
 
     def _connect_signals(self):
+        # Update view when new rows are added
         self.model().rowsInserted.connect(self.on_rows_inserted)
+        # Open detailed view when activated (double-click or Enter key)
+        # Only use 'activated' to avoid duplicate dialogs
+        self.activated.connect(self.on_entry_activated)
 
     @QtCore.Slot()
     def on_rows_inserted(self):
@@ -73,19 +80,37 @@ class LogTableView(QtWidgets.QTableView):
         if sort_col == Columns.Date.value and sort_order == QtCore.Qt.DescendingOrder:
             # newest at top
             self.scrollToTop()
-            idx = model.index(0, 0)
+            index = model.index(0, 0)
         else:
             # newest at bottom
             self.scrollToBottom()
-            idx = model.index(model.rowCount() - 1, 0)
+            index = model.index(model.rowCount() - 1, 0)
 
         # Select and ensure visibility
-        if idx.isValid():
+        if index.isValid():
             sel = self.selectionModel()
             sel.clearSelection()
-            sel.select(idx, QtCore.QItemSelectionModel.ClearAndSelect)
-            sel.setCurrentIndex(idx, QtCore.QItemSelectionModel.NoUpdate)
-            self.scrollTo(idx)
+            sel.select(index, QtCore.QItemSelectionModel.ClearAndSelect)
+            sel.setCurrentIndex(index, QtCore.QItemSelectionModel.NoUpdate)
+            self.scrollTo(index)
+
+    @QtCore.Slot(QtCore.QModelIndex)
+    def on_entry_activated(self, index: QtCore.QModelIndex) -> None:
+        """Open a dialog showing the full log entry details."""
+        if not index.isValid():
+            return
+        proxy = self.model()
+        src_model = proxy.sourceModel()
+        # Map proxy index to source model
+        src_index = proxy.mapToSource(index)
+        try:
+            entry = src_model.get_entry(src_index.row())
+        except Exception as e:
+            logging.warning(f'Failed to retrieve log entry: {e}')
+            return
+        # Show entry in dialog
+        dialog = LogEntryDialog(entry, parent=self.window())
+        dialog.exec()
 
     def sizeHint(self):
         return QtCore.QSize(
@@ -198,3 +223,119 @@ class LogDockWidget(DockableWidget):
             model.resume()
         else:
             model.pause()
+
+
+class LogEntryViewDelegate(ui.RoundedRowDelegate):
+
+    def createEditor(self, parent, option, index):
+        editor = QtWidgets.QTextEdit(parent)
+        editor.setWordWrapMode(QtGui.QTextOption.WrapAnywhere)
+        editor.setAcceptRichText(False)
+        editor.setReadOnly(True)
+        editor.setFrameStyle(QtWidgets.QFrame.NoFrame)
+
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.data(QtCore.Qt.EditRole)
+        editor.setPlainText(value)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
+        editor.setStyleSheet(f'height: {option.rect.height()}px;')
+
+
+class LogEntryView(QtWidgets.QTableView):
+    """A QTableView displaying a single log entry with auto-sized, wrap-enabled cells."""
+
+    def __init__(self, entry: dict[str, object], parent=None):
+        super().__init__(parent=parent)
+        self.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked)
+        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+
+        self.setWordWrap(True)
+        self.setTextElideMode(QtCore.Qt.ElideNone)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+        self.setItemDelegate(LogEntryViewDelegate(self))
+        self.setProperty('noitembackground', True)
+
+        self.setModel(LogEntryModel(entry, parent=self))
+        self._init_headers()
+
+    def _init_headers(self) -> None:
+        header = self.horizontalHeader()
+        header.setHidden(True)
+        header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+        header.setDefaultSectionSize(ui.Size.DefaultWidth(0.2))
+        header.setMinimumSectionSize(ui.Size.DefaultWidth(0.2))
+        header.setMaximumSectionSize(ui.Size.DefaultWidth(0.8))
+
+        header.setSectionResizeMode(Columns.Date.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Module.value, QtWidgets.QHeaderView.Interactive)
+        header.setSectionResizeMode(Columns.Level, QtWidgets.QHeaderView.Interactive)
+
+        header.setSectionResizeMode(Columns.Message.value, QtWidgets.QHeaderView.Stretch)
+
+        header.setStretchLastSection(True)
+
+        vheader = self.verticalHeader()
+
+        vheader.setDefaultSectionSize(ui.Size.RowHeight(1.0))
+        vheader.setMinimumSectionSize(ui.Size.RowHeight(1.0))
+        vheader.setMaximumSectionSize(ui.Size.RowHeight(20.0))
+
+        vheader.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        vheader.setHidden(True)
+
+
+class LogEntryDialog(QtWidgets.QDialog):
+    """Dialog to display details for a single log entry."""
+
+    def __init__(self, entry: dict[str, object], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Log Entry Details')
+        self.setModal(True)
+
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+
+        self.setMinimumSize(
+            ui.Size.DefaultWidth(0.5),
+            ui.Size.DefaultHeight(0.2)
+        )
+        self.setMaximumSize(
+            ui.Size.DefaultWidth(2.0),
+            ui.Size.DefaultHeight(2.0)
+        )
+
+        self.entry = entry
+        self.view = None
+
+        self._create_ui()
+
+        QtCore.QTimer.singleShot(0, self.adjust_view)
+
+    def _create_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.view = LogEntryView(self.entry, parent=self)
+        self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        layout.addWidget(self.view)
+
+    @QtCore.Slot()
+    def adjust_view(self):
+        self.view.resizeColumnsToContents()
+        self.view.resizeRowsToContents()
+
+        index = self.view.model().index(0, Columns.Message.value)
+        self.view.setCurrentIndex(index)
+
+    def sizeHint(self):
+        return QtCore.QSize(
+            ui.Size.DefaultWidth(1.5),
+            ui.Size.DefaultHeight(0.3)
+        )

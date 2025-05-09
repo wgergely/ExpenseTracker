@@ -43,9 +43,6 @@ class LogModuleTests(BaseTestCase):
             h for h in self.root_logger.handlers if isinstance(h, TankHandler)
         )
 
-    # ------------------------------------------------------------------ helpers already tested earlier …
-
-    # ------------------------------------------------------------------ tiny perf / robustness checks
     def test_tank_bulk_append_speed(self):
         """
         Appending thousands of records should be quick and all must be stored.
@@ -83,9 +80,6 @@ class LogModuleTests(BaseTestCase):
         stored = self.tank.get_logs(logging.ERROR)[-1]
         # The formatted record includes date/module etc.; ensure payload is present
         self.assertIn(long_msg[-50:], stored[-60:], "Long message truncated in TankHandler")
-
-    # ------------------------------------------------------------------ (rest of previously supplied tests)
-    # … existing functional tests remain unchanged …
 
     def test_set_logging_level_accepts_valid_levels(self):
         set_logging_level(logging.ERROR)

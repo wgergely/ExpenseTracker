@@ -17,11 +17,10 @@ class PieChartView(BaseChartView):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-        # pie-specific settings: enable legend and icons by default
         self._show_legend = True
         self._show_icons = True
         self._show_tooltip = True
-        # explosion offsets
+
         self.min_offset_px = ui.Size.Indicator(1.0)
         self.max_offset_px = ui.Size.Indicator(10.0)
         self.gap_px = self.min_offset_px
@@ -35,7 +34,7 @@ class PieChartView(BaseChartView):
         return path
 
     def _recalc_geometry(self) -> None:
-        sig = (self.model.version, self.width(), self.height())
+        sig = (self.model.version, self.width(), self.height(), self._anim_progress)
         if sig == self._geom_sig:
             return
 
@@ -44,6 +43,7 @@ class PieChartView(BaseChartView):
             return
 
         widget_rect = self.rect()
+
         edge = min(widget_rect.width(), widget_rect.height())
         outer = QtCore.QRect(
             widget_rect.x() + (widget_rect.width() - edge) // 2,
@@ -55,7 +55,7 @@ class PieChartView(BaseChartView):
         margin = ui.Size.Margin(1.0)
         outer = outer.adjusted(margin, margin, -margin, -margin)
 
-        radius = (outer.width() - margin * 2) / ui.Size.Separator(2.0)
+        radius = (outer.width() - margin * 2) / ui.Size.Separator(2.0) * self._anim_progress
         max_off_clip = min(self.max_offset_px, radius * 0.30)
 
         inner = outer.adjusted(

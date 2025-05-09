@@ -23,7 +23,7 @@ from ExpenseTracker.settings.lib import (
     _validate_header,
     _validate_mapping,
     is_valid_hex_color,
-    parse_mapping_spec,
+    parse_merge_mapping,
 )
 from ExpenseTracker.status import status
 from tests.base import BaseTestCase  # (your helper from the previous messages)
@@ -96,9 +96,9 @@ class HelperFunctionTests(unittest.TestCase):
         self.assertFalse(is_valid_hex_color("#abcdex"))
         self.assertFalse(is_valid_hex_color("abcdef"))
 
-    def test_parse_mapping_spec(self):
-        self.assertEqual(parse_mapping_spec("A|B+C"), ["A", "B", "C"])
-        self.assertEqual(parse_mapping_spec("   "), [])
+    def test_parse_merge_mapping(self):
+        self.assertEqual(parse_merge_mapping("A|B+C"), ["A", "B", "C"])
+        self.assertEqual(parse_merge_mapping("   "), [])
 
 
 class ValidatorTests(unittest.TestCase):
