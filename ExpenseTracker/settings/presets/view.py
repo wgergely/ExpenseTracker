@@ -16,7 +16,7 @@ from ...ui import ui
 from ...ui.dockable_widget import DockableWidget
 
 
-class PresetsListDelegate(QtWidgets.QStyledItemDelegate):
+class PresetsListDelegate(ui.RoundedRowDelegate):
     """Delegate for rendering preset items in the list view."""
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
@@ -68,6 +68,9 @@ class PresetsListView(QtWidgets.QTableView):
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
 
         self.setItemDelegate(PresetsListDelegate(self))
+        self.setProperty('noitembackground', True)
+
+        self.setShowGrid(False)
 
         self.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
                              QtWidgets.QAbstractItemView.EditKeyPressed)
@@ -155,7 +158,6 @@ class PresetsDockWidget(DockableWidget):
 
         self.toolbar: QtWidgets.QToolBar
         self.view: PresetsListView
-
 
         self._create_ui()
         self._connect_signals()
