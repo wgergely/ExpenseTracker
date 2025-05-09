@@ -93,6 +93,27 @@ class AuthManager:
             self._creds = creds
             return creds
 
+    def force_reauthenticate(self) -> google.oauth2.credentials.Credentials:
+        """
+        Force interactive reauthentication and clear cached service.
+        """
+        # Remove any existing credentials to force a fresh login
+        from ..settings import lib
+        try:
+            if lib.settings.creds_path.exists():
+                lib.settings.creds_path.unlink()
+        except Exception:
+            pass
+
+        # Clear any cached Sheets service client
+        from . import service
+        service.clear_service()
+
+        # Perform interactive authentication via existing flow
+        creds = self.refresh_credentials_interactive()
+        self._creds = creds
+        return creds
+
 
 auth_manager = AuthManager()
 
@@ -265,36 +286,6 @@ def save_creds(creds: Union[google.oauth2.credentials.Credentials, Dict]) -> Non
     logging.debug(f'Credentials saved to {lib.settings.creds_path}.')
 
 
-def reauthenticate() -> google.oauth2.credentials.Credentials:
-    """Force reauthentication and service reset regardless of creds state.
-
-    Returns:
-        google.oauth2.credentials.Credentials: The authenticated credentials.
-
-    """
-    logging.info('Re-authenticating...')
-
-    from ..settings import lib
-    if not lib.settings.client_secret_path.exists():
-        raise status.ClientSecretNotFoundException
-
-    if lib.settings.creds_path.exists():
-        logging.debug(f'Deleting {lib.settings.creds_path}...')
-        lib.settings.creds_path.unlink()
-
-    # Ensure client secret is present
-    lib.settings.validate_client_secret()
-
-    # Reset service
-    from . import service
-    service.clear_service()
-
-    # Run authentication flow
-    logging.debug('Starting re-authentication...')
-    authenticate()
-
-    service.get_service()
-    return get_creds()
 
 
 def _authenticate() -> google.oauth2.credentials.Credentials:
