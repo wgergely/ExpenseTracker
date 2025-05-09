@@ -22,7 +22,7 @@ __version__ = '0.0.0'
 __author__ = 'Gergely Wootsch'
 __license__ = 'GPL-3.0'
 __copyright__ = 'Copyright (C) 2025 Gergely Wootsch'
-__description__ = 'ExpenseTracker: desktop application for tracking and analyzing expenses from Google Sheets.'
+__description__ = 'ExpenseTracker: desktop application for tracking and analyzing personal expenses from Google Sheets.'
 __url__ = 'https://github.com/wgergely/ExpenseTracker'
 __email__ = 'hello+ExpenseTracker@gergely-wootsch.com'
 
