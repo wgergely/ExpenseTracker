@@ -58,9 +58,10 @@ class Application(QtWidgets.QApplication):
         set_model_id()
 
         from ..settings import lib
+        from .. import __version__
+        self.setApplicationVersion(__version__)
         self.setApplicationName(lib.app_name)
         self.setOrganizationName('')
-        self.setApplicationVersion(__version__)
         self.setQuitOnLastWindowClosed(True)
 
         set_model_id()
