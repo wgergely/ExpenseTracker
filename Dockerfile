@@ -16,6 +16,11 @@ RUN Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vs_buildtools.exe -OutFi
     '--add', 'Microsoft.Net.Component.4.7.TargetingPack', `
     '--add', 'Microsoft.Net.Component.4.7.2.SDK', `
     '--add', 'Microsoft.Net.Component.4.7.2.TargetingPack', `
+    '--add', 'Microsoft.VisualStudio.Workload.VCTools',`
+    '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop',`
+    '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',`
+    '--add', 'Microsoft.VisualStudio.Component.Windows10SDK.19041',`
+    '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project',`
     '--remove', 'Microsoft.VisualStudio.Component.Windows10SDK.10240', `
     '--remove', 'Microsoft.VisualStudio.Component.Windows10SDK.10586', `
     '--remove', 'Microsoft.VisualStudio.Component.Windows10SDK.14393', `
@@ -69,17 +74,6 @@ RUN [Environment]::SetEnvironmentVariable('DOTNET_ROOT', 'C:/dotnet', [Environme
 RUN dotnet --version
 
 
-
-# ————————————————————————————————————————————————————————————
-# Install WIX for package management
-# ————————————————————————————————————————————————————————————
-RUN dotnet tool install --global wix
-
-# Verify WIX installation
-RUN wix --version
-
-
-
 # ————————————————————————————————————————————————————————————
 # Download and install git
 # ————————————————————————————————————————————————————————————
@@ -105,6 +99,16 @@ COPY docs/requirements.txt .
 RUN python -m pip install --upgrade pip; `
     python -m pip install -r requirements.txt; `
     Remove-Item -Force requirements.txt
+
     
+# ————————————————————————————————————————————————————————————
+# Install WIX for package management
+# ————————————————————————————————————————————————————————————
+RUN dotnet tool install --global wix --version 4.0.4
+RUN wix --version
+RUN wix extension add --global WixToolset.UI.wixext/4.0.4
+
 
 WORKDIR C:/workspace
+
+ENTRYPOINT ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoLogo"]
