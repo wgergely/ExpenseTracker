@@ -39,6 +39,7 @@ def metadata():
     Retrieves metadata settings from configuration and verifies the database before calling
     the wrapped function.
     """
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

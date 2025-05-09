@@ -172,9 +172,9 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         existing = self._mapping.get(key, '')
 
         # Parse existing components
-        from ..lib import parse_mapping_spec, DATA_MAPPING_SEPARATOR_CHARS
+        from ..lib import parse_merge_mapping, DATA_MAPPING_SEPARATOR_CHARS
         sep = DATA_MAPPING_SEPARATOR_CHARS[0] if DATA_MAPPING_SEPARATOR_CHARS else '|'
-        parts = parse_mapping_spec(existing)
+        parts = parse_merge_mapping(existing)
 
         # Determine update behavior: replace/append/remove
         schema = lib.LEDGER_SCHEMA.get('mapping', {})
@@ -213,10 +213,10 @@ class DataMappingModel(QtCore.QAbstractTableModel):
         return self._mapping.copy()
 
 
-class DataMappingDelegate(QtWidgets.QStyledItemDelegate):
+class DataMappingDelegate(ui.RoundedRowDelegate):
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent)
 
     def createEditor(self, parent, option, index):
         if index.column() != 1:
@@ -303,7 +303,9 @@ class DataMappingEditor(QtWidgets.QWidget):
         from .views import TableView
         self.view = TableView(parent=self)
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
         self.view.setItemDelegate(self.delegate)
+        self.view.setProperty('noitembackground', True)
 
         self.view.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked |

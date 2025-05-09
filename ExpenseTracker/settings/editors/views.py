@@ -6,9 +6,12 @@ Provides:
 """
 from PySide6 import QtWidgets, QtGui
 
+from ...ui import ui
+
 
 class VerticalScrollMixin:
     """Mixin that intercepts vertical wheel events to avoid scrolling parent when at boundaries."""
+
     def __init__(self, *args, **kwargs):
         self._accumulated_delta = 0
         super().__init__(*args, **kwargs)
@@ -46,6 +49,14 @@ class TableView(VerticalScrollMixin, QtWidgets.QTableView):
         super().__init__(*args, **kwargs)
         self.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+
+        self.setShowGrid(False)
+
+        self.setItemDelegate(ui.RoundedRowDelegate(parent=self))
+        self.setProperty('noitembackground', True)
 
 
 class TreeView(VerticalScrollMixin, QtWidgets.QTreeView):
