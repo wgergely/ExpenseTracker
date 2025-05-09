@@ -64,7 +64,8 @@ cover/
 *.mo
 *.pot
 
-.vscode
+.vscode/
+
 
 # Django stuff:
 *.log

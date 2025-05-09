@@ -12,8 +12,6 @@ from typing import Optional, Sequence
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
-__version__ = '0.1.0'
-
 
 def set_application_properties(app: Optional[QtWidgets.QApplication] = None) -> None:
     """Enables OpenGL and high-dpi support."""
@@ -60,9 +58,10 @@ class Application(QtWidgets.QApplication):
         set_model_id()
 
         from ..settings import lib
+        from .. import __version__
+        self.setApplicationVersion(__version__)
         self.setApplicationName(lib.app_name)
         self.setOrganizationName('')
-        self.setApplicationVersion(__version__)
         self.setQuitOnLastWindowClosed(True)
 
         set_model_id()

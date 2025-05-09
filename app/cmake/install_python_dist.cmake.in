@@ -1,7 +1,4 @@
-# cmake/install_python_dist.cmake.in
-# Executed by `cmake --install …`
-# Only @…@ tokens are substituted at configure time; all ${…} are
-# evaluated at install time.
+cmake_minimum_required(VERSION 3.31)
 
 #—— configure-time values ——
 set(_python_exe  "@Python3_EXECUTABLE@")
@@ -29,6 +26,7 @@ print(f\"Created {zip_path}\")
 ")
 
 #—— 2. run it under the *install-time* prefix ——
+message(STATUS "[install-phase] Zipping Python stdlib...")
 execute_process(
   COMMAND "${_python_exe}" "${CMAKE_CURRENT_LIST_DIR}/zip_stdlib.py"
   RESULT_VARIABLE _zip_status

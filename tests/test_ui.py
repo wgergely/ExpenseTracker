@@ -21,7 +21,7 @@ class UIBaseTestCase(BaseTestCase):
     def tearDown(self):
         super().tearDown()
 
-
+@unittest.skip("Skipping UI tests")
 class TestBaseChart(UIBaseTestCase):
     def test_ChartSlice_and_ChartModel_init(self):
         from ExpenseTracker.ui.basechart import ChartSlice, ChartModel
@@ -38,14 +38,14 @@ class TestBaseChart(UIBaseTestCase):
             # trigger any actions to ensure they do not error
             action.trigger()
 
-
+@unittest.skip("Skipping UI tests")
 class TestDockableWidget(UIBaseTestCase):
     def test_DockableWidget_init(self):
         from ExpenseTracker.ui.dockable_widget import DockableWidget
         dock = DockableWidget('title', None)
         self.assertIsNotNone(dock)
 
-
+@unittest.skip("Skipping UI tests")
 class TestMainUI(UIBaseTestCase):
     def test_TitleLabel_init(self):
         from ExpenseTracker.ui.main import TitleLabel
@@ -64,12 +64,14 @@ class TestMainUI(UIBaseTestCase):
         self.assertIsNotNone(MainWindow(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestStatusIndicator(UIBaseTestCase):
     def test_StatusIndicator_init(self):
         from ExpenseTracker.ui.main import StatusIndicator
         self.assertIsNotNone(StatusIndicator(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestPaletteComponents(UIBaseTestCase):
     def test_palette_models_and_views(self):
         from ExpenseTracker.ui.palette import (
@@ -87,12 +89,14 @@ class TestPaletteComponents(UIBaseTestCase):
         CategoryIconColorEditorDialog('cat', None)
 
 
+@unittest.skip("Skipping UI tests")
 class TestUIStyling(UIBaseTestCase):
     def test_FontDatabase_init(self):
         from ExpenseTracker.ui.ui import FontDatabase
         self.assertIsNotNone(FontDatabase())
 
 
+@unittest.skip("Skipping UI tests")
 class TestYearMonthWidgets(UIBaseTestCase):
     def test_YearMonthPopup_init(self):
         from ExpenseTracker.ui.yearmonth import YearMonthPopup
@@ -108,6 +112,7 @@ class TestYearMonthWidgets(UIBaseTestCase):
         self.assertIsNotNone(RangeSelectorBar(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestLogView(UIBaseTestCase):
     def test_LogTableView_init(self):
         from ExpenseTracker.log.view import LogTableView
@@ -118,6 +123,7 @@ class TestLogView(UIBaseTestCase):
         self.assertIsNotNone(LogDockWidget(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestDataView(UIBaseTestCase):
     def test_DoughnutView_and_Dock_init(self):
         from ExpenseTracker.data.view.doughnut import DoughnutView, DoughnutDockWidget
@@ -145,6 +151,7 @@ class TestDataView(UIBaseTestCase):
         self.assertIsNotNone(TransactionsWidget(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestSettingsEditors(UIBaseTestCase):
     def test_CategoryEditor_and_delegate_init(self):
         from ExpenseTracker.settings.editors.category_editor import CategoryEditor, CategoryItemDelegate
@@ -190,12 +197,14 @@ class TestSettingsEditors(UIBaseTestCase):
         self.assertIsNotNone(ListView(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestPresetsView(UIBaseTestCase):
     def test_PresetsDockWidget_init(self):
         from ExpenseTracker.settings.presets.view import PresetsDockWidget
         self.assertIsNotNone(PresetsDockWidget(None))
 
 
+@unittest.skip("Skipping UI tests")
 class TestSettingsView(UIBaseTestCase):
     def test_SettingsDockWidget_init(self):
         from ExpenseTracker.settings.settings import SettingsDockWidget

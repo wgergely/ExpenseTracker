@@ -6,7 +6,6 @@ Live Google‑Sheets workbook, no mocks.  Three test cases:
 * ServiceContractTest      – exhaustive header/mapping (incl. merge‑mapping)
 * ServiceDataIntegrityTest – big + messy data fetch / pagination
 """
-
 from datetime import datetime, timedelta
 from random import choice, randint
 from typing import Any, Dict, List, Optional
