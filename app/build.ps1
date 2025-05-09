@@ -2,11 +2,11 @@
 ===============================================================================
  build.ps1 – CMake configure + build helper (Windows PowerShell 5.1)
 -------------------------------------------------------------------------------
-    -Config            Debug | Release          (default: Release)
-    -BuildDir          Path to build directory  (default: C:/build)
+    -Config            Debug | Release           (default: Release)
+    -BuildDir          Path to build directory   (default: C:/build)
     -InstallDir        Path to install directory (default: C:/install)
-    -Vesrsion          Version string           (default: 0.0.0)
-    -Generator         CMake generator name     (auto: Ninja if in PATH, else VS 2022)
+    -Version           Version string            (default: 0.0.0)
+    -Generator         CMake generator name      (auto: Ninja if in PATH, else VS 2022)
     -Clean             Remove contents of BuildDir before configuring
 
     -SkipPythonInterpreter   Do NOT build embedded Python interpreter
@@ -17,7 +17,6 @@
     -SkipTests               Do NOT build unit tests
     -SkipDocs                Do NOT build documentation
     -SkipInstaller           Do NOT build installer package
-    -SkipDocs                Do NOT build documentation
 
     -h / -Help         Display this help
 ===============================================================================
@@ -136,7 +135,7 @@ $CMakeInstallModule          = Convert-SkipToCMake $SkipModule
 $CMakeInstallPythonLibs      = Convert-SkipToCMake $SkipPythonLibs
 $CMakeBuildTests             = Convert-SkipToCMake $SkipTests
 $CMakeBuildInstaller         = Convert-SkipToCMake $SkipInstaller
-$CMakeBuildDocs              = Convert-SkipToCMake $SKipDocs
+$CMakeBuildDocs              = Convert-SkipToCMake $SkipDocs
 
 
 # summary
@@ -177,7 +176,11 @@ if ($SkipConfigure) {
         "-DINSTALL_MODULE:BOOL=$CMakeInstallModule",
         "-DINSTALL_PYTHONLIBS:BOOL=$CMakeInstallPythonLibs",
         "-DCMAKE_INSTALL_PREFIX:PATH=$InstallDir",
-        "-DCMAKE_PREFIX_PATH:PATH=$InstallDir"
+        "-DCMAKE_PREFIX_PATH:PATH=$InstallDir",
+        "-DApp_Version:STRING=$Version",
+        "-DBUILD_TESTS:BOOL=$CMakeBuildTests",
+        "-DBUILD_INSTALLER:BOOL=$CMakeBuildInstaller",
+        "-DBUILD_DOCS:BOOL=$CMakeBuildDocs"
     )
     if ($CfgFlag) { $ConfigureCmd += $CfgFlag }
 
