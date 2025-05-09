@@ -16,7 +16,6 @@ from ExpenseTracker.settings import lib
 from tests.base import BaseServiceTestCase
 
 
-# --------------------------------------------------------------------------- shared base
 class ServiceTestBase(BaseServiceTestCase):
     """Common helpers and canonical valid schema."""
 
@@ -56,7 +55,6 @@ class ServiceTestBase(BaseServiceTestCase):
         finally:
             super().tearDown()
 
-    # ---------------- remote sheet helpers -----------------------------
     def _wipe_remote_sheet(self) -> None:
         self.service.spreadsheets().values().clear(
             spreadsheetId=self.sheet_id, range=self.sheet_name, body={}
@@ -77,7 +75,6 @@ class ServiceTestBase(BaseServiceTestCase):
         self._write_rows([self.headers] + rows)
 
 
-# --------------------------------------------------------------------------- 1. helper smoke tests
 class ServiceHelpersTest(ServiceTestBase):
     """Basic ‘does not crash’ checks."""
 
@@ -108,11 +105,9 @@ class ServiceHelpersTest(ServiceTestBase):
         self.assertEqual(svc._fetch_categories(), ['a‑cat', 'b‑cat'])
 
 
-# --------------------------------------------------------------------------- 2. contract tests
 class ServiceContractTest(ServiceTestBase):
     """Exhaustive header/mapping contract validation (incl. merge‑mapping)."""
 
-    # ---------- header presence / duplication --------------------------
     def test_verify_headers_success(self):
         self._populate_header()
         self.assertEqual(svc._verify_headers(), set(self.headers))
@@ -128,7 +123,6 @@ class ServiceContractTest(ServiceTestBase):
         self._populate_header(dup)
         self.assertTrue(set(self.headers).issubset(svc._verify_headers()))
 
-    # ---------- mapping key presence -----------------------------------
     def testverify_mapping_success(self):
         self._populate_header()
         svc._verify_mapping()
@@ -157,7 +151,6 @@ class ServiceContractTest(ServiceTestBase):
         with self.assertRaises(ValueError):
             self._install_mapping(mapping)
 
-    # ---------- mapping wrong reference / type -------------------------
     def testverify_mapping_unknown_column_reference(self):
         bad_map = {**self.GOOD_MAPPING, 'account': 'NonExistent'}
         self._install_mapping(bad_map)
@@ -172,7 +165,6 @@ class ServiceContractTest(ServiceTestBase):
         with self.assertRaises(svc.status.HeaderMappingInvalidException):
             svc._verify_mapping()
 
-    # ---------- merge-mapping (only allowed on 'description') ------------
     def test_merge_mapping_on_description_success(self):
         # Only 'description' may map to multiple columns
         merge_map = dict(self.GOOD_MAPPING)
@@ -196,7 +188,6 @@ class ServiceContractTest(ServiceTestBase):
         with self.assertRaises(ValueError):
             self._install_mapping(bad_map)
 
-    # ---------- duplicate mappings disallowed ---------------------------
     def test_mapping_duplicate_values_disallowed(self):
         # Mapping must not contain extra keys or duplicate references
         dup_map = dict(self.GOOD_MAPPING)
@@ -205,7 +196,6 @@ class ServiceContractTest(ServiceTestBase):
             self._install_mapping(dup_map)
 
 
-# --------------------------------------------------------------------------- 3. data integrity tests
 class ServiceDataIntegrityTest(ServiceTestBase):
     """Large & messy datasets including pagination."""
 

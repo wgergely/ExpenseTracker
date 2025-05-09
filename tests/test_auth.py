@@ -6,7 +6,7 @@ import google.oauth2.credentials as cred_mod
 from ExpenseTracker.core import auth
 from ExpenseTracker.settings import lib
 from ExpenseTracker.status.status import CredsInvalidException, AuthenticationExceptionException
-from .base import BaseTestCase
+from tests.base import BaseTestCase
 
 
 class TestAuthManager(BaseTestCase):
@@ -36,7 +36,7 @@ class TestAuthManager(BaseTestCase):
                 self.expired = False
 
         dummy = DummyCreds()
-        # Patch credential loading and saving
+
         with patch.object(
                 cred_mod.Credentials,
                 'from_authorized_user_file',
@@ -86,3 +86,30 @@ class TestAuthManager(BaseTestCase):
             manager = auth.AuthManager()
             with self.assertRaises(AuthenticationExceptionException):
                 manager.get_valid_credentials()
+
+    def test_force_reauthenticate_clears_creds_and_service(self):
+        """force_reauthenticate should delete stored creds, clear service cache, and return new creds"""
+        from ExpenseTracker.core import service
+        manager = auth.auth_manager
+        # Seed existing credentials and service cache
+        dummy_old = object()
+        manager._creds = dummy_old
+        # Ensure creds file exists
+        creds_path = lib.settings.creds_path
+        creds_path.write_text('old', encoding='utf-8')
+        # Seed cached service
+        service._cached_service = object()
+
+        # Patch interactive refresh to return new creds
+        dummy_new = object()
+        with patch.object(manager, 'refresh_credentials_interactive', return_value=dummy_new) as mock_refresh:
+            result = manager.force_reauthenticate()
+            mock_refresh.assert_called_once()
+            self.assertIs(result, dummy_new)
+
+        # Stored creds file must be removed
+        self.assertFalse(creds_path.exists(), 'Credentials file was not deleted')
+        # Service cache must be cleared
+        self.assertIsNone(service._cached_service, 'Service cache was not cleared')
+        # AuthManager._creds updated
+        self.assertIs(manager._creds, dummy_new)
