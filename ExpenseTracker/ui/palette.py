@@ -6,7 +6,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import ui
 from ..settings.lib import category_manager
-from .actions import signals
 
 DEFAULT_ICON = 'cat_unclassified'
 
@@ -170,6 +169,7 @@ class PaletteView(QtWidgets.QTableView):
         self.setProperty('rounded', True)
 
         self.setModel(PaletteModel(self))
+
         self.setItemDelegate(PaletteItemDelegate())
 
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
