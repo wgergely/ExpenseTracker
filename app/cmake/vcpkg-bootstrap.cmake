@@ -1,5 +1,4 @@
-# app/cmake/vcpkg-bootstrap.cmake
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.31)
 
 if(DEFINED VCPKG_BOOTSTRAPPED)
     return()
@@ -52,7 +51,7 @@ FetchContent_Declare(
     GIT_TAG        ${VCPKG_TAG}
     GIT_SHALLOW    TRUE
     SOURCE_DIR     ${VCPKG_ROOT})
-FetchContent_Populate(vcpkg)
+FetchContent_MakeAvailable(vcpkg)
 
 # mark repo safe locally (harmless if already set)
 execute_process(
