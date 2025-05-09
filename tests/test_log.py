@@ -30,6 +30,10 @@ class LogModuleTests(BaseTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+
+        # enable logging
+        logging.disable(logging.NOTSET)
+
         setup_logging(enable_stream_handler=False,
                       enable_qt_handler=False,
                       log_level=logging.DEBUG)
