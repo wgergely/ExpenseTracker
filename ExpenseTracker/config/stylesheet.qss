@@ -614,10 +614,6 @@ YearMonthPopup {
     border-radius: <Indicator@1.5>px;
 }
 
-RangeSelectorBar {
-}
-
-
 ExpenseView:focus,
 ExpenseView:focus:hover,
 TransactionsView:focus,
@@ -626,7 +622,7 @@ TransactionsView:focus:hover {
 }
 
 ExpenseView {
-    padding: <Margin@1.5>px;
+    padding: < Margin @ 1.5 > px < Margin @ 1.0 > px;
 }
 
 
@@ -694,7 +690,7 @@ LogTableView {
 QWidget[rounded="true"] {
     border-radius: <Indicator@2.0>px;
 }
-/* Dock Widget Tab Bar Styling */
+
 QTabBar {
     background-color: <Transparent>;
     padding: 0px;
@@ -747,8 +743,39 @@ QLabel[h1="true"] {
     color: <Text>;
 }
 
+QLabel[h2="true"] {
+    font-size: < MediumText @ 1.0 > px;
+    font-weight: 900;
+    color: < Text >;
+}
+
+QLabel[h3="true"] {
+    font-size: < MediumText @ 1.0 > px;
+    font-weight: 600;
+    color: < SecondaryText >;
+}
+
+QLabel[button="true"] {
+    background-color: < Background >;
+    border-radius: < Indicator @ 1.0 > px;
+    padding: < Indicator @ 1.0 > px;
+    margin: 0px;
+}
+
+QWidget[transparent="true"] {
+    background-color: < Transparent >;
+}
+
 QToolBar[transparent="true"] {
     background-color: <Transparent>;
     border: none;
     border-radius: <Indicator@1.5>px;
 }
+
+QTableView[noitembackground="true"]::item,
+QTableView[noitembackground="true"]::item:hover,
+QTableView[noitembackground="true"]::item:selected,
+QTableView[noitembackground="true"]::item:disabled {
+    background-color: < Transparent >;
+}
+
