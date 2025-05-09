@@ -537,6 +537,24 @@ class DatabaseAPI(QtCore.QObject):
         conn: Optional[sqlite3.Connection] = None
         try:
             conn = cls.connection()
+            # Ensure metadata schema has required columns; add any missing ones
+            cursor = conn.execute(f"PRAGMA table_info({Table.Meta.value})")
+            existing = {row[1] for row in cursor.fetchall()}
+            added: list[str] = []
+            if 'spreadsheet_id' not in existing:
+                conn.execute(
+                    f"ALTER TABLE {Table.Meta.value} ADD COLUMN \"spreadsheet_id\" TEXT DEFAULT ''"
+                )
+                added.append('spreadsheet_id')
+            if 'worksheet' not in existing:
+                conn.execute(
+                    f"ALTER TABLE {Table.Meta.value} ADD COLUMN \"worksheet\" TEXT DEFAULT ''"
+                )
+                added.append('worksheet')
+            if added:
+                conn.commit()
+                logging.info(f"Added missing metadata columns: {added}")
+            # Update last sync timestamp and identifiers
             config = lib.settings.get_section('spreadsheet')
             spreadsheet_id = config.get('id', '')
             worksheet = config.get('worksheet', '')
