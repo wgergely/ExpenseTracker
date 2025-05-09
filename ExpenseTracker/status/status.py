@@ -34,6 +34,8 @@ class Status(enum.StrEnum):
 
     SpreadsheetNotFound = enum.auto()
     WorksheetNotFound = enum.auto()
+    # Empty spreadsheet (no sheets or no data)
+    SpreadsheetEmpty = enum.auto()
 
     # Service status
     ServiceUnavailable = enum.auto()
@@ -64,6 +66,7 @@ STATUS_MESSAGE: Dict[Status, str] = {
 
     Status.SpreadsheetNotFound: 'Could not find the spreadsheet. Have you set up a valid spreadsheet id in the settings?',
     Status.WorksheetNotFound: 'Could not find the worksheet. Have you set up a valid worksheet name in the settings?',
+    Status.SpreadsheetEmpty: 'The spreadsheet is empty. No data found.',
 
     Status.HeadersInvalid: 'Is the spreadsheet\'s headers set up correctly?',
     Status.HeaderMappingInvalid: 'The header mapping seems to be incomplete, or contains invalid values.',
@@ -106,6 +109,9 @@ class BaseStatusException(Exception):
         super().__init__(exception_message)
 
         logging.error(exception_message)
+
+        from ..ui.actions import signals
+        signals.error.emit(message or self.status_message)
 
 
 class UnknownException(BaseStatusException):
@@ -166,6 +172,13 @@ class SpreadsheetNotFoundException(BaseStatusException):
 class WorksheetNotFoundException(BaseStatusException):
     """Exception raised when the specified worksheet cannot be accessed."""
     status = Status.WorksheetNotFound
+
+    # Exception for an empty spreadsheet (no data)
+
+
+class SpreadsheetEmptyException(BaseStatusException):
+    """Exception raised when the specified spreadsheet contains no data."""
+    status = Status.SpreadsheetEmpty
 
 
 class ServiceUnavailableException(BaseStatusException):
