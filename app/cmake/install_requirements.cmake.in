@@ -1,0 +1,96 @@
+cmake_minimum_required(VERSION 3.31)
+
+# ───────────────────────────────────────────────────────────
+# Install Requirements.txt to bundle dir
+# ───────────────────────────────────────────────────────────
+
+# locate requirements.txt
+set(REQUIREMENTS_FILE "@CMAKE_SOURCE_DIR@/../requirements.txt")
+if (NOT EXISTS "${REQUIREMENTS_FILE}")
+  message(FATAL_ERROR "requirements.txt not found: ${REQUIREMENTS_FILE}")
+endif()
+
+# prepare bundle dir
+set(BUNDLE_DIR "@CMAKE_INSTALL_PREFIX@/packages")
+file(MAKE_DIRECTORY "${BUNDLE_DIR}")
+message(STATUS "[install-phase] Bundling into ${BUNDLE_DIR}")
+
+# bootstrap pip if needed
+message(STATUS "[install-phase] Bootstrapping pip if needed")
+execute_process(
+  COMMAND "@Python3_EXECUTABLE@" -m ensurepip --default-pip --upgrade
+  RESULT_VARIABLE _ep_status
+  OUTPUT_VARIABLE  _ep_out
+  ERROR_VARIABLE   _ep_err
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message(STATUS "[install-phase] ensurepip exit: ${_ep_status}")
+message(STATUS "[install-phase] ensurepip stdout:\n${_ep_out}")
+message(STATUS "[install-phase] ensurepip stderr:\n${_ep_err}")
+
+# upgrade pip & setuptools
+message(STATUS "[install-phase] Upgrading pip and setuptools")
+execute_process(
+  COMMAND "@Python3_EXECUTABLE@" -m pip install --upgrade pip setuptools wheel
+  RESULT_VARIABLE _up_status
+  OUTPUT_VARIABLE  _up_out
+  ERROR_VARIABLE   _up_err
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message(STATUS "[install-phase] pip upgrade exit: ${_up_status}")
+message(STATUS "[install-phase] pip upgrade stdout:\n${_up_out}")
+message(STATUS "[install-phase] pip upgrade stderr:\n${_up_err}")
+
+# install requirements into bundle
+message(STATUS "[install-phase] Installing requirements.txt to ${BUNDLE_DIR}")
+execute_process(
+  COMMAND "@Python3_EXECUTABLE@" -m pip install --upgrade
+          --target "${BUNDLE_DIR}"
+          --requirement "${REQUIREMENTS_FILE}"
+  RESULT_VARIABLE _pip_status
+  OUTPUT_VARIABLE  _pip_out
+  ERROR_VARIABLE   _pip_err
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message(STATUS "[install-phase] pip install exit: ${_pip_status}")
+message(STATUS "[install-phase] pip install stdout:\n${_pip_out}")
+message(STATUS "[install-phase] pip install stderr:\n${_pip_err}")
+
+if (NOT _pip_status EQUAL 0)
+  message(FATAL_ERROR "pip install failed (exit ${_pip_status})")
+endif()
+
+# Clean up .dist-info directories
+file(GLOB _dirs
+  LIST_DIRECTORIES true
+  "${BUNDLE_DIR}/*dist-info"
+)
+foreach(_dir IN LISTS _dirs)
+  message(STATUS "[install-phase] Cleaning up .dist-info directory: ${_dir}")
+  file(REMOVE_RECURSE "${_dir}")
+endforeach()
+
+
+# Clean up unwanted Qt files from the bundled PySide6 directory
+set(PYSIDE6_DIR "${BUNDLE_DIR}/PySide6")
+
+# collect all Qt6 DLLs and all Qt PYDs
+file(GLOB _qt_files
+  "${PYSIDE6_DIR}/Qt6*.dll"
+  "${PYSIDE6_DIR}/Qt*.pyd"
+)
+
+foreach(_file IN LISTS _qt_files)
+  get_filename_component(_name "${_file}" NAME)
+
+  # keep only the core modules:
+  #   • DLLs named Qt6Core, Qt6Widgets, Qt6Gui, Qt6Concurrent, Qt6Sql, Qt6Svg, Qt6Xml
+  #   • PYDs named QtCore, QtWidgets, QtGui, QtConcurrent, QtSql, QtSvg, QtXml
+  if(_name MATCHES "^Qt6(Core|Widgets|Gui|Concurrent|Sql|Svg|Xml)\\.dll$"
+     OR _name MATCHES "^Qt(Core|Widgets|Gui|Concurrent|Sql|Svg|Xml)\\.pyd$")
+    continue()
+  endif()
+
+  message(STATUS "[install-phase] Removing unneeded Qt file: ${_file}")
+  file(REMOVE "${_file}")
+endforeach()
