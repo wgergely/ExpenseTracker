@@ -12,7 +12,7 @@ import logging
 import math
 import os
 import re
-from typing import Union
+from typing import Union, Optional
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
@@ -592,3 +592,51 @@ def get_icon(icon: str, color: Union[QtGui.QColor, Color] = Color.Text,
 
     icon_cache[k] = icon
     return icon
+
+
+class RoundedRowDelegate(QtWidgets.QStyledItemDelegate):
+    """Delegate that draws rounded-corner backgrounds for selected row cells."""
+
+    def __init__(self, first_column: int = 0, last_column: int = -1,
+                 parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent=parent)
+
+        self._first_column = first_column
+        self._last_column = last_column
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
+              index: QtCore.QModelIndex) -> None:
+        """Paint the item with rounded corners if selected."""
+        selected = option.state & QtWidgets.QStyle.State_Selected
+        hover = option.state & QtWidgets.QStyle.State_MouseOver
+
+        column = index.column()
+
+        painter.setPen(QtCore.Qt.NoPen)
+        if selected:
+            color = Color.Background()
+        else:
+            color = Color.Transparent()
+
+        painter.setBrush(color)
+
+        last_column = index.model().columnCount() + self._last_column
+
+        o = Size.Indicator(1.5)
+        rect1 = QtCore.QRect(option.rect)
+        rect2 = QtCore.QRect(option.rect)
+
+        if column == self._first_column:
+            rect1 = rect1.adjusted(0, 0, -option.rect.width() / 2 + o, 0)
+            painter.drawRoundedRect(rect1, o, o)
+            rect2 = rect2.adjusted(option.rect.width() / 2, 0, 0, 0)
+            painter.fillRect(rect2, color)
+        elif column == last_column:
+            rect1 = rect1.adjusted(option.rect.width() / 2, 0, 0, 0)
+            painter.drawRoundedRect(rect1, o, o)
+            rect2 = rect2.adjusted(0, 0, -option.rect.width() / 2 + o, 0)
+            painter.fillRect(rect2, color)
+        else:
+            painter.fillRect(option.rect, color)
+
+        super().paint(painter, option, index)
