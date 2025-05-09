@@ -113,6 +113,9 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         signals.categoryOrderChanged.connect(self.init_data)
         signals.categoryOrderChanged.connect(select_category)
 
+        signals.categoryExluded.connect(self.init_data)
+        signals.categoryExluded.connect(select_category)
+
         signals.initializationRequested.connect(self.init_data)
 
     def rowCount(self, parent=QtCore.QModelIndex()):
@@ -289,20 +292,14 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         return data
 
 
-class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
+class CategoryItemDelegate(ui.RoundedRowDelegate):
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(first_column=1, last_column=-2, parent=parent)
 
     def paint(self, painter, option, index):
 
         hover = option.state & QtWidgets.QStyle.State_MouseOver
         selected = option.state & QtWidgets.QStyle.State_Selected
-        if hover or selected:
-            painter.setBrush(ui.Color.Background())
-        else:
-            painter.setBrush(ui.Color.VeryDarkBackground())
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.drawRect(option.rect)
 
         col = index.column()
         # Render text columns normally
@@ -310,19 +307,15 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             super().paint(painter, option, index)
             return
 
-        # ICON column: draw tinted icon and label
         if col == COL_ICON:
-            # retrieve category info from model
             model = index.model()
             try:
                 cat = model.categories[index.row()]
                 icon_name = cat.get('icon', DEFAULT_ICON)
                 color_str = cat.get('color', ui.Color.Text().name(QtGui.QColor.HexRgb))
-                display_name = cat.get('display_name') or cat.get('name')
             except Exception:
                 icon_name = index.data(QtCore.Qt.DisplayRole) or DEFAULT_ICON
                 color_str = ui.Color.Text().name(QtGui.QColor.HexRgb)
-                display_name = icon_name
 
             # tinted icon
             color = QtGui.QColor(color_str)
@@ -407,7 +400,10 @@ class CategoryItemDelegate(QtWidgets.QStyledItemDelegate):
             self.commitData.emit(editor)
             self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
 
-            editor.deleteLater()
+            index = index.sibling(index.row(), COL_NAME)
+            category = index.data(QtCore.Qt.EditRole)
+            signals.categoryExluded.emit(category)
+
 
     def setModelData(self, editor, model, index):
         """
@@ -462,14 +458,14 @@ class CategoryEditor(QtWidgets.QWidget):
         self.toolbar.setFixedHeight(ui.Size.RowHeight(1.0))
         self.layout().addWidget(self.toolbar, 1)
 
-        # Table
         from .views import TableView
         self.view = TableView(self)
-        # set delegate with view as parent for live updates
+
         self.view.setItemDelegate(CategoryItemDelegate(self.view))
+        self.view.setProperty('noitembackground', True)
+
         self.view.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
-        # Double-click editing
         self.view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked |
                                   QtWidgets.QAbstractItemView.EditKeyPressed)
 
@@ -798,10 +794,15 @@ class CategoryEditor(QtWidgets.QWidget):
             model = self.view.model()
             model.setData(index, not model.data(index, QtCore.Qt.EditRole), QtCore.Qt.EditRole)
 
+            index = index.sibling(index.row(), COL_NAME)
+            category = index.data(QtCore.Qt.EditRole)
+
+            signals.categoryExluded.emit(category)
+
         action = QtGui.QAction('Exclude', self)
 
         action.setShortcut('Ctrl+E')
-        action.setStatusTip('Exclude selected category')
+        action.setStatusTip('Exclude category')
         action.setIcon(ui.get_icon('btn_remove'))
         action.triggered.connect(exclude_action)
 
