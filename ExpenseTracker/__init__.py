@@ -12,10 +12,20 @@ This package provides:
 Use :func:`ExpenseTracker.exec_` to launch the application.
 """
 
+import logging
 import os
 import pathlib
 
 from PySide6 import QtCore
+
+__version__ = '0.0.0'
+__author__ = 'Gergely Wootsch'
+__license__ = 'GPL-3.0'
+__copyright__ = 'Copyright (C) 2025 Gergely Wootsch'
+__description__ = 'ExpenseTracker: desktop application for tracking and analyzing personal expenses from Google Sheets.'
+__url__ = 'https://github.com/wgergely/ExpenseTracker'
+__email__ = 'hello+ExpenseTracker@gergely-wootsch.com'
+
 
 # Use internally shipped font directory for Qt font loading
 font_dir = pathlib.Path(__file__).parent / 'config' / 'font'
@@ -25,6 +35,7 @@ from .log import log
 
 log.setup_logging()
 
+    
 
 def exec_() -> None:
     """Launch the ExpenseTracker GUI application and enter its event loop.

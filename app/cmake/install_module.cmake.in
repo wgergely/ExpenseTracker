@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.31)
+
+# ───────────────────────────────────────────────────────────
+# Main ExpenseTracker @CMAKE_INSTALL_PREFIX@/lib/ExpenseTracker
+# ───────────────────────────────────────────────────────────
+
+message(STATUS "[install-phase] Cleaning existing Python module at @CMAKE_INSTALL_PREFIX@/lib/ExpenseTracker")
+file(REMOVE_RECURSE "@CMAKE_INSTALL_PREFIX@/lib/ExpenseTracker")
+
+message(STATUS "[install-phase] Cleaning existing tests at @CMAKE_INSTALL_PREFIX@/lib/tests")
+file(REMOVE_RECURSE "@CMAKE_INSTALL_PREFIX@/lib/tests")
+
+# Install ExpenseTracker module
+set(MODULE_SRC "@CMAKE_SOURCE_DIR@/../ExpenseTracker")
+set(MODULE_DST "@CMAKE_INSTALL_PREFIX@/lib/ExpenseTracker")
+
+message(STATUS "[install-phase] Installing Python module to ${MODULE_DST}...")
+if (NOT EXISTS "${MODULE_SRC}/")
+    message(FATAL_ERROR "${MODULE_SRC}/ does not exist")
+endif()
+
+file(GLOB_RECURSE MODULE_FILES
+    RELATIVE "${MODULE_SRC}"
+    "${MODULE_SRC}/*"
+)
+
+foreach(file IN LISTS MODULE_FILES)
+    if(NOT file MATCHES "__pycache__" AND NOT file MATCHES "\\.pyc$")
+        set(src "${MODULE_SRC}/${file}")
+        set(dst "${MODULE_DST}/${file}")
+        message(STATUS "[install-phase] Copying ${src} -> ${dst}")
+        get_filename_component(dst_dir "${dst}" DIRECTORY)
+        file(MAKE_DIRECTORY "${dst_dir}")
+        file(COPY "${src}" DESTINATION "${dst_dir}")
+    endif()
+endforeach()
+
+# ───────────────────────────────────────────────────────────
+# Install tests to @CMAKE_INSTALL_PREFIX@/lib/tests
+# ───────────────────────────────────────────────────────────
+
+set(TESTS_SRC "@CMAKE_SOURCE_DIR@/../tests")
+set(TESTS_DST "@CMAKE_INSTALL_PREFIX@/lib/tests")
+
+message(STATUS "[install-phase] Installing tests to ${TESTS_DST}...")
+if (NOT EXISTS "${TESTS_SRC}/")
+    message(FATAL_ERROR "${TESTS_SRC}/ does not exist")
+endif()
+
+file(GLOB_RECURSE TEST_FILES
+    RELATIVE "${TESTS_SRC}"
+    "${TESTS_SRC}/*"
+)
+
+foreach(file IN LISTS TEST_FILES)
+    if(NOT file MATCHES "__pycache__" AND NOT file MATCHES "\\.pyc$")
+        set(src "${TESTS_SRC}/${file}")
+        set(dst "${TESTS_DST}/${file}")
+        message(STATUS "[install-phase] Copying ${src} -> ${dst}")
+        get_filename_component(dst_dir "${dst}" DIRECTORY)
+        file(MAKE_DIRECTORY "${dst_dir}")
+        file(COPY "${src}" DESTINATION "${dst_dir}")
+    endif()
+endforeach()

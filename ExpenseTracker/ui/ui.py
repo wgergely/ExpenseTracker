@@ -366,6 +366,10 @@ def apply_theme() -> None:
     if not QtWidgets.QApplication.instance():
         raise RuntimeError('set_app_stylesheet() must be called after a QApplication is initiated.')
 
+    if os.environ.get('EXPENSETRACKER_DISABLE_STYLESHEET', '').lower() in ['1', 'true', 'yes']:
+        logging.warning('Stylesheet disabled by environment variable.')
+        return
+
     qss = init_stylesheet()
     QtWidgets.QApplication.instance().setStyleSheet(qss)
 
