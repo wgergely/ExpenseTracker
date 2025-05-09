@@ -91,6 +91,9 @@ class BaseTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up a clean config directory and reinitialize all APIs."""
+        # Disable logging for tests
+        logging.disable(logging.CRITICAL)
+
         # Ensure headless Qt
         if 'QT_QPA_PLATFORM' not in os.environ:
             os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -133,6 +136,9 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down the test config and restore any original config directory."""
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
+
         if QtWidgets.QApplication.instance():
             QtWidgets.QApplication.instance().quit()
 
@@ -175,6 +181,10 @@ def with_service(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+@unittest.skipUnless(
+    all([os.environ.get(f.name, None) for f in TestAuthEnvKeys]),
+    'Skipping test because environment variables are not set.'
+)
 class BaseServiceTestCase(BaseTestCase):
     """Base test case for service-related tests."""
 
