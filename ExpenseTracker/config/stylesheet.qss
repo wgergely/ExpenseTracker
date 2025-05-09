@@ -622,7 +622,7 @@ TransactionsView:focus:hover {
 }
 
 ExpenseView {
-    padding: < Margin @ 1.5 > px < Margin @ 1.0 > px;
+    padding: <Margin@1.5>px <Margin@1.0>px;
 }
 
 
@@ -744,26 +744,26 @@ QLabel[h1="true"] {
 }
 
 QLabel[h2="true"] {
-    font-size: < MediumText @ 1.0 > px;
+    font-size: <MediumText@1.0>px;
     font-weight: 900;
-    color: < Text >;
+    color: <Text>;
 }
 
 QLabel[h3="true"] {
-    font-size: < MediumText @ 1.0 > px;
+    font-size: <MediumText@1.0>px;
     font-weight: 600;
-    color: < SecondaryText >;
+    color: <SecondaryText>;
 }
 
 QLabel[button="true"] {
-    background-color: < Background >;
-    border-radius: < Indicator @ 1.0 > px;
-    padding: < Indicator @ 1.0 > px;
+    background-color: <Background>;
+    border-radius: <Indicator@1.0>px;
+    padding: <Indicator@1.0>px;
     margin: 0px;
 }
 
 QWidget[transparent="true"] {
-    background-color: < Transparent >;
+    background-color: <Transparent>;
 }
 
 QToolBar[transparent="true"] {
@@ -776,6 +776,6 @@ QTableView[noitembackground="true"]::item,
 QTableView[noitembackground="true"]::item:hover,
 QTableView[noitembackground="true"]::item:selected,
 QTableView[noitembackground="true"]::item:disabled {
-    background-color: < Transparent >;
+    background-color: <Transparent>;
 }
 
