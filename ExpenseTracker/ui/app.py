@@ -12,18 +12,23 @@ from typing import Optional, Sequence
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
-__version__ = '0.1.0'
+__version__ = '0.0.0'
 
 
 def set_application_properties(app: Optional[QtWidgets.QApplication] = None) -> None:
     """Enables OpenGL and high-dpi support."""
+    # Force use of desktop OpenGL; alternatives are AA_UseOpenGLES or AA_UseSoftwareOpenGL
+    # AA_UseDesktopOpenGL
+    # AA_UseOpenGLES
+    # AA_UseSoftwareOpenGL
+
     if app:
-        app.setAttribute(QtCore.Qt.AA_UseOpenGLES, True)
+        app.setAttribute(QtCore.Qt.AA_UseDesktopOpenGL, True)
         app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
         app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
         return
 
-    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseOpenGLES, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseDesktopOpenGL, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
