@@ -63,7 +63,7 @@ class ExpenseModel(QtCore.QAbstractTableModel):
         signals.presetAboutToBeActivated.connect(self.clear_data)
         signals.dataAboutToBeFetched.connect(self.clear_data)
         signals.dataFetched.connect(self.init_data)
-        signals.categoryExluded.emit(self.init_data)
+        signals.categoryExcluded.emit(self.init_data)
 
         @QtCore.Slot(str, object)
         def metadata_changed(key: str, value: object) -> None:

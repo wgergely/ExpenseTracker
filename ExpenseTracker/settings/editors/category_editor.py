@@ -113,8 +113,8 @@ class CategoriesModel(QtCore.QAbstractTableModel):
         signals.categoryOrderChanged.connect(self.init_data)
         signals.categoryOrderChanged.connect(select_category)
 
-        signals.categoryExluded.connect(self.init_data)
-        signals.categoryExluded.connect(select_category)
+        signals.categoryExcluded.connect(self.init_data)
+        signals.categoryExcluded.connect(select_category)
 
         signals.initializationRequested.connect(self.init_data)
 
@@ -402,7 +402,7 @@ class CategoryItemDelegate(ui.RoundedRowDelegate):
 
             index = index.sibling(index.row(), COL_NAME)
             category = index.data(QtCore.Qt.EditRole)
-            signals.categoryExluded.emit(category)
+            signals.categoryExcluded.emit(category)
 
 
     def setModelData(self, editor, model, index):
@@ -797,7 +797,7 @@ class CategoryEditor(QtWidgets.QWidget):
             index = index.sibling(index.row(), COL_NAME)
             category = index.data(QtCore.Qt.EditRole)
 
-            signals.categoryExluded.emit(category)
+            signals.categoryExcluded.emit(category)
 
         action = QtGui.QAction('Exclude', self)
 

@@ -69,7 +69,7 @@ class Signals(QtCore.QObject):
     categoryRemoved = QtCore.Signal(str, int)
     categoryOrderChanged = QtCore.Signal(str, int, int)
     categoryPaletteChanged = QtCore.Signal(str)
-    categoryExluded = QtCore.Signal(str)
+    categoryExcluded = QtCore.Signal(str)
 
     error = QtCore.Signal(str)
 
