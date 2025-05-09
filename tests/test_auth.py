@@ -6,7 +6,7 @@ import google.oauth2.credentials as cred_mod
 from ExpenseTracker.core import auth
 from ExpenseTracker.settings import lib
 from ExpenseTracker.status.status import CredsInvalidException, AuthenticationExceptionException
-from .base import BaseTestCase
+from tests.base import BaseTestCase
 
 
 class TestAuthManager(BaseTestCase):
