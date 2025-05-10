@@ -81,7 +81,6 @@ class Signals(QtCore.QObject):
         self.openSpreadsheet.connect(open_spreadsheet)
 
         from ..core import service
-        # Trigger asynchronous fetch (with progress dialog) rather than direct blocking fetch
         self.dataFetchRequested.connect(service.fetch_data)
 
         # Handle authentication requests emitted by background workers

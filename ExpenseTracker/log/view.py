@@ -15,6 +15,65 @@ from ..ui import ui
 from ..ui.dockable_widget import DockableWidget
 
 
+class LogLevelDelegate(ui.RoundedRowDelegate):
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(
+            first_column=0,
+            last_column=-1,
+            parent=parent
+        )
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex) -> None:
+        if index.column() != Columns.Level.value:
+            super().paint(painter, option, index)
+            return
+
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+
+        # Display text
+        text = str(index.data(QtCore.Qt.DisplayRole) or '')
+        if not text:
+            super().paint(painter, option, index)
+            painter.restore()
+            return
+
+        # Font
+        font = index.data(QtCore.Qt.FontRole)
+        if font:
+            painter.setFont(font)
+
+        font, metrics = ui.Font.BoldFont(ui.Size.SmallText(1.0))
+
+        o = ui.Size.Indicator(2.0)
+        rect = option.rect.adjusted(o, o, -o, -o)
+
+        rect = metrics.boundingRect(
+            rect,
+            QtCore.Qt.AlignCenter,
+            index.data(QtCore.Qt.DisplayRole)
+        )
+        o = ui.Size.Indicator(1.5)
+        rect = rect.adjusted(-o, -o, o, o)
+
+        # Foreground colour
+        color = index.data(QtCore.Qt.ForegroundRole)
+        if not color:
+            color = option.palette.color(QtGui.QPalette.Text)
+
+        # Draw background
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.setOpacity(0.3)
+        painter.drawRoundedRect(rect, o, o)
+
+
+        # Draw text
+        painter.setPen(color)
+        painter.setOpacity(1.0)
+        painter.drawText(option.rect, QtCore.Qt.AlignCenter, text)
+
+
 class LogTableView(QtWidgets.QTableView):
     """A QTableView displaying log messages from LogTableModel."""
 
@@ -29,6 +88,7 @@ class LogTableView(QtWidgets.QTableView):
 
         self.setItemDelegate(ui.RoundedRowDelegate(parent=self))
         self.setProperty('noitembackground', True)
+        self.setProperty('rounded', True)
 
         self._init_model()
         self._init_headers()
@@ -43,6 +103,8 @@ class LogTableView(QtWidgets.QTableView):
         self.setModel(proxy)
 
     def _init_headers(self):
+        self.setItemDelegateForColumn(Columns.Level.value, LogLevelDelegate(parent=self))
+
         header = self.horizontalHeader()
         header.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         header.setDefaultSectionSize(ui.Size.DefaultWidth(0.3))

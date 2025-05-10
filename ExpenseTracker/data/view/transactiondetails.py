@@ -35,6 +35,7 @@ class TransactionDetailsModel(QtCore.QAbstractTableModel):
         signals.dataAboutToBeFetched.connect(self.clear_data)
         signals.presetAboutToBeActivated.connect(self.clear_data)
 
+
     def columnCount(self, parent: QtCore.QModelIndex = QtCore.QModelIndex()) -> int:
         return 2
 

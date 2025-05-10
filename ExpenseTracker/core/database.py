@@ -414,7 +414,7 @@ class DatabaseAPI(QtCore.QObject):
             cfg_sheet = config.get('worksheet', '')
 
             if db_id != cfg_id or db_sheet != cfg_sheet:
-                logging.warning(
+                logging.debug(
                     f'DB source mismatch. DB: (id={db_id}, sheet={db_sheet}), '
                     f'Config: (id={cfg_id}, sheet={cfg_sheet}). Marking Stale.'
                 )

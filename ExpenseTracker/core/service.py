@@ -601,11 +601,12 @@ def _fetch_headers(
         values: List[List[Any]] = vr.get('values', [])
         if values:
             data_rows.extend(values)
+
     logging.debug(f'Total header rows fetched: {len(data_rows)}.')
 
     if not data_rows:
-        # No header row or data: treat as empty spreadsheet
-        raise status.SpreadsheetEmptyException('No data found in the remote sheet.')
+        logging.warning(f'The remote sheet is empty!')
+        return data_rows
 
     header_row: List[Any] = data_rows[0] if data_rows[0] else []
     header_row = [str(cell) for cell in header_row]

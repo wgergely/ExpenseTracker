@@ -7,8 +7,8 @@ This module defines:
     - StatusIndicator: widget for cache status display
     - InteractionState and ResizableMainWidget: support window resizing and state changes
 """
-import functools
 import logging
+from typing import Optional
 
 from PySide6 import QtWidgets, QtCore, QtGui
 
@@ -353,326 +353,293 @@ class ResizableMainWidget(QtWidgets.QMainWindow):
 
 
 class MainWindow(ResizableMainWidget):
-
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        # Enable nested and animated docking behaviors
-        opts = self.dockOptions()
-        opts |= QtWidgets.QMainWindow.AllowNestedDocks | QtWidgets.QMainWindow.AnimatedDocks
-        self.setDockOptions(opts)
-        # Position dock-tabs: horizontal at top/bottom, vertical on sides
-        self.setTabPosition(QtCore.Qt.LeftDockWidgetArea, QtWidgets.QTabWidget.West)
-        self.setTabPosition(QtCore.Qt.RightDockWidgetArea, QtWidgets.QTabWidget.East)
-        self.setTabPosition(QtCore.Qt.TopDockWidgetArea, QtWidgets.QTabWidget.North)
-        self.setTabPosition(QtCore.Qt.BottomDockWidgetArea, QtWidgets.QTabWidget.South)
+        self._configure_dock_behavior()
         self.setWindowTitle(app_name)
-
         self.setObjectName('ExpenseTrackerMainWindow')
-
-        self.content_area = None
-
-        self.toolbar = None
-        self.range_selector = None
-        self.expense_view = None
-        self.transactions_view = None
-        self.presets_popup = None
-        self.status_indicator = None
-
         self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+        # Predeclare UI elements for type clarity
+        self.toolbar: QtWidgets.QToolBar
+        self.range_selector: RangeSelectorBar
+        self.expense_view: ExpenseView
+        self.status_indicator: StatusIndicator
+
+        # Placeholders for dock widgets
+        self.transactions_view: TransactionsDockWidget
+        self.transaction_preview: TransactionDetailsDockWidget
+        self.presets_view: PresetsDockWidget
+        self.settings_view: SettingsDockWidget
+        self.log_view: LogDockWidget
+        self.trends_view: TrendDockWidget
+        self.piechart_view: PieChartDockWidget
+        self.doughnut_view: DoughnutDockWidget
 
         self._create_ui()
         self._init_actions()
         self._connect_signals()
         self.load_window_settings()
 
-    def _create_ui(self):
-        self.setMenuWidget(TitleBar(self))
+    def _configure_dock_behavior(self) -> None:
+        """
+        Enable nested and animated docking, and set default tab positions for all dock areas.
+        """
+        opts = self.dockOptions()
+        opts |= QtWidgets.QMainWindow.AllowNestedDocks | QtWidgets.QMainWindow.AnimatedDocks
+        self.setDockOptions(opts)
 
+        positions = [
+            (QtCore.Qt.LeftDockWidgetArea, QtWidgets.QTabWidget.West),
+            (QtCore.Qt.RightDockWidgetArea, QtWidgets.QTabWidget.East),
+            (QtCore.Qt.TopDockWidgetArea, QtWidgets.QTabWidget.North),
+            (QtCore.Qt.BottomDockWidgetArea, QtWidgets.QTabWidget.South),
+        ]
+        for area, pos in positions:
+            self.setTabPosition(area, pos)
+            logging.debug('Set tab position for %s to %s', area, pos)
+
+    def _create_ui(self) -> None:
+        """
+        Build the main UI: central widget, toolbar, main view and docks based on configuration.
+        """
+        # Title bar and central layout
+        self.setMenuWidget(TitleBar(self))
         central = QtWidgets.QWidget(self)
         central.setProperty('rounded', True)
-        QtWidgets.QVBoxLayout(central)
-
-        o = ui.Size.Margin(1.0)
-        central.layout().setContentsMargins(o, 0, o, o)
-        central.layout().setSpacing(o * 0.5)
-
+        layout = QtWidgets.QVBoxLayout(central)
+        margin = ui.Size.Margin(1.0)
+        layout.setContentsMargins(margin, 0, margin, margin)
+        layout.setSpacing(margin * 0.5)
         self.setCentralWidget(central)
 
-        # Action bar at the top.
+        # Toolbar setup
         self.toolbar = QtWidgets.QToolBar(self)
         self.toolbar.setProperty('transparent', True)
         self.toolbar.setProperty('no_background', True)
         self.toolbar.setObjectName('ExpenseTrackerActionToolBar')
         self.menuWidget().layout().insertWidget(1, self.toolbar, 1)
 
+        # Core widgets
         self.range_selector = RangeSelectorBar(parent=self)
         self.range_selector.setObjectName('ExpenseTrackerRangeSelector')
         self.toolbar.addWidget(self.range_selector)
 
         self.expense_view = ExpenseView(parent=central)
         self.expense_view.setObjectName('ExpenseTrackerExpenseView')
-        central.layout().addWidget(self.expense_view, 1)
+        layout.addWidget(self.expense_view, 1)
 
         self.status_indicator = StatusIndicator(parent=self)
 
-        # Add transactions dock (right side)
-        self.transactions_view = TransactionsDockWidget(parent=self)
-        self.transactions_view.setObjectName('ExpenseTrackerTransactionsView')
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transactions_view)
-        self.transactions_view.hide()
-        # Add transaction preview dock (right side)
-        self.transaction_preview = TransactionDetailsDockWidget(parent=self)
-        self.transaction_preview.setObjectName('ExpenseTrackerTransactionDetailsDockWidget')
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.transaction_preview)
-        self.transaction_preview.hide()
+        # Dock configuration list including default areas
+        dock_configs = [
+            {
+                'attr': 'transactions_view',
+                'class': TransactionsDockWidget,
+                'name': 'ExpenseTrackerTransactionsView',
+                'area': QtCore.Qt.RightDockWidgetArea},
+            {
+                'attr': 'transaction_preview',
+                'class': TransactionDetailsDockWidget,
+                'name': 'ExpenseTrackerTransactionDetailsDockWidget',
+                'area': QtCore.Qt.RightDockWidgetArea},
+            {
+                'attr': 'presets_view',
+                'class': PresetsDockWidget,
+                'name': 'ExpenseTrackerPresetsDockWidget',
+                'area': QtCore.Qt.LeftDockWidgetArea},
+            {
+                'attr': 'settings_view',
+                'class': SettingsDockWidget,
+                'name': 'ExpenseTrackerSettingsDockWidget',
+                'area': QtCore.Qt.LeftDockWidgetArea},
+            {
+                'attr': 'log_view',
+                'class': LogDockWidget,
+                'name': 'ExpenseTrackerLogDockWidget',
+                'area': QtCore.Qt.BottomDockWidgetArea},
+            {
+                'attr': 'trends_view',
+                'class': TrendDockWidget,
+                'name': 'ExpenseTrackerTrendDockWidget',
+                'area': QtCore.Qt.RightDockWidgetArea},
+            {
+                'attr': 'piechart_view',
+                'class': PieChartDockWidget,
+                'name': 'ExpenseTrackerPieChartDockWidget',
+                'area': QtCore.Qt.RightDockWidgetArea},
+            {
+                'attr': 'doughnut_view',
+                'class': DoughnutDockWidget,
+                'name': 'ExpenseTrackerDoughnutDockWidget',
+                'area': QtCore.Qt.RightDockWidgetArea},
+        ]
+        for cfg in dock_configs:
+            widget = cfg['class'](parent=self)
+            setattr(self, cfg['attr'], widget)
+            widget.setObjectName(cfg['name'])
+            self.addDockWidget(cfg['area'], widget)
+            widget.hide()
+            logging.debug('Added dock %s in area %s', cfg['name'], cfg['area'])
 
-        # Add presets dock (left side)
-        self.presets_view = PresetsDockWidget(parent=self)
-        self.presets_view.setObjectName('ExpenseTrackerPresetsDockWidget')
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.presets_view)
-        self.presets_view.hide()
+    def _init_actions(self) -> None:
+        """
+        Create and register toolbar/menu actions defined by configuration.
+        """
 
-        # Add settings dock (bottom)
-        self.settings_view = SettingsDockWidget(parent=self)
-        self.settings_view.setObjectName('ExpenseTrackerSettingsDockWidget')
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.settings_view)
-        self.settings_view.hide()
+        def _make_action(cfg: dict) -> Optional[QtGui.QAction]:
+            if cfg.get('separator'):
+                action = QtGui.QAction(self)
+                action.setSeparator(True)
+                action.setEnabled(False)
+                return action
 
-        # Add log dock (top)
-        self.log_view = LogDockWidget(parent=self)
-        self.log_view.setObjectName('ExpenseTrackerLogDockWidget')
-        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.log_view)
-        self.log_view.hide()
+            if 'widget_action' in cfg:
+                cfg['widget_action']()
+                return None
 
-        # Add trend dock (bottom)
-        self.trends_view = TrendDockWidget(parent=self)
-        self.trends_view.setObjectName('ExpenseTrackerTrendDockWidget')
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.trends_view)
-        self.trends_view.hide()
+            action = QtGui.QAction(cfg['label'], self)
+            if 'icon' in cfg:
+                action.setIcon(ui.get_icon(cfg['icon'], color=ui.Color.DisabledText))
+            if 'trigger' in cfg:
+                action.triggered.connect(cfg['trigger'])
 
-        # Add pie chart dock (right side)
-        self.piechart_view = PieChartDockWidget(parent=self)
-        self.piechart_view.setObjectName('ExpenseTrackerPieChartDockWidget')
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.piechart_view)
-        self.piechart_view.hide()
+            # Toggle behavior for dock widgets
+            if 'widget_attr' in cfg:
+                widget = getattr(self, cfg['widget_attr'])
+                action.setCheckable(True)
+                action.setChecked(widget.isVisible())
+                action.triggered.connect(lambda checked, w=widget: w.setHidden(not w.isHidden()))
+                widget.toggled.connect(action.setChecked)
+                # icon toggle on state change
+                action.triggered.connect(
+                    lambda checked, a=action, icon=cfg['icon']: a.setIcon(
+                        ui.get_icon(icon, color=(ui.Color.Green if a.isChecked() else ui.Color.DisabledText))
+                    )
+                )
 
-        # Add doughnut chart dock (right side)
-        self.doughnut_view = DoughnutDockWidget(parent=self)
-        self.doughnut_view.setObjectName('ExpenseTrackerDoughnutDockWidget')
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.doughnut_view)
-        self.doughnut_view.hide()
+            # Shortcuts
+            if 'shortcut' in cfg:
+                action.setShortcut(cfg['shortcut'])
+            if 'shortcuts' in cfg:
+                action.setShortcuts(cfg['shortcuts'])
+            if any(k in cfg for k in ('shortcut', 'shortcuts')):
+                action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
 
-    def _connect_signals(self):
-        signals.showTransactions.connect(
-            lambda: self.transactions_view.setHidden(not self.transactions_view.isHidden()))
+            return action
+
+        # Spacer helper for toolbar
+        def _spacer() -> QtWidgets.QWidget:
+            w = QtWidgets.QWidget(self)
+            w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+            w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+            return w
+
+        action_configs = [
+            {
+                'label': 'Maximize',
+                'icon': 'btn_maximize',
+                'trigger': self.toggle_maximised,
+                'shortcut': 'Ctrl+M'
+            },
+            {'separator': True},
+            {'widget_action': lambda: self.toolbar.addWidget(_spacer())},
+            {
+                'label': 'Open Spreadsheet',
+                'icon': 'btn_ledger',
+                'trigger': signals.openSpreadsheet,
+                'shortcut': 'Ctrl+Shift+O'
+            },
+            {'separator': True},
+            {
+                'label': 'Presets',
+                'widget_attr': 'presets_view',
+                'icon': 'btn_presets',
+                'shortcut': 'Ctrl+0'
+            },
+            {
+                'label': 'Transactions',
+                'widget_attr': 'transactions_view',
+                'icon': 'btn_transactions',
+                'shortcut': 'Ctrl+1'
+            },
+            {
+                'label': 'Preview',
+                'widget_attr': 'transaction_preview',
+                'icon': 'btn_TransactionDetails',
+                'shortcut': 'Ctrl+2'
+            },
+            {'separator': True},
+            {
+                'label': 'Trends',
+                'widget_attr': 'trends_view',
+                'icon': 'btn_trend',
+                'shortcut': 'Ctrl+3'
+            },
+            {
+                'label': 'Pie Chart',
+                'widget_attr': 'piechart_view',
+                'icon': 'btn_piechart',
+                'shortcut': 'Ctrl+4'
+            },
+            {
+                'label': 'Doughnut Chart',
+                'widget_attr': 'doughnut_view',
+                'icon': 'btn_doughnut',
+                'shortcut': 'Ctrl+5'
+            },
+            {'separator': True},
+            {
+                'label': 'Logs',
+                'widget_attr': 'log_view',
+                'icon': 'btn_log',
+                'shortcut': 'Ctrl+6'
+            },
+            {
+                'label': 'Settings',
+                'widget_attr': 'settings_view',
+                'icon': 'btn_settings',
+                'shortcut': 'Ctrl+0'
+            },
+            {'separator': True},
+            {
+                'label': 'Previous Month',
+                'trigger': self.range_selector.previous_month,
+                'shortcuts': ['Alt+Left',
+                              'Ctrl+Left']
+            },
+            {
+                'label': 'Next Month',
+                'trigger': self.range_selector.next_month,
+                'shortcuts': ['Alt+Right',
+                              'Ctrl+Right']
+            },
+            {
+                'label': 'Refresh Data',
+                'icon': 'btn_sync',
+                'trigger': signals.dataFetchRequested}
+        ]
+
+        for cfg in action_configs:
+            act = _make_action(cfg)
+            if not act:
+                continue
+            self.toolbar.addAction(act)
+            self.addAction(act)
+            logging.debug('Added action: %s', cfg.get('label', 'separator'))
+
+        # Append status indicator widget
+        self.toolbar.addWidget(self.status_indicator)
+
+    def _connect_signals(self) -> None:
+        """
+        Wire up application-level signals to corresponding dock visibility.
+        """
+        signals.showTransactions.connect(lambda: (self.transactions_view.show(), self.transactions_view.raise_()))
         signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
-
         signals.showSettings.connect(self.settings_view.show)
         signals.showTransactionPreview.connect(self.transaction_preview.show)
-
-    def _init_actions(self):
-        action = QtGui.QAction('Maximize', self)
-        action.setIcon(ui.get_icon('btn_maximize'))
-        action.setToolTip('Maximize')
-        action.setStatusTip('Maximize')
-        action.setShortcut('Ctrl+M')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(self.toggle_maximised)
-        self.addAction(action)
-
-        # Separator
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.addAction(action)
-
-        w = QtWidgets.QWidget(self)
-        w.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        w.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-        w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
-        self.toolbar.addWidget(w)
-
-        action = QtGui.QAction('Open Spreadsheet', self)
-        action.setShortcut('Ctrl+Shift+O')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.setToolTip('Open spreadsheet in browser')
-        action.setIcon(ui.get_icon('btn_ledger'))
-        action.triggered.connect(signals.openSpreadsheet)
-        self.toolbar.addAction(action)
-        self.addAction(action)
-
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.toolbar.addAction(action)
-        self.addAction(action)
-
-        toggle_func = lambda a, s: a.setIcon(
-            ui.get_icon(s, color=ui.Color.Green)) if a.isChecked() else a.setIcon(
-            ui.get_icon(s, color=ui.Color.DisabledText))
-        toggle_vis = lambda e: e.setHidden(not e.isHidden())
-
-        action = QtGui.QAction('Presets', self)
-        action.setCheckable(True)
-        action.setChecked(self.presets_view.isVisible())
-        action.setIcon(ui.get_icon('btn_presets', color=ui.Color.DisabledText))
-        action.setToolTip('Show presets...')
-        action.setStatusTip('Show presets...')
-        action.setShortcut('Ctrl+Shift+V')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_presets'))
-        action.triggered.connect(functools.partial(toggle_vis, self.presets_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.presets_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_presets'))
-
-        # Transaction Preview toggle
-        action = QtGui.QAction('Preview', self)
-        action.setCheckable(True)
-        action.setChecked(self.transaction_preview.isVisible())
-        action.setIcon(ui.get_icon('btn_TransactionDetails', color=ui.Color.DisabledText))
-        action.setToolTip('Show transaction preview...')
-        action.setStatusTip('Show transaction preview...')
-        action.setShortcut('Ctrl+Shift+V')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        # toggle icon color
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_TransactionDetails'))
-        # toggle visibility
-        action.triggered.connect(functools.partial(toggle_vis, self.transaction_preview))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.transaction_preview.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_TransactionDetails'))
-
-        # Separator
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.toolbar.addAction(action)
-        self.addAction(action)
-
-        action = QtGui.QAction('Transactions', self)
-        action.setCheckable(True)
-        action.setChecked(self.transactions_view.isVisible())
-        action.setIcon(ui.get_icon('btn_transactions', color=ui.Color.DisabledText))
-        action.setToolTip('Show transactions...')
-        action.setStatusTip('Show transactions...')
-        action.setShortcut('Ctrl+Shift+T')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_transactions'))
-
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.transactions_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_transactions'))
-
-        action = QtGui.QAction('Trends', self)
-        action.setCheckable(True)
-        action.setChecked(self.trends_view.isVisible())
-        action.setIcon(ui.get_icon('btn_trend', color=ui.Color.DisabledText))
-        action.setToolTip('Show trends chart...')
-        action.setStatusTip('Show trends chart...')
-        action.setShortcut('Ctrl+Shift+T')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_trend'))
-        action.triggered.connect(functools.partial(toggle_vis, self.trends_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.trends_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_trend'))
-
-        # Pie Chart toggle
-        action = QtGui.QAction('Pie Chart', self)
-        action.setCheckable(True)
-        action.setChecked(self.piechart_view.isVisible())
-        action.setIcon(ui.get_icon('btn_piechart', color=ui.Color.DisabledText))
-        action.setToolTip('Show pie chart...')
-        action.setStatusTip('Show pie chart...')
-        action.triggered.connect(functools.partial(toggle_vis, self.piechart_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.piechart_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_piechart'))
-
-        # Doughnut Chart toggle
-        action = QtGui.QAction('Doughnut Chart', self)
-        action.setCheckable(True)
-        action.setChecked(self.doughnut_view.isVisible())
-        action.setIcon(ui.get_icon('btn_doughnut', color=ui.Color.DisabledText))
-        action.setToolTip('Show doughnut chart...')
-        action.setStatusTip('Show doughnut chart...')
-        action.triggered.connect(functools.partial(toggle_vis, self.doughnut_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        # sync action checked state when view visibility changes
-        self.doughnut_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_doughnut'))
-
-        # Separator
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.toolbar.addAction(action)
-        self.addAction(action)
-
-        action = QtGui.QAction('Logs', self)
-        action.setCheckable(True)
-        action.setChecked(self.log_view.isVisible())
-        action.setIcon(ui.get_icon('btn_log', color=ui.Color.DisabledText))
-        action.setToolTip('Show logs...')
-        action.setStatusTip('Show logs...')
-        action.setShortcut('Ctrl+Shift+L')
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_log'))
-        action.triggered.connect(functools.partial(toggle_vis, self.log_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.log_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_log'))
-
-        action = QtGui.QAction('Settings', self)
-        action.setIcon(ui.get_icon('btn_settings', color=ui.Color.DisabledText))
-        action.setToolTip('Show settings...')
-        action.setStatusTip('Show settings...')
-        action.setCheckable(True)
-        action.setChecked(self.settings_view.isVisible())
-        action.setShortcuts(['Ctrl+,', 'Ctrl+Shift+,', 'Ctrl+.', 'Ctrl+Shift+.', 'Ctrl+Shift+S'])
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(functools.partial(toggle_func, action, 'btn_settings'))
-        action.triggered.connect(functools.partial(toggle_vis, self.settings_view))
-        self.toolbar.addAction(action)
-        self.addAction(action)
-        self.settings_view.toggled.connect(action.setChecked)
-        action.toggled.connect(lambda checked, a=action: toggle_func(a, 'btn_settings'))
-
-        # Separator
-        action = QtGui.QAction(self)
-        action.setSeparator(True)
-        action.setEnabled(False)
-        self.toolbar.addAction(action)
-        self.addAction(action)
-
-        action = QtGui.QAction('Previous Month', self)
-        action.setShortcuts(['Alt+Left', 'Ctrl+Left'])
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(self.range_selector.previous_month)
-        self.addAction(action)
-
-        action = QtGui.QAction('Next Month', self)
-        action.setShortcuts(['Alt+Right', 'Ctrl+Right'])
-        action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
-        action.triggered.connect(self.range_selector.next_month)
-        self.addAction(action)
-
-        action = QtGui.QAction('Refresh Data', self)
-        action.setIcon(ui.get_icon('btn_sync'))
-        action.setToolTip('Fetch data')
-        action.setStatusTip('Fetch data')
-        action.triggered.connect(signals.dataFetchRequested)
-        self.toolbar.addAction(action)
-
-        self.toolbar.addWidget(self.status_indicator)
 
     def sizeHint(self):
         return QtCore.QSize(

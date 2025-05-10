@@ -247,10 +247,9 @@ class SyncAPI(QtCore.QObject):
             logging.info(
                 f'Successfully pushed {len(to_update)} edit(s) to remote sheet.'
             )
-            # Update results for successfully pushed operations
+            # Record successful update for each matched operation
             for op, _ in to_update:
-                if results.get((op.local_id, op.column), (False, ''))[0]:  # Check if already marked True
-                    results[(op.local_id, op.column)] = (True, 'Committed successfully')
+                results[(op.local_id, op.column)] = (True, 'Committed successfully')
 
 
         except HttpError as ex:
@@ -606,7 +605,6 @@ class SyncAPI(QtCore.QObject):
 
     def _assemble_remote_rows(
             self,
-            # stable_fields: List[str], <-- Argument removed as it's not used
             column_values_map: Dict[Tuple[str, str], List[Any]],  # (log. field, act. header) -> [values]
             data_row_count: int,
     ) -> List[Dict[str, Any]]:  # Returns List[Dict[logical_field_name, Tuple[values...]]]

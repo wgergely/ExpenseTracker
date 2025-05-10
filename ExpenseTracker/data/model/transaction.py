@@ -55,6 +55,8 @@ class TransactionsModel(QtCore.QAbstractTableModel):
         sync.dataUpdated.connect(self.on_sync_success)
         sync.commitFinished.connect(self.on_sync_complete)
 
+        self.modelAboutToBeReset.connect(lambda: signals.transactionItemSelected.emit(-1))
+
     @QtCore.Slot(list)
     def queue_data_init(self, data: list) -> None:
         self._pending_data = data
