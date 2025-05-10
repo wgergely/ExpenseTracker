@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/expensetracker
-      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_TAG: latest
 
     steps:
       - name: Checkout code
@@ -25,25 +25,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Windows container image
-        run: |
-          docker build `
-            --file Dockerfile `
-            --platform windows/amd64 `
-            --tag ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} `
-            --tag ${{ env.IMAGE_NAME }}:latest `
-            .
-
-      - name: Push both image tags
-        run: |
-          docker push ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          docker push ${{ env.IMAGE_NAME }}:latest
-
       - name: Run build script in container
         run: |
           docker run --rm `
-            --mount type=bind,source="${{ github.workspace }}",target=C:\workspace `
-            -w C:\workspace `
+            --mount type=bind,source="${{ github.workspace }}",target=C:/workspace `
+            -w C:/workspace `
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} `
             powershell -NoLogo -ExecutionPolicy Bypass `
                        -File .\app\build.ps1 `
@@ -63,15 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ env.IMAGE_TAG }}
-          path: app/build/install/**
+          path: C:/build/ExpenseTracker*.*
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
-
-      - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs-${{ env.IMAGE_TAG }}
-          path: docs/_build/html/**
-          if-no-files-found: error
           retention-days: 7
