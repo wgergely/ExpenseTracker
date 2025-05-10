@@ -11,10 +11,10 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'ExpenseTracker'
-copyright = '2025, Gergely Wootsch'
+project = '@PROJECT_NAME@'
+copyright = '@CURRENT_YEAR@, Gergely Wootsch'
 author = 'Gergely Wootsch'
-release = '0.0.0'
+release = '@App_VERSION@'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -69,7 +69,7 @@ html_theme_options = {
 }
 highlight_language = "python"
 
-html_static_path = ['_static', '../rsc/icon']
+html_static_path = ['_static']
 
 # -- Favicon and logo -------------------------------------------------------
 html_favicon = '../rsc/icon/icon.ico'
