@@ -20,6 +20,7 @@ endif()
 
 
 set(App_VERSION "0.0.0" CACHE STRING "App version")
+string(TIMESTAMP CURRENT_YEAR "%Y" UTC)
 
 message(STATUS "[App] Version ........: ${App_VERSION}")
 message(STATUS "[App] Build type .....: ${CMAKE_BUILD_TYPE}")
