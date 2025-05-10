@@ -294,7 +294,8 @@ class SyncInternalHelperTest(BaseTestCase):
     # _fetch_headers ----------------------------------------------------------
     def test_fetch_headers_returns_header_row(self):
         service = _make_service(['A', 'B'], {})
-        self.assertEqual(self.sync._fetch_headers(2), ['A', 'B'])
+        # pass the stub service and column count to fetch headers
+        self.assertEqual(self.sync._fetch_headers(service, 2), ['A', 'B'])
 
     # _determine_stable_fields ------------------------------------------------
     def test_determine_stable_fields_prefers_id(self):
@@ -310,7 +311,7 @@ class SyncInternalHelperTest(BaseTestCase):
         headers = ['ID', 'Date', 'Amount']
         col_vals = {
             ('id', 'ID'): ['1'],
-            ('date', 'Date'): [45227],  # 2023‑10‑28 serial
+            ('date', 'Date'): [45227],  # 2023-10-28 serial
             ('amount', 'Amount'): ['10.23'],
         }
         svc = _make_service(headers, col_vals)
@@ -319,7 +320,9 @@ class SyncInternalHelperTest(BaseTestCase):
         fetched = self.sync._fetch_stable_data(svc, stable_map, idx, 2, 1)
         self.assertEqual(fetched[('amount', 'Amount')][0], 10.23)
 
-        rows = self.sync._assemble_remote_rows(fetched, ['id', 'date', 'amount'], 1)
+        # assemble_remote_rows now takes only (column_values_map, data_row_count)
+        rows = self.sync._assemble_remote_rows(fetched, 1)
+        # build index map with logical stable fields
         m = self.sync._build_remote_index_map(rows, ['id', 'date', 'amount'])
         self.assertIn(((1,), ('2023-10-28',), (10.23,)), m)
 
