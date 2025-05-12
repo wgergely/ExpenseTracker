@@ -34,14 +34,19 @@ jobs:
 
       - name: Run unit tests in container
         shell: pwsh
+        env:
+          TEST_CLIENT_SECRET_ENV_KEY: ${{ secrets.TEST_CLIENT_SECRET_ENV_KEY }}
+          TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY: ${{ secrets.TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY }}
+          TEST_SPREADHSEET_ID_ENV_KEY: ${{ secrets.TEST_SPREADHSEET_ID_ENV_KEY }}
+          TEST_SPREADHSEET_NAME_ENV_KEY: ${{ secrets.TEST_SPREADHSEET_NAME_ENV_KEY }}
         run: |
           docker run --rm `
             --mount "type=bind,source=${{ github.workspace }},target=${{ env.WORKSPACE_DIR }}" `
             -w "${{ env.WORKSPACE_DIR }}" `
-            -e TEST_CLIENT_SECRET_ENV_KEY="${{ secrets.TEST_CLIENT_SECRET_ENV_KEY }}" `
-            -e TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY="${{ secrets.TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY }}" `
-            -e TEST_SPREADSHEET_ID_ENV_KEY="${{ secrets.TEST_SPREADHSEET_ID_ENV_KEY }}" `
-            -e TEST_SPREADSHEET_NAME_ENV_KEY="${{ secrets.TEST_SPREADHSEET_NAME_ENV_KEY }}" `
+            --env TEST_CLIENT_SECRET_ENV_KEY `
+            --env TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY `
+            --env TEST_SPREADHSEET_ID_ENV_KEY `
+            --env TEST_SPREADHSEET_NAME_ENV_KEY `
             ${{ env.DOCKER_IMAGE }} `
             python -m unittest
 
