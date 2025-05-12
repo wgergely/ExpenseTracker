@@ -10,15 +10,19 @@ permissions:
   contents: read
   packages: read
 
+env:
+  DOCKER_IMAGE: ghcr.io/wgergely/expensetracker:latest
+  WORKSPACE_DIR: C:/workspace
+
 jobs:
   test:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -26,17 +30,17 @@ jobs:
 
       - name: Pull test image
         run: |
-          docker pull ghcr.io/wgergely/expensetracker/gh-actions:latest
+          docker pull ${{ env.DOCKER_IMAGE }}
 
       - name: Run unit tests in container
         shell: pwsh
         run: |
           docker run --rm `
-            --mount type=bind,source="${{ github.workspace }}",target=C:/workspace `
-            -w C:/workspace `
+            --mount type=bind,source="${{ github.workspace }}",target="${{ env.WORKSPACE_DIR }}" `
+            -w ${{ env.WORKSPACE_DIR }} `
             -e TEST_CLIENT_SECRET_ENV_KEY="${{ secrets.TEST_CLIENT_SECRET_ENV_KEY }}" `
             -e TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY="${{ secrets.TEST_SERVICE_ACCOUNT_CREDS_ENV_KEY }}" `
             -e TEST_SPREADHSEET_ID_ENV_KEY="${{ secrets.TEST_SPREADHSEET_ID_ENV_KEY }}" `
             -e TEST_SPREADHSEET_NAME_ENV_KEY="${{ secrets.TEST_SPREADHSEET_NAME_ENV_KEY }}" `
-            ghcr.io/wgergely/expensetracker/gh-actions:latest `
+            ${{ env.DOCKER_IMAGE }} `
             python -m unittest

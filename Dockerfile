@@ -108,6 +108,7 @@ RUN dotnet tool install --global wix --version 4.0.4
 RUN wix --version
 RUN wix extension add --global WixToolset.UI.wixext/4.0.4
 
+LABEL org.opencontainers.image.source=https://github.com/wgergely/ExpenseTracker
 
 WORKDIR C:/workspace
 
