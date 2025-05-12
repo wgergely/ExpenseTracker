@@ -23,6 +23,9 @@ ExpenseTracker
    :alt: Qt6/PySide6
    :target: https://doc.qt.io/qtforpython-6/index.html
 
+.. image:: https://github.com/wgergely/ExpenseTracker/actions/workflows/test.yml/badge.svg
+   :alt: Test
+
 
 ------
 
