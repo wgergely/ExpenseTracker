@@ -21,28 +21,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1) Try to restore a previously saved image.tar
-      - name: Restore image cache
-        id: cache
-        uses: actions/cache@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          path: image.tar
-          key: ${{ runner.os }}-docker-image-${{ env.DOCKER_IMAGE }}
-          restore-keys: |
-            ${{ runner.os }}-docker-image-${{ env.DOCKER_IMAGE }}-
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2) If image.tar existed, load it; otherwise pull & save it for next time
-      - name: Pull or load Docker image
-        shell: pwsh
+      - name: Pull test image
         run: |
-          if (Test-Path image.tar) {
-            Write-Host "Loading image from cache…"
-            docker load --input image.tar
-          } else {
-            Write-Host "Pulling image from registry…"
-            docker pull ${{ env.DOCKER_IMAGE }}
-            docker save --output image.tar ${{ env.DOCKER_IMAGE }}
-          }
+          docker pull ${{ env.DOCKER_IMAGE }}
 
       - name: Run unit tests in container
         shell: pwsh
