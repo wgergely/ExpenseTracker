@@ -47,15 +47,14 @@ def patch_get_creds() -> Credentials:
 
     # Log initial state
     logging.debug(
-        'Initial creds state: valid=%s, expired=%s, token=%r, expiry=%s, scopes=%s, service_account_email=%s',
-        creds.valid, creds.expired, creds.token, creds.expiry,
-        creds.scopes, creds.service_account_email
+        f'Initial creds state: '
+        f'{creds.valid=}, {creds.expired=}, {creds.token=}, {creds.expiry=}, {creds.scopes=}'
     )
 
     # Try to refresh (this will fetch a fresh access token)
     try:
         creds.refresh(Request())
-        logging.debug('Refreshed credentials successfully; new expiry=%s', creds.expiry)
+        logging.debug(f'Refreshed credentials successfully: {creds.expiry=}')
     except RefreshError as exc:
         logging.error(
             'Failed to refresh credentials: %s',
@@ -65,8 +64,8 @@ def patch_get_creds() -> Credentials:
 
     # Log post‐refresh state
     logging.debug(
-        'Post‐refresh creds state: valid=%s, expired=%s, token=%r, expiry=%s',
-        creds.valid, creds.expired, creds.token, creds.expiry
+        f'Post‐refresh creds state: '
+        f'{creds.valid=}, {creds.expired=}, {creds.token=}, {creds.expiry=}, {creds.scopes=}'
     )
 
     return creds
