@@ -203,11 +203,11 @@ class Color(enum.Enum):
         Theme.Dark.value: (0, 0, 0, 0),
     }
     VeryDarkBackground = {
-        Theme.Light.value: (225, 225, 225),
+        Theme.Light.value: (245, 245, 245),
         Theme.Dark.value: (30, 30, 30),
     }
     DarkBackground = {
-        Theme.Light.value: (210, 210, 210),
+        Theme.Light.value: (220, 220, 220),
         Theme.Dark.value: (45, 45, 45),
     }
     Background = {
