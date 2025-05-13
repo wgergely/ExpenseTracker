@@ -7,6 +7,7 @@ This module defines:
     - StatusIndicator: widget for cache status display
     - InteractionState and ResizableMainWidget: support window resizing and state changes
 """
+import functools
 import logging
 from typing import Optional
 
@@ -397,7 +398,7 @@ class MainWindow(ResizableMainWidget):
         ]
         for area, pos in positions:
             self.setTabPosition(area, pos)
-            logging.debug('Set tab position for %s to %s', area, pos)
+            logging.debug(f'Set tab position for {area} to {pos}')
 
     def _create_ui(self) -> None:
         """
@@ -480,50 +481,57 @@ class MainWindow(ResizableMainWidget):
             widget.setObjectName(cfg['name'])
             self.addDockWidget(cfg['area'], widget)
             widget.hide()
-            logging.debug('Added dock %s in area %s', cfg['name'], cfg['area'])
+
+            logging.debug(f'Added dock {cfg["name"]} in area {cfg["area"]}')
 
     def _init_actions(self) -> None:
         """
         Create and register toolbar/menu actions defined by configuration.
         """
 
-        def _make_action(cfg: dict) -> Optional[QtGui.QAction]:
-            if cfg.get('separator'):
+        def _make_action(_cfg: dict) -> Optional[QtGui.QAction]:
+            if _cfg.get('separator'):
                 action = QtGui.QAction(self)
                 action.setSeparator(True)
                 action.setEnabled(False)
                 return action
 
-            if 'widget_action' in cfg:
-                cfg['widget_action']()
+            if 'widget_action' in _cfg:
+                _cfg['widget_action']()
                 return None
 
-            action = QtGui.QAction(cfg['label'], self)
-            if 'icon' in cfg:
-                action.setIcon(ui.get_icon(cfg['icon'], color=ui.Color.DisabledText))
-            if 'trigger' in cfg:
-                action.triggered.connect(cfg['trigger'])
+            action = QtGui.QAction(_cfg['label'], self)
+            if 'icon' in _cfg:
+                action.setIcon(ui.get_icon(_cfg['icon'], color=ui.Color.DisabledText))
+            if 'trigger' in _cfg:
+                action.triggered.connect(_cfg['trigger'])
+
+            def toggle_visibility(widget, checked=None):
+                checked = checked if checked is not None else widget.isVisible()
+                widget.setHidden(checked)
+
+            def set_action_icon(widget, action, icon, checked):
+                color = ui.Color.Green if checked else ui.Color.DisabledText
+                action.setIcon(ui.get_icon(icon, color=color))
 
             # Toggle behavior for dock widgets
-            if 'widget_attr' in cfg:
-                widget = getattr(self, cfg['widget_attr'])
+            if 'widget_attr' in _cfg:
+                _widget = getattr(self, _cfg['widget_attr'])
                 action.setCheckable(True)
-                action.setChecked(widget.isVisible())
-                action.triggered.connect(lambda checked, w=widget: w.setHidden(not w.isHidden()))
-                widget.toggled.connect(action.setChecked)
-                # icon toggle on state change
-                action.triggered.connect(
-                    lambda checked, a=action, icon=cfg['icon']: a.setIcon(
-                        ui.get_icon(icon, color=(ui.Color.Green if a.isChecked() else ui.Color.DisabledText))
-                    )
-                )
+                action.setChecked(_widget.isVisible())
+
+                toggle_visibility_func = functools.partial(toggle_visibility, _widget)
+                set_action_icon_func = functools.partial(set_action_icon, _widget, action, cfg['icon'])
+
+                action.triggered.connect(toggle_visibility_func)
+                _widget.toggled.connect(set_action_icon_func)
 
             # Shortcuts
-            if 'shortcut' in cfg:
-                action.setShortcut(cfg['shortcut'])
+            if 'shortcut' in _cfg:
+                action.setShortcut(_cfg['shortcut'])
             if 'shortcuts' in cfg:
-                action.setShortcuts(cfg['shortcuts'])
-            if any(k in cfg for k in ('shortcut', 'shortcuts')):
+                action.setShortcuts(_cfg['shortcuts'])
+            if any(k in _cfg for k in ('shortcut', 'shortcuts')):
                 action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
 
             return action
@@ -541,9 +549,9 @@ class MainWindow(ResizableMainWidget):
                 'label': 'Maximize',
                 'icon': 'btn_maximize',
                 'trigger': self.toggle_maximised,
-                'shortcut': 'Ctrl+M'
+                'shortcut': 'Ctrl+M',
+                'visible': False
             },
-            {'separator': True},
             {'widget_action': lambda: self.toolbar.addWidget(_spacer())},
             {
                 'label': 'Open Spreadsheet',
@@ -606,14 +614,14 @@ class MainWindow(ResizableMainWidget):
             {
                 'label': 'Previous Month',
                 'trigger': self.range_selector.previous_month,
-                'shortcuts': ['Alt+Left',
-                              'Ctrl+Left']
+                'shortcut': 'Ctrl+Left',
+                'visible': False
             },
             {
                 'label': 'Next Month',
                 'trigger': self.range_selector.next_month,
-                'shortcuts': ['Alt+Right',
-                              'Ctrl+Right']
+                'shortcut': 'Ctrl+Right',
+                'visible': False
             },
             {
                 'label': 'Refresh Data',
@@ -625,16 +633,17 @@ class MainWindow(ResizableMainWidget):
             act = _make_action(cfg)
             if not act:
                 continue
-            self.toolbar.addAction(act)
+            if cfg.get('visible', True):
+                self.toolbar.addAction(act)
             self.addAction(act)
-            logging.debug('Added action: %s', cfg.get('label', 'separator'))
+            logging.debug(f'Added action: {cfg.get("label", "separator")}')
 
         # Append status indicator widget
         self.toolbar.addWidget(self.status_indicator)
 
     def _connect_signals(self) -> None:
         """
-        Wire up application-level signals to corresponding dock visibility.
+        Wire up app-level signals to corresponding dock visibility.
         """
         signals.showTransactions.connect(lambda: (self.transactions_view.show(), self.transactions_view.raise_()))
         signals.showLogs.connect(lambda: (self.log_view.show(), self.log_view.raise_()))
