@@ -58,6 +58,13 @@ class TableView(VerticalScrollMixin, QtWidgets.QTableView):
         self.setItemDelegate(ui.RoundedRowDelegate(parent=self))
         self.setProperty('noitembackground', True)
 
+        self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.verticalScrollBar().setSingleStep(ui.Size.Indicator(3.0))
+
+        self.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.horizontalScrollBar().setSingleStep(ui.Size.Indicator(3.0))
+
+
 
 class TreeView(VerticalScrollMixin, QtWidgets.QTreeView):
     """QTreeView subclass that integrates vertical scroll mixin."""
