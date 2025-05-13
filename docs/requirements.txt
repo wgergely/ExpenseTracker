@@ -2,3 +2,4 @@ sphinx
 furo
 sphinx_sitemap
 autodocsumm
+sphinx_markdown_builder

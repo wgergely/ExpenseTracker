@@ -26,6 +26,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.githubpages',
+    'sphinx_markdown_builder'
 ]
 
 napoleon_google_docstring = True
