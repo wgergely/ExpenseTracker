@@ -30,7 +30,7 @@ ExpenseTracker
 ------
 
 
-**ExpenseTracker is a personal finance desktop app for visualizing expenses stored in Google Sheets.**
+**ExpenseTracker is a personal finance tool for visualizing expense transactions kept in Google Sheets.**
 
 
 .. image:: _static/ui_darklight.png
@@ -41,44 +41,65 @@ ExpenseTracker
 
 -------
 
-If you use Google Sheets to track personal expenses, you might have thougth at one point, huh,
-wouldn't it be nice to have a dedicated app that can visualize my spreadsheet? I know, you didn't think that.
-But I did, and I built one, and you're looking at it!
-
-Before you get your hopes up, ExpenseTracker is limited and boots only a limited feature set.
-
+ExpenseTracker is designed for folk who already track their spending using Google Sheets and need a practical way to
+visualize their expenses by category and period.
 
 What does it do?
 ++++++++++++++++
 
-| ✅ Fetches data from Google Sheets and display expenses by period and category
-| ✅ Displays expenses by period
-| ✅ You can save preset, to allow switching between multiple sources and or insights
+ExpenseTracker is limited and boots a limited feature set:
+
+| ✅ Fetches data from Google Sheets and display expenses by period and categories
+| ✅ You can save presets to allow switching between multiple sources and or insights
 | ✅ Browse and edit category transactions
-| ✅ Basic data visualization
-| ✅ Arrange, exclude and customize categories
+| ✅ Basic data visualization widgets
 
+| ❌ Source data editing isn't fully supported (only category editing is)
 
-What it doesn't do:
-+++++++++++++++++++
-
-| ❌ Source data editing isn't fully supported (only category editing)
-
+If there's an important feature missing, please lodge a request as an issue on Github.
 
 
 Quick Start
-===========
+++++++++++++++++
 
-Download and install the latest release (Windows only, sorry!) from the releases page:
+You can download and install the latest release (Windows only, sorry!) from Github:
 
 | 🔽 `Latest Release on Github <https://https://github.com/wgergely/ExpenseTracker/releases/>`_
 
 
-| 🔘 Google Cloud Project 
+Google Cloud Platform
+++++++++++++++++++++++++
 
-You'll have to set up a Google Cloud Project and an OAuth 2.0 client ID to access the Google Sheets API.
-The process is a little cumbersome, but without this data cannot be fetched from SPreadhseet sources.
 
+You'll have to set up a Google Cloud Platform (GCP) project and an OAuth 2.0 client ID to authenticate the app with your
+own credentials. This one-time setup is a little cumbersome but it is necessary to access your Google Sheets data.
+
+1) Go to the `Google Cloud Console <https://console.cloud.google.com/>`_
+2) Create a new project (`help <https://developers.google.com/workspace/guides/create-project/>`_)
+3) `Enable <https://console.cloud.google.com/apis/library>`_ the Google Sheets API for your project (`help <https://cloud.google.com/endpoints/docs/openapi/enable-api>`_)
+4) `Create <https://console.cloud.google.com/apis/credentials>`_ OAuth 2.0 credentials (`help <https://developers.google.com/workspace/guides/create-credentials>`_):
+    * Click on "Create credentials" and select "OAuth client ID".
+    * Select "Desktop app" as the application type and give it a name (e.g. "ExpenseTracker").
+    * Download the credentials JSON file (you'll need it later).
+
+    The credentials file will look something like this:
+
+
+    .. code-block:: json
+
+       {
+          "installed": {
+            "client_id": "<CLIEND-ID>.apps.googleusercontent.com",
+            "project_id": "<PROJECT-ID>",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": "secret",
+            "redirect_uris": [
+              "http://localhost"
+            ]
+          }
+        }
 
 
 
