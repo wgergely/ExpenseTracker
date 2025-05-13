@@ -110,12 +110,20 @@ class CategoryDelegate(ui.RoundedRowDelegate):
             pass
 
         if pending:
-            pen = QtGui.QPen(ui.Color.Yellow())
-            pen.setWidthF(ui.Size.Separator(2.0))
             painter.save()
+
+            pen = QtGui.QPen(ui.Color.Yellow())
+            _o = ui.Size.Separator(2.0)
+            pen.setWidthF(_o)
+
+            painter.setBrush(QtCore.Qt.NoBrush)
             painter.setPen(pen)
-            # draw highlight border inside the cell rectangle
-            painter.drawRect(option.rect.adjusted(0, 0, -1, -1))
+
+            _rect = option.rect.adjusted(_o * 2, _o * 2, -_o, -_o)
+
+            o_ = ui.Size.Indicator(1.5)
+            painter.drawRoundedRect(_rect, _o, _o)
+
             painter.restore()
 
         try:
@@ -170,11 +178,21 @@ class TransactionsView(QtWidgets.QTableView):
         delegate = CategoryDelegate(self)
         self.setItemDelegateForColumn(Columns.Category.value, delegate)
 
-
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Preferred,
             QtWidgets.QSizePolicy.Minimum
         )
+
+        self.verticalScrollBar().setProperty('rounded', True)
+
+        self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.verticalScrollBar().setSingleStep(ui.Size.Indicator(3.0))
+
+        self.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.horizontalScrollBar().setSingleStep(ui.Size.Indicator(3.0))
+
+        self.setShowGrid(True)
+
 
         self._init_model()
         self._init_actions()
@@ -426,7 +444,7 @@ class TransactionsDockWidget(DockableWidget):
 
         self.setSizePolicy(
             QtWidgets.QSizePolicy.MinimumExpanding,
-            QtWidgets.QSizePolicy.Preferred
+            QtWidgets.QSizePolicy.MinimumExpanding
         )
 
         self.view = None
@@ -472,7 +490,7 @@ class TransactionsDockWidget(DockableWidget):
         content.layout().addWidget(self.status_label)
 
         # Button to push queued edits
-        self.sync_button = QtWidgets.QPushButton('Push Edits', content)
+        self.sync_button = QtWidgets.QPushButton('Save Changes', content)
         self.sync_button.setVisible(False)
         self.sync_button.setEnabled(False)
         content.layout().addWidget(self.sync_button)
