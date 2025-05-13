@@ -56,9 +56,8 @@ class DockableWidget(QtWidgets.QDockWidget):
         if max_height is not None:
             self.setMaximumHeight(max_height)
 
-        self.visibilityChanged.connect(self.toggled.emit)
         self.topLevelChanged.connect(self.refresh_main_dock_options)
-        # ensure active when shown
+        self.visibilityChanged.connect(self.toggled.emit)
         self.visibilityChanged.connect(self._on_visibility_changed)
 
     def sizeHint(self) -> QtCore.QSize:
