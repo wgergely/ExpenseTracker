@@ -19,6 +19,14 @@ from PySide6 import QtWidgets, QtGui, QtCore
 icons = []
 
 
+def get_main_window() -> Optional[QtWidgets.QWidget]:
+    app = QtWidgets.QApplication.instance()
+    for widget in app.topLevelWidgets():
+        if isinstance(widget, QtWidgets.QMainWindow):
+            return widget
+    return None
+
+
 class Font(enum.Enum):
     """Enumeration of font names."""
 
@@ -644,3 +652,190 @@ class RoundedRowDelegate(QtWidgets.QStyledItemDelegate):
             painter.fillRect(option.rect, color)
 
         super().paint(painter, option, index)
+
+
+class BaseProgressDialog(QtWidgets.QDialog):
+    """
+    Progress dialog with countdown auto-update and cancel signal.
+
+    """
+    cancelled = QtCore.Signal()
+    errorOccurred = QtCore.Signal(str)
+
+    def __init__(
+            self,
+            timeout: float,
+            status_text: Optional[str] = None,
+            parent: Optional[QtWidgets.QWidget] = None,
+    ) -> None:
+        if parent is None:
+            parent = get_main_window()
+
+        super().__init__(parent)
+
+        self.setModal(True)
+        self.remaining = timeout
+        self.status_text = status_text
+
+        if self.status_text:
+            self.setWindowTitle(self.status_text)
+
+        self.cancel_button = None
+        self.countdown_timer = QtCore.QTimer(self)
+        self.countdown_timer.setInterval(1000)
+
+        self.progress_animation = QtCore.QVariantAnimation(self)
+        self.progress_animation.setDuration(1000)
+        self.progress_animation.setLoopCount(-1)
+        self.progress_animation.setEasingCurve(QtCore.QEasingCurve.InOutSine)
+        self.progress_animation.setDirection(QtCore.QAbstractAnimation.Forward)
+        self.progress_animation.setKeyValueAt(0.0, 0.0)
+        self.progress_animation.setKeyValueAt(1.0, 1.0)
+
+        self.setWindowFlag(QtCore.Qt.FramelessWindowHint, True)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+
+        self.setMinimumWidth(Size.DefaultWidth(0.8))
+        self.setMinimumHeight(Size.DefaultHeight(0.2))
+
+        self._create_ui()
+        self._connect_signals()
+
+    def showEvent(self, event: QtCore.QEvent) -> None:
+        super().showEvent(event)
+        self.countdown_timer.start()
+        self.progress_animation.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
+
+        parent = self.parentWidget()
+        if parent:
+            pg = parent.geometry()
+            self.setGeometry(
+                pg.x() + (pg.width() - self.width()) // 2,
+                pg.y() + (pg.height() - self.height()) // 2,
+                self.width(),
+                self.height(),
+            )
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+
+        o = Size.Indicator(1.5)
+        _o = Size.Margin(0.5)
+
+        rect = self.rect()
+        rect = rect.adjusted(_o, _o, -_o, -_o)
+
+        color = Color.VeryDarkBackground()
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+
+        painter.drawRoundedRect(rect, o, o)
+
+        rect = rect.adjusted(_o, _o, -_o, -_o)
+        rect.setBottom(rect.top() + Size.Margin(0.5))
+
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(Color.DarkBackground())
+
+        painter.drawRoundedRect(rect, o, o)
+
+        # compute a “mirrored” fraction every odd loop
+        raw = self.progress_animation.currentValue()
+        loop = self.progress_animation.currentLoop()
+        frac = 1.0 - raw if (loop % 2) else raw
+
+        x_min, x_max = rect.left(), rect.right()
+        current_x = x_min + (x_max - x_min) * frac
+
+        _rect = QtCore.QRectF(
+            current_x - Size.Margin(0.5),
+            rect.top() + Size.Margin(0.5),
+            Size.Margin(1.0),
+            rect.height() - Size.Margin(1.0),
+        )
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(Color.Blue())
+        painter.drawRoundedRect(_rect, o, o)
+
+        super().paintEvent(event)
+
+    def _connect_signals(self) -> None:
+        """Wire up timers, buttons, and animation repaint."""
+        self.countdown_timer.timeout.connect(self.update_countdown)
+        self.cancel_button.clicked.connect(self.on_cancel)
+        self.errorOccurred.connect(self.on_error)
+
+        def _on_anim_value_changed(value: float) -> None:
+            """Trigger a repaint each frame of the animation."""
+            self.update()
+
+        self.progress_animation.valueChanged.connect(_on_anim_value_changed)
+
+    @QtCore.Slot()
+    def update_countdown(self) -> None:
+        self.remaining -= 1
+        self._update_countdown_label()
+        if self.remaining <= 0:
+            self.countdown_timer.stop()
+            self.progress_animation.stop()
+            self.on_timeout()
+
+    @QtCore.Slot()
+    def on_cancel(self) -> None:
+        try:
+            self.progress_animation.stop()
+            self.countdown_timer.stop()
+        except Exception as e:  #
+            pass
+        self.cancelled.emit()
+        self.reject()
+
+    @QtCore.Slot(str)
+    def on_error(self, msg: str) -> None:
+        if hasattr(self, 'error_label'):
+            self.error_label.setText(msg)
+        QtWidgets.QApplication.processEvents()
+
+    def _create_ui(self) -> None:
+        from ..settings import lib
+
+        QtWidgets.QHBoxLayout(self)
+        o = Size.Margin(1.0)
+        self.layout().setContentsMargins(o * 2, o, o * 2, o)
+        self.layout().setSpacing(o * 0.5)
+
+        self.icon = QtWidgets.QLabel()
+        size = Size.Margin(4.0)
+
+        icon = QtGui.QIcon(str(lib.settings.template_dir / 'icon.png'))
+        self.icon.setPixmap(icon.pixmap(size, size))
+        self.layout().addWidget(self.icon, 0, QtCore.Qt.AlignLeft)
+
+        container = QtWidgets.QWidget(self)
+        container.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        container.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+
+        content_layout = QtWidgets.QVBoxLayout(container)
+        content_layout.setContentsMargins(o, o, o, o)
+        content_layout.setSpacing(Size.Indicator(1.0))
+        self.layout().addWidget(container, 1)
+
+        self._populate_content(content_layout)
+
+    def _populate_content(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """
+        Populate the right-side content area. Subclasses must override.
+        """
+        raise NotImplementedError
+
+    def _update_countdown_label(self) -> None:
+        raise NotImplementedError
+
+    def on_timeout(self) -> None:
+        raise NotImplementedError
