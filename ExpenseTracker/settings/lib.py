@@ -725,7 +725,8 @@ class SettingsAPI(ConfigPaths):
             logging.error(msg)
             raise ValueError(msg)
 
-        current_section_data: Dict[str, Any] = self.ledger_data.get(section_name).copy()
+        # Deep copy current section to protect against in-place mutations
+        current_section_data: Any = copy.deepcopy(self.ledger_data.get(section_name))
 
         self.ledger_data[section_name] = new_data
         try:
@@ -733,7 +734,7 @@ class SettingsAPI(ConfigPaths):
             self.save_section(section_name)
             signals.configSectionChanged.emit(section_name)
 
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError, status.LedgerConfigInvalidException) as e:
             logging.error(f'Validation error on set_section("{section_name}"): {e}')
             self.ledger_data[section_name] = current_section_data
             raise
