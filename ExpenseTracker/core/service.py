@@ -12,12 +12,13 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import pandas as pd
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtWidgets
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from .auth import auth_manager, AuthExpiredError
 from ..status import status
+from ..ui.ui import BaseProgressDialog
 
 # Cached Sheets API client to avoid repeated discovery/auth costs
 _cached_service: Any = None
@@ -36,7 +37,6 @@ class AsyncWorker(QtCore.QThread):
         errorOccurred (str): Emitted with an error message on failure.
     """
     resultReady = QtCore.Signal(object)
-    # Emits exception instance on failure (including AuthExpiredError)
     errorOccurred = QtCore.Signal(object)
 
     def __init__(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
@@ -81,138 +81,63 @@ class AsyncWorker(QtCore.QThread):
         self.errorOccurred.emit(last_exception)
 
 
-def get_main_window():
-    app = QtWidgets.QApplication.instance()
-    for widget in app.topLevelWidgets():
-        if isinstance(widget, QtWidgets.QMainWindow):
-            return widget
-    return None
-
-
-class SheetsFetchProgressDialog(QtWidgets.QDialog):
+class SheetsFetchProgressDialog(BaseProgressDialog):
     """
     Progress dialog for asynchronous API operations.
 
     Signals:
         cancelled (): Emitted when the user cancels the operation.
     """
-    cancelled = QtCore.Signal()
-    errorOccurred = QtCore.Signal(str)
 
-    def __init__(self, total_timeout: int = TOTAL_TIMEOUT, parent: Optional[QtWidgets.QWidget] = None,
+    def __init__(self, total_timeout: int = TOTAL_TIMEOUT,
                  status_text: str = 'Fetching data.') -> None:
-        super().__init__(parent)
+        super().__init__(total_timeout, status_text)
 
-        self.setWindowTitle('Fetching Data')
-        self.setModal(True)
-
-        self.total_timeout: int = total_timeout
-        self.remaining: int = total_timeout
-        self.status_text: str = status_text
-
-        self.countdown_timer = QtCore.QTimer(self)
-        self.countdown_timer.setInterval(1000)
-
-        self.setWindowFlag(QtCore.Qt.FramelessWindowHint, True)
-
+    def _populate_content(self, layout: QtWidgets.QVBoxLayout) -> None:
         from ..ui import ui
-        self.setMinimumWidth(ui.Size.DefaultWidth(0.6))
-        self.setMinimumHeight(ui.Size.DefaultHeight(0.2))
-
-        self._create_ui()
-        self._connect_signals()
-
-    def showEvent(self, event: QtCore.QEvent) -> None:
-        self.countdown_timer.start()
-
-        widget = get_main_window()
-        if not widget:
-            return
-
-        # Center the dialog on the main window
-        self.setGeometry(
-            widget.geometry().x() + (widget.width() - self.width()) // 2,
-            widget.geometry().y() + (widget.height() - self.height()) // 2,
-            self.width(),
-            self.height()
-        )
-
-
-    def _create_ui(self) -> None:
-        from ..ui import ui
-
-        QtWidgets.QHBoxLayout(self)
-        o = ui.Size.Margin(1.0)
-        self.layout().setContentsMargins(o, o, o, o)
-        self.layout().setSpacing(0)
-
-        self.icon = QtWidgets.QLabel()
-        o = ui.Size.Margin(4.0)
-        self.icon.setFixedSize(o, o)
-
-        from ..settings import lib
-        icon = QtGui.QIcon(str(lib.settings.template_dir / 'icon.png'))
-        self.icon.setPixmap(icon.pixmap(o, o))
-
-        self.layout().addWidget(self.icon, 0, QtCore.Qt.AlignLeft)
-
-        widget = QtWidgets.QWidget(parent=self)
-        layout = QtWidgets.QVBoxLayout(widget)
-
-        margin = ui.Size.Margin(1.0)
-        layout.setContentsMargins(margin, margin, margin, margin)
-        layout.setSpacing(ui.Size.Indicator(1.0))
 
         self.status_label = QtWidgets.QLabel(self.status_text)
         layout.addWidget(self.status_label, 1)
 
         self.error_label = QtWidgets.QLabel('')
         self.error_label.setWordWrap(True)
-
         self.error_label.setStyleSheet(
             f'color: {ui.Color.Red(qss=True)};'
         )
         layout.addWidget(self.error_label, 1)
 
-        self.countdown_label = QtWidgets.QLabel(f'Please wait ({self.remaining}s).')
+        self.countdown_label = QtWidgets.QLabel(
+            f'Please wait ({self.remaining}s).'
+        )
         layout.addWidget(self.countdown_label, 1)
 
-        layout.addSpacing(margin)
+        layout.addSpacing(ui.Size.Margin(1.0))
 
         self.cancel_button = QtWidgets.QPushButton('Cancel')
         layout.addWidget(self.cancel_button, 1)
 
-        self.layout().addWidget(widget, 1)
-
-
-
     def _connect_signals(self) -> None:
-        self.countdown_timer.timeout.connect(self.update_countdown)
-        self.cancel_button.clicked.connect(self.on_cancel)
+        super()._connect_signals()
+
         self.accepted.connect(self.on_cancel)
-        self.errorOccurred.connect(self.on_error_occurred)
-
         from ..ui.actions import signals
-        signals.error.connect(self.on_error_occurred)
-
-    @QtCore.Slot()
-    def update_countdown(self) -> None:
-        self.remaining -= 1
-        self.countdown_label.setText(f'Please wait ({self.remaining}s)...')
-        if self.remaining <= 0:
-            self.countdown_timer.stop()
-            self.countdown_label.setText('Operation timed out.')
-
-    @QtCore.Slot()
-    def on_cancel(self) -> None:
-        self.cancelled.emit()
-        self.reject()
+        signals.error.connect(self.on_error)
 
     @QtCore.Slot(str)
-    def on_error_occurred(self, msg: str) -> None:
+    def on_error(self, msg: str) -> None:
         """Update the error label with a new error message."""
         self.error_label.setText(msg)
-        QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+        QtWidgets.QApplication.processEvents()
+
+    def _update_countdown_label(self) -> None:
+        """Update countdown label each second."""
+        self.countdown_label.setText(f'Please wait ({self.remaining}s)...')
+
+    @QtCore.Slot()
+    def on_timeout(self) -> None:
+        """Handle timeout: stop timer and show timeout message."""
+        self.countdown_timer.stop()
+        self.countdown_label.setText('Operation timed out.')
 
 
 def clear_service() -> None:
@@ -704,8 +629,10 @@ def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int 
     Raises:
         Exception: If the operation is cancelled, times out, or an error occurs.
     """
-    dialog: SheetsFetchProgressDialog = SheetsFetchProgressDialog(total_timeout=total_timeout,
-                                                                  status_text=status_text)
+    dialog: SheetsFetchProgressDialog = SheetsFetchProgressDialog(
+        total_timeout,
+        status_text=status_text,
+    )
     worker: AsyncWorker = AsyncWorker(func, *args, **kwargs)
 
     result: Dict[str, Any] = {'data': None, 'error': None}
