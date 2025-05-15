@@ -18,6 +18,7 @@ import google_auth_oauthlib.flow
 from PySide6 import QtCore, QtWidgets
 
 from ..status import status
+from ..ui.ui import BaseProgressDialog
 
 DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', ]
 
@@ -144,88 +145,52 @@ class AuthFlowWorker(QtCore.QThread):
             logging.debug(
                 f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: flow.run_local_server returned at {time.time()}")
             if not self.creds or not self.creds.token:
-                # Authentication did not complete
-                ex = status.AuthenticationExceptionException('Authentication did not complete successfully.')
+                ex = status.AuthenticationExceptionException(
+                    'Authentication did not complete successfully.')
                 self.errorOccurred.emit(ex)
             else:
                 self.resultReady.emit(self.creds)
         except Exception as ex:
-            logging.debug(f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: exception at {time.time()}: {ex}")
-            # Emit the exception object
+            logging.debug(
+                f"[Thread-{threading.get_ident()}] AuthFlowWorker.run: exception at {time.time()}: {ex}")
             self.errorOccurred.emit(ex)
 
 
-class AuthProgressDialog(QtWidgets.QDialog):
+class AuthProgressDialog(BaseProgressDialog):
     """
     Dialog displaying authentication progress with countdown and cancel.
 
     Signals:
         cancelled (): Emitted when the user cancels authentication.
     """
-    cancelled = QtCore.Signal()
 
-    def __init__(self, timeout_seconds: int = 60, parent=None):
-        super().__init__(parent=parent)
-        self.setWindowTitle('Authenticating')
-        self.setModal(True)
+    def __init__(self, timeout_seconds: int = 60) -> None:
+        super().__init__(timeout_seconds)
 
-        self.countdown_label = None
-        self.status_label = None
-
-        self.timeout_seconds = timeout_seconds
-        self.remaining = timeout_seconds
-
-        self.countdown_timer = QtCore.QTimer(self)
-        self.countdown_timer.setInterval(1000)
-
-        self._create_ui()
-        self._connect_signals()
-
-    def showEvent(self, event):
-        self.countdown_timer.start()
-
-    def _create_ui(self):
-        QtWidgets.QVBoxLayout(self)
-
+    def _populate_content(self, layout: QtWidgets.QVBoxLayout) -> None:
         label = QtWidgets.QLabel(
             'Please complete sign-in in your browser.\n'
             'Waiting...'
         )
-        self.layout().addWidget(label, 1)
+        layout.addWidget(label, 1)
 
-        self.countdown_label = QtWidgets.QLabel(f'Time remaining: {self.remaining} seconds')
-        self.layout().addWidget(self.countdown_label)
+        self.countdown_label = QtWidgets.QLabel(
+            f'Time remaining: {self.remaining} seconds'
+        )
+        layout.addWidget(self.countdown_label)
 
         self.status_label = QtWidgets.QLabel('')
-        self.layout().addWidget(self.status_label)
+        layout.addWidget(self.status_label)
 
         self.cancel_button = QtWidgets.QPushButton('Cancel')
-        self.layout().addWidget(self.cancel_button, 1)
-
-    def _connect_signals(self):
-        self.cancel_button.clicked.connect(self.on_cancel)
-        self.countdown_timer.timeout.connect(self.update_countdown)
-
-    def sizeHint(self):
-        from ..ui import ui
-        return QtCore.QSize(
-            ui.Size.DefaultWidth(0.5),
-            ui.Size.DefaultHeight(0.5)
-        )
-
+        layout.addWidget(self.cancel_button, 1)
+    
     @QtCore.Slot()
-    def update_countdown(self):
-        self.remaining -= 1
+    def _update_countdown_label(self) -> None:
         self.countdown_label.setText(f'Time remaining: {self.remaining} seconds')
-        if self.remaining <= 0:
-            self.countdown_timer.stop()
 
     @QtCore.Slot()
-    def on_cancel(self):
-        self.cancelled.emit()
-        self.reject()
-
-    def show_timeout_message(self):
+    def on_timeout(self) -> None:
         self.countdown_label.setText('Authentication timed out. Please try again.')
         self.countdown_timer.stop()
 
@@ -415,7 +380,7 @@ def authenticate() -> google.oauth2.credentials.Credentials:
 
     timer = QtCore.QTimer()
     timer.setSingleShot(True)
-    timer.timeout.connect(lambda: (dialog.show_timeout_message(), loop.quit()))
+    timer.timeout.connect(lambda: (dialog.on_timeout(), loop.quit()))
     timer.start(60000)
 
     dialog.show()
