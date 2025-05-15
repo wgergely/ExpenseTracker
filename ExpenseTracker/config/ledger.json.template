@@ -3,23 +3,7 @@
     "id": "",
     "worksheet": "Sheet1"
   },
-  "header": {
-    "Id": "int",
-    "Date":	"date",
-    "Description": "string",
-    "Category": "string",
-    "Amount": "float",
-    "Notes": "string",
-    "Reference": "string",
-    "Account": "string"
-  },
-  "mapping": {
-    "date": "Date",
-    "amount": "Amount",
-    "description": "Description|Notes|Reference",
-    "category": "Category",
-    "account": "Account"
-  },
+  "headers": [],
   "metadata": {
     "name": "Default Ledger",
     "description": "Default ledger configuration",
