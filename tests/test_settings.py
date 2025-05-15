@@ -16,10 +16,12 @@ from typing import Any, Dict
 
 from ExpenseTracker.settings import lib
 from ExpenseTracker.settings.lib import (
+    HEADER_TYPES,
     LEDGER_SCHEMA,
     SettingsAPI,
     _validate_categories,
     _validate_header,
+    _validate_mapping,
     is_valid_hex_color,
     parse_merge_mapping,
 )
@@ -60,17 +62,17 @@ DUMMY_SECRET = {
 
 
 def minimal_ledger() -> Dict[str, Any]:
-    # Return minimal valid ledger data using new 'headers' schema
     return {
         "spreadsheet": {"id": "dummy", "sheet": "dummy"},
-        "headers": [
-            {"name": "Id", "role": "id", "type": "int"},
-            {"name": "Date", "role": "date", "type": "date"},
-            {"name": "Amount", "role": "amount", "type": "float"},
-            {"name": "Account", "role": "account", "type": "string"},
-            {"name": "Description", "role": "description", "type": "string"},
-        ],
+        "header": HEADER_FIXTURE,
         "metadata": META_FIXTURE.copy(),
+        "mapping": {
+            "date": "Date",
+            "amount": "Amount",
+            "description": "Description",
+            "category": "Category",
+            "account": "Account",
+        },
         "categories": {
             "cash": {
                 "display_name": "Cash",
@@ -100,52 +102,50 @@ class HelperFunctionTests(unittest.TestCase):
 
 
 class ValidatorTests(unittest.TestCase):
-    def test_validate_header_list_good(self):
-        # Contains all singleton roles exactly once
-        headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "DateCol", "role": "date", "type": "date"},
-            {"name": "AmountCol", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
-            {"name": "DescCol", "role": "description", "type": "string"},
-            {"name": "NotesCol", "role": "notes", "type": "string"},
-            {"name": "CatCol", "role": "category", "type": "string"},
-        ]
-        _validate_header(headers)  # should not raise
+    def test_validate_header_good(self):
+        _validate_header({"A": "string", "B": "float"}, HEADER_TYPES)  # no raise
 
-    def test_validate_header_missing_singleton(self):
-        # Missing date role
-        headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "AmountCol", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
-        ]
-        with self.assertRaises(Exception) as cm:
-            _validate_header(headers)
-        self.assertIn("Role \"date\" must be mapped to exactly one header", str(cm.exception))
+    def test_validate_header_bad_type(self):
+        with self.assertRaises(TypeError):
+            _validate_header({"A": 123}, HEADER_TYPES)
 
-    def test_validate_header_duplicate_singleton(self):
-        # Duplicate amount role
-        headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "DateCol", "role": "date", "type": "date"},
-            {"name": "Amount1", "role": "amount", "type": "float"},
-            {"name": "Amount2", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
-        ]
-        with self.assertRaises(Exception) as cm:
-            _validate_header(headers)
-        self.assertIn("Role \"amount\" must be mapped to exactly one header", str(cm.exception))
+    def test_validate_header_bad_value(self):
+        with self.assertRaises(ValueError):
+            _validate_header({"A": "money"}, HEADER_TYPES)
 
-    def test_validate_header_invalid_structure(self):
-        # Not a list
-        with self.assertRaises(Exception):
-            _validate_header(None)
-        # Missing keys
-        with self.assertRaises(Exception):
-            _validate_header([{"name": "X", "role": "date"}])
-        # Invalid role/type
-        bad = [
+    def _good_mapping(self) -> Dict[str, str]:
+        return {
+            "date": "Date",
+            "amount": "Amount",
+            "description": "Desc|Note",  # allowed multi
+            "category": "Cat",
+            "account": "Acc",
+        }
+
+    def test_validate_mapping_good(self):
+        _validate_mapping(self._good_mapping(), LEDGER_SCHEMA["mapping"])
+
+    def test_validate_mapping_missing_key(self):
+        bad = self._good_mapping()
+        bad.pop("account")
+        with self.assertRaises(ValueError):
+            _validate_mapping(bad, LEDGER_SCHEMA["mapping"])
+
+    def test_validate_mapping_unallowed_multi(self):
+        bad = self._good_mapping()
+        bad["date"] = "Col1|Col2"
+        with self.assertRaises(ValueError):
+            _validate_mapping(bad, LEDGER_SCHEMA["mapping"])
+
+    def test_validate_categories_good(self):
+        good = {
+            "food": {
+                "display_name": "Food",
+                "color": "#123ABC",
+                "description": "Meals",
+                "icon": "utensils",
+                "excluded": False,
+            }
         }
         _validate_categories(good, LEDGER_SCHEMA["categories"]["item_schema"])
 
