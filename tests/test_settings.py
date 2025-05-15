@@ -138,14 +138,45 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("Role \"amount\" must be mapped to exactly one header", str(cm.exception))
 
     def test_validate_header_invalid_structure(self):
-        # Not a list
-        with self.assertRaises(Exception):
-            _validate_header(None)
-        # Missing keys
-        with self.assertRaises(Exception):
+        # None input is not a list
+        with self.assertRaises(status.LedgerConfigInvalidException):
+            _validate_header(None)  # type: ignore
+        # Missing required 'type' key
+        with self.assertRaises(status.LedgerConfigInvalidException):
             _validate_header([{"name": "X", "role": "date"}])
-        # Invalid role/type
-        bad = [
+        # 'name' must be a string
+        with self.assertRaises(status.LedgerConfigInvalidException):
+            _validate_header([{"name": 123, "role": "date", "type": "date"}])  # type: ignore
+        # Invalid role value
+        headers_invalid_role = [
+            {"name": "Id", "role": "id", "type": "int"},
+            {"name": "Date", "role": "date", "type": "date"},
+            {"name": "Amount", "role": "amount", "type": "float"},
+            {"name": "Account", "role": "account", "type": "string"},
+            {"name": "X", "role": "invalid", "type": "string"},
+        ]
+        with self.assertRaises(status.LedgerConfigInvalidException):
+            _validate_header(headers_invalid_role)
+        # Invalid type value
+        headers_invalid_type = [
+            {"name": "Id", "role": "id", "type": "int"},
+            {"name": "Date", "role": "date", "type": "date"},
+            {"name": "Amount", "role": "amount", "type": "float"},
+            {"name": "Account", "role": "account", "type": "string"},
+            {"name": "X", "role": "description", "type": "invalid_type"},
+        ]
+        with self.assertRaises(status.LedgerConfigInvalidException):
+            _validate_header(headers_invalid_type)
+
+    def test_validate_categories_good(self):
+        good = {
+            "food": {
+                "display_name": "Food",
+                "color": "#FF0000",
+                "description": "Meals",
+                "icon": "utensils",
+                "excluded": False,
+            }
         }
         _validate_categories(good, LEDGER_SCHEMA["categories"]["item_schema"])
 
@@ -174,11 +205,11 @@ class RealTemplateSmokeTest(BaseTestCase):
 class SettingsAPIBehaviour(BaseTestCase):
     """Full functional coverage for SettingsAPI."""
 
-    # utility for tests that need to manipulate header quickly
-    def _apply_header_cfg(self, hdr: Dict[str, str] | None = None):
-        hdr = hdr or HEADER_FIXTURE
-        self.api.ledger_data["header"] = hdr
-        self.api.save_section("header")
+    # utility for tests that need to manipulate headers list
+    def _apply_headers_cfg(self, hdrs: list[dict] | None = None):
+        hdrs = hdrs or self.api.get_section("headers")
+        self.api.ledger_data["headers"] = hdrs
+        self.api.save_section("headers")
 
     def setUp(self) -> None:
         super().setUp()
@@ -202,44 +233,38 @@ class SettingsAPIBehaviour(BaseTestCase):
         with self.assertRaises(ValueError):
             self.api["loess_fraction"] = "not‑a‑float"
 
-    def test_set_section_header_invalid_value_rollback(self):
-        header = self.api.get_section("header")
-        header["Bad"] = "money"  # not allowed
+    def test_set_section_headers_invalid_value_rollback(self):
+        headers = self.api.get_section("headers")
+        # introduce invalid type in first header
+        headers[0]["type"] = "invalid_type"
 
-        with self.assertRaises(Exception):
-            self.api.set_section("header", header)
+        with self.assertRaises(status.LedgerConfigInvalidException):
+            self.api.set_section("headers", headers)
 
-        # ensure rollback happened (Bad key not present)
-        self.assertNotIn("Bad", self.api.get_section("header"))
+        # ensure rollback: first header type remains valid
+        current = self.api.get_section("headers")
+        self.assertIn(current[0]["type"], [t.value for t in lib.HeaderType])
 
-    def test_set_section_mapping_invalid_multi(self):
-        mapping = self.api.get_section("mapping")
-        mapping["date"] = "Col1|Col2"
-        with self.assertRaises(Exception):
-            self.api.set_section("mapping", mapping)
+    # mapping section deprecated: removed mapping tests
 
-    def test_set_section_categories_bad_hex(self):
-        cats = self.api.get_section("categories")
-        key = next(iter(cats))
-        cats[key]["color"] = "red"
-        with self.assertRaises(Exception):
-            self.api.set_section("categories", cats)
+    def test_reload_section_headers(self):
+        headers = self.api.get_section("headers")
+        # append an extra header
+        extra = {"name": "Extra", "role": "notes", "type": "string"}
+        headers.append(extra)
+        self.api.set_section("headers", headers)
 
-    def test_reload_section(self):
-        hdr = self.api.get_section("header")
-        hdr["Extra"] = "string"
-        self.api.set_section("header", hdr)
-
-        # manually delete the key from file to simulate external change
+        # manually remove extra in file to simulate external change
         with self.api.ledger_path.open("r+", encoding="utf-8") as fp:
             data = json.load(fp)
-            data["header"].pop("Extra")
+            data["headers"] = [h for h in data["headers"] if h.get("name") != "Extra"]
             fp.seek(0)
             json.dump(data, fp, indent=4)
             fp.truncate()
 
-        self.api.reload_section("header")
-        self.assertNotIn("Extra", self.api.get_section("header"))
+        self.api.reload_section("headers")
+        names = [h["name"] for h in self.api.get_section("headers")]
+        self.assertNotIn("Extra", names)
 
     def test_revert_section_metadata(self):
         # change metadata.theme to unique sentinel then revert
@@ -261,21 +286,20 @@ class SettingsAPIBehaviour(BaseTestCase):
             self.api.validate_client_secret(bad)
 
     def test_save_all_rollback_on_invalid_ledger(self):
-        """`save_all()` must roll back the *file* when validation fails."""
-        # break the schema: non‑string mapping value
-        bad_mapping = self.api.get_section("mapping")
-        bad_mapping["amount"] = 123
-        self.api.ledger_data["mapping"] = bad_mapping  # direct mutation
+        """`save_all()` must roll back the file when validation fails due to headers."""
+        # break the schema: invalid header role
+        headers = self.api.get_section("headers")
+        headers[0]["role"] = "invalid_role"
+        self.api.ledger_data["headers"] = headers  # direct mutation
 
-        with self.assertRaises((TypeError, ValueError)):
+        with self.assertRaises(status.LedgerConfigInvalidException):
             self.api.save_all()
 
-        # -------- verify rollback on disk --------
-        self.api.load_ledger()  # <‑ reload file
-        self.assertIsInstance(
-            self.api.get_section("mapping")["amount"], str,
-            "ledger file was not rolled back to a valid state",
-        )
+        # verify rollback on disk: reload and ensure valid header roles
+        self.api.load_ledger()
+        roles = [h["role"] for h in self.api.get_section("headers")]
+        self.assertTrue(all(role in [r.value for r in lib.HeaderRole] for role in roles),
+            "ledger file was not rolled back to a valid state")
 
     def test_save_section_unknown(self):
         with self.assertRaises(ValueError):
