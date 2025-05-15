@@ -205,6 +205,10 @@ def _validate_header(headers_list: List[Dict[str, Any]]) -> None:
         msg = '"headers" must be a list.'
         logging.error(msg)
         raise status.LedgerConfigInvalidException(msg)
+    # Allow empty headers (template load) without enforcing singleton roles
+    if len(headers_list) == 0:
+        logging.debug('No headers configured; skipping header validation.')
+        return
     for idx, item in enumerate(headers_list):
         if not isinstance(item, dict):
             msg = f'Header entry at index {idx} must be an object.'
@@ -229,17 +233,24 @@ def _validate_header(headers_list: List[Dict[str, Any]]) -> None:
                 f'Header.type at index {idx} must be one of {[t.value for t in HeaderType]}.')
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
-    # Enforce singleton roles
+    # Enforce singleton roles: date, amount, account must appear exactly once
     role_counts: Dict[str, int] = {}
     for item in headers_list:
         role = item['role']
         role_counts[role] = role_counts.get(role, 0) + 1
-    for singleton_role in [HeaderRole.Id.value, HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Account.value]:
-        count = role_counts.get(singleton_role, 0)
+    # Required singleton roles
+    for required_role in [HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Account.value]:
+        count = role_counts.get(required_role, 0)
         if count != 1:
-            msg = f'Role "{singleton_role}" must be mapped to exactly one header, found {count}.'
+            msg = f'Role "{required_role}" must be mapped to exactly one header, found {count}.'
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
+    # Id role is optional but must not be duplicated
+    id_count = role_counts.get(HeaderRole.Id.value, 0)
+    if id_count > 1:
+        msg = f'Role "{HeaderRole.Id.value}" must be mapped to at most one header, found {id_count}.'
+        logging.error(msg)
+        raise status.LedgerConfigInvalidException(msg)
 
 
 class ConfigPaths:
