@@ -14,7 +14,6 @@ import re
 import shutil
 import tempfile
 from typing import Dict, Any, Optional, List
-import enum
 
 from PySide6 import QtCore, QtWidgets
 
@@ -60,22 +59,6 @@ METADATA_KEYS: List[str] = [
     'negative_span',
 ]
 
-class HeaderRole(str, enum.Enum):
-    Id = 'id'
-    Date = 'date'
-    Amount = 'amount'
-    Description = 'description'
-    Notes = 'notes'
-    Category = 'category'
-    Account = 'account'
-    Unmapped = 'unmapped'
-
-class HeaderType(str, enum.Enum):
-    String = 'string'
-    Int = 'int'
-    Float = 'float'
-    Date = 'date'
-
 LEDGER_SCHEMA: Dict[str, Any] = {
     'spreadsheet': {
         'type': dict,
@@ -85,14 +68,10 @@ LEDGER_SCHEMA: Dict[str, Any] = {
             'sheet': {'type': str, 'required': True}
         }
     },
-    'headers': {
-        'type': list,
+    'header': {
+        'type': dict,
         'required': True,
-        'item_schema': {
-            'name': {'type': str, 'required': True},
-            'role': {'type': str, 'required': True, 'allowed_values': [r.value for r in HeaderRole]},
-            'type': {'type': str, 'required': True, 'allowed_values': [t.value for t in HeaderType]}
-        }
+        'allowed_values': HEADER_TYPES
     },
     'metadata': {
         'type': dict,
@@ -113,6 +92,14 @@ LEDGER_SCHEMA: Dict[str, Any] = {
             'loess_fraction': {'type': float, 'required': True},
             'negative_span': {'type': int, 'required': True},
         }
+    },
+    'mapping': {
+        'type': dict,
+        'required': True,
+        'required_keys': DATA_MAPPING_KEYS,
+        'value_type': str,
+        # Only these logical mapping keys may contain multiple headers separated
+        'multi_allowed_keys': ['description']
     },
     'categories': {
         'type': dict,
@@ -149,6 +136,81 @@ def is_merge_mapped(key: str) -> bool:
     """Check if the given key is a merge-mapped key."""
     return (len(parse_merge_mapping(key)) > 1)
 
+
+
+def _validate_header(header_dict: Dict[str, Any], allowed_values: List[str]) -> None:
+    """Validate the 'header' section of the ledger configuration.
+
+    Ensures header_dict is a mapping of column names to allowed type strings.
+
+    Args:
+        header_dict: Mapping of header names to type identifiers.
+        allowed_values: List of allowed type identifiers (e.g., 'string', 'int').
+
+    Raises:
+        TypeError: If header_dict is not a dict or contains non-string keys/values.
+        ValueError: If a header value is not one of the allowed_values.
+    """
+    logging.debug('Validating "header" section.')
+    if not isinstance(header_dict, dict):
+        msg: str = 'header must be a dict.'
+        logging.error(msg)
+        raise TypeError(msg)
+    for k, v in header_dict.items():
+        if not isinstance(k, str):
+            msg = f'Header key "{k}" is not a string.'
+            logging.error(msg)
+            raise TypeError(msg)
+        if not isinstance(v, str):
+            msg = f'Header value "{v}" must be a string.'
+            logging.error(msg)
+            raise TypeError(msg)
+        if v not in allowed_values:
+            msg = f'Header value "{v}" must be one of {allowed_values}.'
+            logging.error(msg)
+            raise ValueError(msg)
+
+
+def _validate_mapping(mapping_dict: Dict[str, Any], specs: Dict[str, Any]) -> None:
+    """Validate the 'mapping' section of the ledger configuration.
+
+    Ensures mapping_dict has exactly the required keys and that values conform to type and
+    multi-value rules defined in specs.
+
+    Args:
+        mapping_dict: Mapping from internal data keys to spreadsheet column specifications.
+        specs: Schema dict containing 'required_keys', 'value_type', and 'multi_allowed_keys'.
+
+    Raises:
+        ValueError: If mapping_dict keys do not match required_keys or if unauthorized multi-mapping.
+        TypeError: If a mapping value is not of the expected type.
+    """
+    logging.debug('Validating "mapping" section.')
+    required_keys = set(specs['required_keys'])
+    if set(mapping_dict.keys()) != required_keys:
+        msg: str = (
+            f'mapping must have keys {required_keys}, '
+            f'got {set(mapping_dict.keys())}.'
+        )
+        logging.error(msg)
+        raise ValueError(msg)
+    # validate each mapping value and enforce single vs. multi mapping rules
+    allowed_multi = specs.get('multi_allowed_keys', [])
+    for key, val in mapping_dict.items():
+        if not isinstance(val, specs['value_type']):
+            msg: str = 'All mapping values must be strings.'
+            logging.error(msg)
+            raise TypeError(msg)
+        # unless explicitly allowed, mapping must reference exactly one column
+        if key not in allowed_multi:
+            for sep in DATA_MAPPING_SEPARATOR_CHARS:
+                if sep in val:
+                    msg = (
+                        f'Mapping for "{key}" must not contain multiple source columns; '
+                        f'found separator "{sep}" in "{val}".'
+                    )
+                    logging.error(msg)
+                    raise ValueError(msg)
 
 
 def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
@@ -196,50 +258,6 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
                     )
                     logging.error(msg)
                     raise ValueError(msg)
-
-
-def _validate_header(headers_list: List[Dict[str, Any]]) -> None:
-    """Validate the 'headers' section of the ledger configuration."""
-    logging.debug('Validating "headers" section.')
-    if not isinstance(headers_list, list):
-        msg = '"headers" must be a list.'
-        logging.error(msg)
-        raise status.LedgerConfigInvalidException(msg)
-    for idx, item in enumerate(headers_list):
-        if not isinstance(item, dict):
-            msg = f'Header entry at index {idx} must be an object.'
-            logging.error(msg)
-            raise status.LedgerConfigInvalidException(msg)
-        for key in ('name', 'role', 'type'):
-            if key not in item:
-                msg = f'Header entry missing "{key}" at index {idx}.'
-                logging.error(msg)
-                raise status.LedgerConfigInvalidException(msg)
-        if not isinstance(item['name'], str):
-            msg = f'Header.name at index {idx} must be a string.'
-            logging.error(msg)
-            raise status.LedgerConfigInvalidException(msg)
-        if item['role'] not in [r.value for r in HeaderRole]:
-            msg = (
-                f'Header.role at index {idx} must be one of {[r.value for r in HeaderRole]}.')
-            logging.error(msg)
-            raise status.LedgerConfigInvalidException(msg)
-        if item['type'] not in [t.value for t in HeaderType]:
-            msg = (
-                f'Header.type at index {idx} must be one of {[t.value for t in HeaderType]}.')
-            logging.error(msg)
-            raise status.LedgerConfigInvalidException(msg)
-    # Enforce singleton roles
-    role_counts: Dict[str, int] = {}
-    for item in headers_list:
-        role = item['role']
-        role_counts[role] = role_counts.get(role, 0) + 1
-    for singleton_role in [HeaderRole.Id.value, HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Account.value]:
-        count = role_counts.get(singleton_role, 0)
-        if count != 1:
-            msg = f'Role "{singleton_role}" must be mapped to exactly one header, found {count}.'
-            logging.error(msg)
-            raise status.LedgerConfigInvalidException(msg)
 
 
 class ConfigPaths:
@@ -641,8 +659,10 @@ class SettingsAPI(ConfigPaths):
                 msg = f'Field "{field}" must be {specs["type"]}, got {type(data[field])}.'
                 raise status.LedgerConfigInvalidException(msg)
 
-            if field == 'headers':
-                _validate_header(data['headers'])
+            if field == 'header':
+                _validate_header(data[field], specs['allowed_values'])
+            elif field == 'mapping':
+                _validate_mapping(data[field], specs)
             elif field == 'categories':
                 _validate_categories(data[field], specs['item_schema'])
 
