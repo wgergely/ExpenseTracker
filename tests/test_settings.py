@@ -201,6 +201,14 @@ class RealTemplateSmokeTest(BaseTestCase):
         self.assertTrue(cp.ledger_template.exists())
         self.assertTrue(cp.icon_dir.is_dir())
 
+    def test_default_headers_empty(self):
+        # Loading a fresh ledger from template should yield empty headers list
+        api = SettingsAPI()
+        ledger = api.load_ledger()
+        self.assertIn('headers', ledger)
+        self.assertIsInstance(ledger['headers'], list)
+        self.assertEqual(len(ledger['headers']), 0)
+
 
 class SettingsAPIBehaviour(BaseTestCase):
     """Full functional coverage for SettingsAPI."""
