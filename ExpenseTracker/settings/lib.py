@@ -674,7 +674,8 @@ class SettingsAPI(ConfigPaths):
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
 
-        return self.ledger_data[section_name].copy()
+        # Return a deep copy to prevent caller mutations from affecting internal state
+        return copy.deepcopy(self.ledger_data[section_name])
 
     def set_section(self, section_name: str, new_data: Dict[str, Any]) -> None:
         """Replace and persist a configuration section.
@@ -736,7 +737,13 @@ class SettingsAPI(ConfigPaths):
 
         except (ValueError, TypeError, status.LedgerConfigInvalidException) as e:
             logging.error(f'Validation error on set_section("{section_name}"): {e}')
+            # Roll back in-memory state
             self.ledger_data[section_name] = current_section_data
+            # Reload entire ledger from disk to ensure consistency
+            try:
+                self.load_ledger()
+            except Exception as load_err:
+                logging.error(f'Failed to reload ledger after rollback: {load_err}')
             raise
 
     def reload_section(self, section_name: str) -> None:
