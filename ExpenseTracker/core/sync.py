@@ -20,17 +20,10 @@ from typing import Any, Dict, List, Tuple, Optional
 from PySide6 import QtCore
 from googleapiclient.errors import HttpError
 
-from .database import DatabaseAPI, google_serial_date_to_iso
-from .service import (
-    _verify_sheet_access,
-    _query_sheet_size,
-    start_asynchronous,
-    TOTAL_TIMEOUT,  # Implicitly used by start_asynchronous
-    _verify_mapping,
-    _fetch_headers as service_fetch_headers,
-)
+from . import database
+from . import service
+from .service import idx_to_col
 from ..settings import lib
-from ..settings.lib import HeaderRole
 
 
 @dataclass
@@ -41,22 +34,6 @@ class EditOperation:
     orig_value: Any
     new_value: Any
     stable_keys: Dict[str, Tuple[Any, ...]]  # Logical stable field -> tuple of its values
-
-
-def idx_to_col(idx: int) -> str:
-    """Convert zero-based column index to spreadsheet letter(s).
-
-    Args:
-        idx: The zero-based column index.
-
-    Returns:
-        The spreadsheet column letter(s) (e.g., A, B, AA).
-    """
-    letters = ''
-    while idx >= 0:
-        letters = chr((idx % 26) + ord('A')) + letters
-        idx = idx // 26 - 1
-    return letters
 
 
 class SyncAPI(QtCore.QObject):
@@ -124,7 +101,7 @@ class SyncAPI(QtCore.QObject):
             None
         """
         logging.debug(f'Queueing edit: local_id={local_id}, column="{column}", new_value="{new_value}"')
-        row = DatabaseAPI.get_row(local_id)
+        row = database.database.get_row(local_id)
         if row is None:
             raise ValueError(f'No local row with id {local_id}')
         # Prevent edits on roles mapped to multiple headers
@@ -195,8 +172,8 @@ class SyncAPI(QtCore.QObject):
 
         logging.info(f'Starting commit of {len(self._queue)} queued edit(s)')
         try:
-            service = _verify_sheet_access()
-            row_count, col_count = _query_sheet_size(
+            service = service._verify_sheet_access()
+            row_count, col_count = service._query_sheet_size(
                 service, self.sheet_id, self.worksheet
             )
             # Sheet row_count includes header, data_rows is just data
@@ -212,7 +189,7 @@ class SyncAPI(QtCore.QObject):
                 return results
 
             # Fetch header row using shared service helper
-            headers = service_fetch_headers()
+            headers = service._fetch_headers()
             if not headers:
                 logging.error('Remote sheet has no header row. Cannot proceed with commit.')
                 for op in self._queue:
@@ -223,7 +200,7 @@ class SyncAPI(QtCore.QObject):
                 self.clear_queue()
                 return results
 
-            _verify_mapping(remote_headers=headers)  # Verifies current settings mapping against remote
+            service._verify_mapping(remote_headers=headers)  # Verifies current settings mapping against remote
             header_to_idx = {h: i for i, h in enumerate(headers)}
 
             stable_fields = self._determine_stable_fields(headers)
@@ -312,9 +289,9 @@ class SyncAPI(QtCore.QObject):
 
         logging.debug('Starting asynchronous commit_queue')
         # start_asynchronous is expected to handle the actual threading and error reporting
-        result = start_asynchronous(
+        result = service.start_asynchronous(
             self.commit_queue,
-            total_timeout=TOTAL_TIMEOUT,  # This constant comes from .service
+            total_timeout=service.TOTAL_TIMEOUT,  # This constant comes from .service
             status_text='Syncing edits...',
         )
         # Note: The result from start_asynchronous might be None if it has its own signalling.
@@ -346,7 +323,7 @@ class SyncAPI(QtCore.QObject):
         # Core stable keys: date, amount, description
         headers_list = lib.settings.get_section('headers')
         role_map = {item['role']: item['name'] for item in headers_list}
-        for logical_key_name in (HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Description.value):
+        for logical_key_name in (lib.HeaderRole.Date.value, lib.HeaderRole.Amount.value, lib.HeaderRole.Description.value):
             col_name = role_map.get(logical_key_name)
             if col_name is None or col_name not in row:
                 raise ValueError(
@@ -355,9 +332,9 @@ class SyncAPI(QtCore.QObject):
             keys[logical_key_name] = (row[col_name],)
 
         # Optional 'id' stable key if configured
-        id_col = role_map.get(HeaderRole.Id.value)
+        id_col = role_map.get(lib.HeaderRole.Id.value)
         if id_col and id_col in row:
-            keys[HeaderRole.Id.value] = (row[id_col],)
+            keys[lib.HeaderRole.Id.value] = (row[id_col],)
         return keys
 
     def _get_original_value(self, row: Dict[str, Any], column_logical_name: str) -> Any:
@@ -416,7 +393,7 @@ class SyncAPI(QtCore.QObject):
             raise ValueError('Cannot determine stable fields without an ID column or queued items.')
 
         # Use keys from the first queued item, excluding 'id' as it wasn't chosen
-        default_stable_keys = [k for k in self._queue[0].stable_keys if k != 'id']
+        default_stable_keys = [k for k in self._queue[0].stable_keys if k != lib.HeaderRole.Id.value]
         logging.debug(f'Using composite stable fields: {default_stable_keys}')
         return default_stable_keys
 
@@ -441,8 +418,8 @@ class SyncAPI(QtCore.QObject):
                 that correspond to it.
         """
         header_map: Dict[str, List[str]] = {}
-        if logical_stable_fields == ['id']:  # Special handling for 'id' primary key
-            id_aliases = {'id', '#', 'number', 'num'}
+        if logical_stable_fields == [lib.HeaderRole.Id.value]:  # Special handling for 'id' primary key
+            id_aliases = {lib.HeaderRole.Id.value, '#', 'number', 'num'}
             actual_id_header = next(
                 (h for h in remote_headers if h.strip().lower() in id_aliases),
                 None,
@@ -529,7 +506,7 @@ class SyncAPI(QtCore.QObject):
                 if v is not None:  # Perform normalization only on non-None values
                     if logical_field == 'date':
                         try:
-                            normalized_v = google_serial_date_to_iso(float(v))
+                            normalized_v = database.google_serial_date_to_iso(float(v))
                         except (ValueError, TypeError):  # If v is not a floatable string or number
                             normalized_v = str(v) if v is not None else ''  # Fallback to string or empty
                     elif logical_field == 'amount':
@@ -766,7 +743,7 @@ class SyncAPI(QtCore.QObject):
                 if not db_column_name:
                     raise KeyError(f'Header role "{op.column}" not found for local cache update')
                 # Perform the local cache update
-                DatabaseAPI.update_cell(op.local_id, db_column_name, op.new_value)
+                database.database.update_cell(op.local_id, db_column_name, op.new_value)
                 logging.debug(f'Local cache updated for id {op.local_id}, column "{db_column_name}".')
             except StopIteration:  # Should not happen if logic is consistent
                 logging.error(
