@@ -19,6 +19,7 @@ import pandas as pd
 from ExpenseTracker.core.database import DatabaseAPI
 from ExpenseTracker.core.sync import EditOperation, SyncAPI
 from ExpenseTracker.settings import lib
+from ExpenseTracker.settings.lib import HeaderRole, HeaderType
 from tests.base import BaseTestCase, BaseServiceTestCase, mute_ui_signals
 
 
@@ -65,13 +66,21 @@ class SyncIntegrationTest(BaseServiceTestCase):
         super().tearDown()
 
     def _setup_sheet_and_cache(self, header: List[str], mapping: Dict[str, str], rows: List[List[Any]]):
+        # Build header entries for new unified headers schema
         hdr_types = {h: ('int' if h in {'ID', '#'}
                          else 'float' if h == 'Amount'
         else 'date' if h == 'Date'
         else 'string') for h in header}
-        lib.settings.set_section('header', hdr_types)
-        lib.settings.set_section('mapping', mapping)
-
+        headers_list = []
+        for col in header:
+            # determine logical role by matching mapping entries
+            for role, mapped in mapping.items():
+                parts = mapped.split('|')
+                if col in parts:
+                    headers_list.append({'name': col, 'role': role, 'type': hdr_types[col]})
+                    break
+        lib.settings.set_section('headers', headers_list)
+         
         df = pd.DataFrame(rows, columns=header)
         with mute_ui_signals():
             DatabaseAPI.cache_data(df)
@@ -112,12 +121,11 @@ class SyncIntegrationTest(BaseServiceTestCase):
 
     def test_merge_mapping_description_updates_first_header(self):
         rows = gen_rows(2)
+        # multi-mapped 'description' should be disallowed in queue_edit
         self._setup_sheet_and_cache(self.HDR_ALL, self.MAP_BASE, rows)
-        new_desc = 'NewDesc'
-        self.assertTrue(self._run_commit(1, 'description', new_desc)[(1, 'description')][0])
-        val = self.service.spreadsheets().values().get(
-            spreadsheetId=self.sheet_id, range=f'{self.sheet_name}!C2').execute()['values'][0][0]
-        self.assertEqual(val, new_desc)
+        sync = SyncAPI()
+        with self.assertRaises(ValueError):
+            sync.queue_edit(1, 'description', 'NewDesc')
 
     def test_id_alias_hash_header(self):
         hdr = ['#'] + self.HDR_ALL[1:]
@@ -234,32 +242,17 @@ class SyncInternalHelperTest(BaseTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.sync = SyncAPI()
-
-        # Provide a *complete* header / mapping so SettingsAPI validation
-        # succeeds.
-        lib.settings.set_section(
-            "header",
-            {
-                "ID": "int",
-                "Date": "date",
-                "Amount": "float",
-                "Description": "string",
-                "Notes": "string",
-                "Category": "string",
-                "Account": "string",
-            },
-        )
-
-        lib.settings.set_section(
-            "mapping",
-            {
-                "date": "Date",
-                "amount": "Amount",
-                "description": "Description|Notes",
-                "category": "Category",
-                "account": "Account",
-            },
-        )
+        # Configure unified headers schema for tests
+        headers_list = [
+            {'name': 'ID', 'role': HeaderRole.Id.value, 'type': HeaderType.Int.value},
+            {'name': 'Date', 'role': HeaderRole.Date.value, 'type': HeaderType.Date.value},
+            {'name': 'Amount', 'role': HeaderRole.Amount.value, 'type': HeaderType.Float.value},
+            {'name': 'Description', 'role': HeaderRole.Description.value, 'type': HeaderType.String.value},
+            {'name': 'Notes', 'role': HeaderRole.Notes.value, 'type': HeaderType.String.value},
+            {'name': 'Category', 'role': HeaderRole.Category.value, 'type': HeaderType.String.value},
+            {'name': 'Account', 'role': HeaderRole.Account.value, 'type': HeaderType.String.value},
+        ]
+        lib.settings.set_section('headers', headers_list)
 
     # _get_parsed_mapping -----------------------------------------------------
     def test_parsed_mapping_split_and_cache(self):
@@ -282,7 +275,7 @@ class SyncInternalHelperTest(BaseTestCase):
         self.assertEqual(keys, {
             'date': ('2025-01-01',),
             'amount': (10,),
-            'description': ('Foo', 'Bar'),
+            'description': ('Foo',),
             'id': (7,),
         })
 
@@ -290,12 +283,6 @@ class SyncInternalHelperTest(BaseTestCase):
     def test_get_original_value_prefers_first_mapping_hit(self):
         row = {'Description': 'Foo', 'Notes': 'Bar'}
         self.assertEqual(self.sync._get_original_value(row, 'description'), 'Foo')
-
-    # _fetch_headers ----------------------------------------------------------
-    def test_fetch_headers_returns_header_row(self):
-        service = _make_service(['A', 'B'], {})
-        # pass the stub service and column count to fetch headers
-        self.assertEqual(self.sync._fetch_headers(service, 2), ['A', 'B'])
 
     # _determine_stable_fields ------------------------------------------------
     def test_determine_stable_fields_prefers_id(self):
