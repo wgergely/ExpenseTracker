@@ -386,31 +386,30 @@ def _verify_headers(remote_headers: List[str] = None) -> Set[str]:
     Verify the headers of the remote spreadsheet against the local configuration.
     """
     from ..settings import lib
+    from ..settings.lib import HeaderRole
 
-    config: Dict[str, Any] = lib.settings.get_section('header')
-    if not config:
-        raise status.HeadersInvalidException
+    # Load configured headers list
+    headers_list = lib.settings.get_section('headers')
+    if not isinstance(headers_list, list) or not headers_list:
+        raise status.HeadersInvalidException('No headers configured.')
 
-    remote_headers = remote_headers or _fetch_headers()
+    # Extract expected header names
+    expected_names = {item['name'] for item in headers_list}
 
-    if not remote_headers:
+    remote = set(remote_headers or _fetch_headers())
+    if not remote:
         raise status.HeadersInvalidException('No data found in the remote sheet.')
 
-    remote_headers_set = set(sorted(remote_headers))
-    expected_headers = set(sorted(config.keys()))
-    mismatch = expected_headers.difference(remote_headers_set)
-
-    if mismatch:
+    missing = expected_names.difference(remote)
+    if missing:
         raise status.HeadersInvalidException(
-            f'Remote sheet headers do not match the expected configuration: '
-            f'{", ".join(mismatch)} not found.'
+            f'Remote sheet headers do not match header configuration: {", ".join(sorted(missing))} not found.'
         )
 
     logging.debug(
-        f'Found {len(expected_headers)} headers in the local configuration: '
-        f'[{",".join(sorted(expected_headers))}].'
+        f'Found {len(expected_names)} configured headers in the remote sheet: [{", ".join(sorted(expected_names))}].'
     )
-    return remote_headers_set
+    return remote
 
 
 def verify_headers(total_timeout: int = TOTAL_TIMEOUT) -> Set[str]:
@@ -423,56 +422,48 @@ def verify_headers(total_timeout: int = TOTAL_TIMEOUT) -> Set[str]:
 
 def _verify_mapping(remote_headers: List[str] = None) -> None:
     """
-    Verify the header mapping configuration against the remote spreadsheet's column values.
+    Verify header configuration against the remote spreadsheet using new headers schema.
     """
     from ..settings import lib
+    from ..settings.lib import HeaderRole, HeaderType
 
-    config: Dict[str, Any] = lib.settings.get_section('mapping')
-    if not config:
-        raise status.HeaderMappingInvalidException
+    # Load configured headers list
+    headers_list = lib.settings.get_section('headers')
+    if not isinstance(headers_list, list) or not headers_list:
+        msg = 'No headers configured.'
+        logging.error(msg)
+        raise status.HeaderMappingInvalidException(msg)
 
-    # Build the list of header names referenced by mapping (split merged specs)                                                                                                                               │
-    config_headers: List[str] = []
-    from ..settings.lib import parse_merge_mapping
-    for raw_spec in config.values():
-        for hdr in parse_merge_mapping(raw_spec):
-            if hdr not in config_headers:
-                config_headers.append(hdr)
+    # Build role→name and role→type mappings
+    role_to_header = {item['role']: item['name'] for item in headers_list}
+    role_to_type = {item['role']: item['type'] for item in headers_list}
 
-    config_headers_set: Set[str] = set(config_headers)
-    logging.debug(f'Header mapping configuration found {len(config_headers_set)} columns.')
-
-    remote_headers: List[str] = remote_headers or _fetch_headers()
-    remote_headers_set: Set[str] = set(sorted(remote_headers))
-
-    if not config_headers_set.issubset(remote_headers_set):
+    # Verify remote sheet has all configured headers
+    remote_names = set(remote_headers or _fetch_headers())
+    expected_names = set(role_to_header.values())
+    missing = expected_names.difference(remote_names)
+    if missing:
         raise status.HeaderMappingInvalidException(
-            f'Header mapping is referencing columns not found in the remote sheet: '
-            f'{", ".join(config_headers_set.difference(remote_headers_set))}.'
+            f'Remote sheet headers do not match header configuration: {", ".join(sorted(missing))}.'
         )
 
-    logging.debug(
-        f'Header mapping references {len(config_headers_set)} valid columns: '
-        f'[{",".join(sorted(config_headers_set))}].'
-    )
-
-    config_headers_full: Dict[str, Any] = lib.settings.get_section('header')
-    date_column: str = config.get('date')
-    _type: str = config_headers_full[date_column]
-    if _type != 'date':
+    # Validate Date column type
+    date = role_to_header.get(HeaderRole.Date.value)
+    date_t = role_to_type.get(HeaderRole.Date.value)
+    if date_t != HeaderType.Date.value:
         raise status.HeaderMappingInvalidException(
-            f'Date column source must be a date type, but column "{date_column}" is of type "{_type}".'
+            f'Date column "{date}" must be type "date", got "{date_t}".'
         )
-    logging.debug(f'date="{date_column}" is of accepted type "{_type}".')
 
-    amount_column: str = config.get('amount')
-    _type = config_headers_full[amount_column]
-    if _type not in ('float', 'int'):
+    # Validate Amount column type
+    amt = role_to_header.get(HeaderRole.Amount.value)
+    amt_t = role_to_type.get(HeaderRole.Amount.value)
+    if amt_t not in (HeaderType.Float.value, HeaderType.Int.value):
         raise status.HeaderMappingInvalidException(
-            f'Amount column source must be a numeric type, but column "{amount_column}" is of type "{_type}".'
+            f'Amount column "{amt}" must be numeric ("int" or "float"), got "{amt_t}".'
         )
-    logging.debug(f'amount="{amount_column}" is of accepted type "{_type}".')
-    logging.debug(f'Header mapping verified successfully. Found {len(config_headers_full)} columns.')
+
+    logging.debug('Header mapping verified successfully.')
 
 
 def verify_mapping(total_timeout: int = TOTAL_TIMEOUT) -> None:
@@ -625,38 +616,41 @@ def _fetch_categories(
         value_render_option: str = 'UNFORMATTED_VALUE'
 ) -> List[str]:
     """
-    Fetches a unique list of categories from the remote spreadsheet.
-
-    Returns:
-        A sorted list of unique category values.
+    Fetch a unique list of categories from the remote spreadsheet using new headers schema.
     """
     from ..settings import lib
-
-    logging.debug('Fetching categories from the remote sheet...')
+    from ..settings.lib import HeaderRole
+    # Obtain authorized Sheets API client
     service: Any = _verify_sheet_access()
-    _verify_mapping()
 
-    config: Dict[str, Any] = lib.settings.get_section('mapping')
-    category_column: Optional[str] = config.get('category', None)
-    if not category_column:
-        raise status.HeaderMappingInvalidException('Category column not found in mapping.')
+    # Determine category header from configured headers
+    headers_list = lib.settings.get_section('headers')
+    if not isinstance(headers_list, list) or not headers_list:
+        raise status.HeaderMappingInvalidException('No headers configured.')
+    category_item = next((h for h in headers_list if h['role'] == HeaderRole.Category.value), None)
+    if not category_item:
+        raise status.HeaderMappingInvalidException('Category header not found in configuration.')
+    category_col = category_item['name']
 
-    spreadsheet_id: Optional[str] = lib.settings.get_section('spreadsheet').get('id')
-    worksheet_name: Optional[str] = lib.settings.get_section('spreadsheet').get('worksheet')
+    # Load spreadsheet identifiers
+    cfg = lib.settings.get_section('spreadsheet')
+    spread_id = cfg.get('id')
+    ws = cfg.get('worksheet')
 
-    headers = lib.settings.get_section('header').keys()
-    header_names: List[str] = list(headers)
-    if category_column not in header_names:
-        raise status.HeaderMappingInvalidException(f'Category "{category_column}" not found.')
-
-    idx: int = header_names.index(category_column)
+    # Determine column index from headers list
+    header_names = [h['name'] for h in headers_list]
+    if category_col not in header_names:
+        raise status.HeaderMappingInvalidException(
+            f'Category "{category_col}" not found among configured headers.'
+        )
+    idx = header_names.index(category_col)
     from .sync import idx_to_col
-    column_letter: str = idx_to_col(idx)
-    range_: str = f'{worksheet_name}!{column_letter}2:{column_letter}'
+    col_letter = idx_to_col(idx)
+    range_ = f'{ws}!{col_letter}2:{col_letter}'
 
     logging.debug(f'Fetching categories from range "{range_}".')
     batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
-        spreadsheetId=spreadsheet_id,
+        spreadsheetId=spread_id,
         ranges=[range_],
         valueRenderOption=value_render_option,
         fields='valueRanges(values)'
