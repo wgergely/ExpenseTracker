@@ -27,6 +27,15 @@ MAX_RETRIES: int = 6
 BATCH_SIZE: int = 3000  # Number of rows per batch for large sheets
 
 
+def idx_to_col(idx: int) -> str:
+    """Convert zero-based column index to spreadsheet letter(s)."""
+    letters = ''
+    while idx >= 0:
+        letters = chr((idx % 26) + ord('A')) + letters
+        idx = idx // 26 - 1
+    return letters
+
+
 class AsyncWorker(QtCore.QThread):
     """
     Generic worker thread with retry logic for blocking functions.
@@ -502,7 +511,6 @@ def _fetch_data(
         logging.warning(f'No data rows found in "{worksheet_name}".')
         return pd.DataFrame()
 
-    from .sync import idx_to_col
     last_col: str = idx_to_col(col_count - 1)
     data_ranges: List[str] = []
     data_start: int = 1
@@ -575,7 +583,6 @@ def _fetch_headers(
     service: Any = _verify_sheet_access()
 
     _, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
-    from .sync import idx_to_col
     end_col: str = idx_to_col(col_count - 1)
     range_ = f'{worksheet_name}!A1:{end_col}1'
 
@@ -644,7 +651,6 @@ def _fetch_categories(
             f'Category "{category_col}" not found among configured headers.'
         )
     idx = header_names.index(category_col)
-    from .sync import idx_to_col
     col_letter = idx_to_col(idx)
     range_ = f'{ws}!{col_letter}2:{col_letter}'
 
