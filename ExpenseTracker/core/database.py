@@ -91,13 +91,16 @@ def get_config_type(column: str) -> str:
     Raises:
         status.HeadersInvalidException: If the column is not found in the header configuration.
     """
-    config = lib.settings.get_section('header')
-
-    if column not in config:
-        raise status.HeadersInvalidException(
-            f'Column "{column}" not found in configuration. Please check the header mapping.'
-        )
-    return config[column]
+    # Retrieve headers list from settings
+    headers_list = lib.settings.get_section('headers')
+    # Search for the column in headers
+    for item in headers_list:
+        if item.get('name') == column:
+            return item.get('type')
+    # Column not found
+    raise status.HeadersInvalidException(
+        f'Column "{column}" not found in header configuration.'
+    )
 
 
 def cast_type(column: str, value: Any) -> Any:
@@ -245,50 +248,50 @@ class DatabaseAPI(QtCore.QObject):
             metatable_is_valid = False
             if db_file_exists:
                 if self._table_exists_in_conn(conn, Table.Meta.value):
-                    cursor = conn.execute(f"PRAGMA table_info({Table.Meta.value})")
+                    cursor = conn.execute(f"""PRAGMA table_info({Table.Meta.value})""")
                     current_columns = {row[1] for row in cursor.fetchall()}
                     if set(META_SCHEMA.keys()).issubset(current_columns):
                         metatable_is_valid = True
                     else:
                         missing_cols = set(META_SCHEMA.keys()) - current_columns
                         logging.warning(
-                            f"Metadata table '{Table.Meta.value}' schema is invalid. Missing columns: {missing_cols}. "
-                            f"Schema will be recreated."
+                            f'Metadata table "{Table.Meta.value}" schema is invalid. Missing columns: {missing_cols}. '
+                            f'Schema will be recreated.'
                         )
                 else:
                     logging.warning(
-                        f"Database file exists but metadata table '{Table.Meta.value}' is missing. "
-                        f"Schema will be recreated."
+                        f'Database file exists but metadata table "{Table.Meta.value}" is missing. '
+                        f'Schema will be recreated.'
                     )
 
             if not db_file_exists or not metatable_is_valid:
                 logging.info(
-                    f"Recreating database schema (DB exists: {db_file_exists}, Metatable valid: {metatable_is_valid})."
+                    f'Recreating database schema (DB exists: {db_file_exists}, Metatable valid: {metatable_is_valid}).'
                 )
-                conn.execute(f"DROP TABLE IF EXISTS {Table.Meta.value}")
-                conn.execute(f"DROP TABLE IF EXISTS {Table.Transactions.value}")
+                conn.execute(f"""DROP TABLE IF EXISTS {Table.Meta.value}""")
+                conn.execute(f"""DROP TABLE IF EXISTS {Table.Transactions.value}""")
 
                 meta_cols_sql = ", ".join(
                     f'"{name}" {typedef}' for name, typedef in META_SCHEMA.items()
                 )
-                conn.execute(f"CREATE TABLE {Table.Meta.value} ({meta_cols_sql})")
+                conn.execute(f"""CREATE TABLE {Table.Meta.value} ({meta_cols_sql})""")
 
                 config = lib.settings.get_section('spreadsheet')
                 cfg_id = config.get('id', '')
                 cfg_sheet = config.get('worksheet', '')
 
                 conn.execute(
-                    f"INSERT INTO {Table.Meta.value} (meta_id, state, last_sync, spreadsheet_id, worksheet) "
-                    "VALUES (1, ?, ?, ?, ?)",  # meta_id=1, last_sync, spreadsheet_id, worksheet
+                    f"""INSERT INTO {Table.Meta.value} (meta_id, state, last_sync, spreadsheet_id, worksheet) VALUES (1, ?, ?, ?, ?)""",
+                    # meta_id=1, last_sync, spreadsheet_id, worksheet
                     (CacheState.Uninitialized.name, now_str(), cfg_id, cfg_sheet)
                 )
                 conn.commit()
-                logging.info(f"Database schema including '{Table.Meta.value}' recreated successfully.")
+                logging.info(f'Database schema including "{Table.Meta.value}" recreated successfully.')
             else:
-                logging.debug("Existing database schema and metatable are considered valid.")
+                logging.debug('Existing database schema and metatable are considered valid.')
 
         except sqlite3.Error as e:
-            logging.error(f"SQLite error during schema initialization: {e}. Attempting recovery.", exc_info=True)
+            logging.error(f'SQLite error during schema initialization: {e}. Attempting recovery.', exc_info=True)
             if conn:
                 try:
                     conn.close()
@@ -336,7 +339,10 @@ class DatabaseAPI(QtCore.QObject):
     @staticmethod
     def _update_state_in_conn(conn: sqlite3.Connection, state: CacheState) -> None:
         """Update the 'state' field in the metatable using an existing connection."""
-        conn.execute(f"""UPDATE {Table.Meta.value} SET state=? WHERE meta_id=1""", (state.name,))
+        conn.execute(
+            f"""UPDATE {Table.Meta.value} SET state=? WHERE meta_id=1""",
+            (state.name,)
+        )
 
     @classmethod
     def _table_exists_in_conn(cls, conn: sqlite3.Connection, table_name: str) -> bool:
@@ -389,24 +395,24 @@ class DatabaseAPI(QtCore.QObject):
             # Attempt to read metadata; catch missing columns in older schemas
             try:
                 meta_row = conn.execute(
-                    f"SELECT spreadsheet_id, worksheet, last_sync FROM {Table.Meta.value} WHERE meta_id=1"
+                    f"""SELECT spreadsheet_id, worksheet, last_sync FROM {Table.Meta.value} WHERE meta_id=1"""
                 ).fetchone()
             except sqlite3.OperationalError as e:
-                logging.warning(
-                    "Metadata table schema outdated or missing columns: %s", e
-                )
+                logging.warning(f'Metadata table schema outdated or missing columns {e}' )
                 # Invalidate cache; prompt schema reset
                 raise status.CacheInvalidException(
                     'Cache schema outdated (missing metadata columns); please reset the cache.'
                 ) from e
             if not meta_row:
                 try:
-                    conn.execute(f"INSERT OR REPLACE INTO {Table.Meta.value} (meta_id, state) VALUES (1, ?)",
-                                 (CacheState.Error.name,))
+                    conn.execute(
+                        f"""INSERT OR REPLACE INTO {Table.Meta.value} (meta_id, state) VALUES (1, ?)""",
+                        (CacheState.Error.name,)
+                    )
                     conn.commit()
                 except sqlite3.Error:  # Best effort
                     pass
-                raise status.CacheInvalidException(f"Metadata entry (meta_id=1) missing in '{Table.Meta.value}'.")
+                raise status.CacheInvalidException(f'Metadata entry (meta_id=1) missing in "{Table.Meta.value}".')
 
             db_id, db_sheet, last_sync_raw = meta_row
             config = lib.settings.get_section('spreadsheet')
@@ -428,27 +434,28 @@ class DatabaseAPI(QtCore.QObject):
             if not cls._table_exists_in_conn(conn, Table.Transactions.value):
                 cls._update_state_in_conn(conn, CacheState.Uninitialized)
                 conn.commit()
-                raise status.CacheInvalidException(
-                    f"Table '{Table.Transactions.value}' not found. Cache uninitialized."
-                )
+                raise status.CacheInvalidException(f'Table "{Table.Transactions.value}" not found. Cache uninitialized.')
 
-            cursor = conn.execute(f"PRAGMA table_info({Table.Transactions.value})")
+            # Check cached table columns against configured headers
+            cursor = conn.execute(f"""PRAGMA table_info({Table.Transactions.value})""")
             cached_columns = {row[1] for row in cursor.fetchall() if row[1] != 'local_id'}
 
-            cfg_header_cols = set(lib.settings.get_section('header').keys())
-            if not cfg_header_cols:
+            # Retrieve configured headers
+            headers_list = lib.settings.get_section('headers')
+            if not headers_list:
                 cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
                 raise status.HeadersInvalidException(
                     'No headers configured. Cannot verify cache. Sync required.'
                 )
+            cfg_header_cols = {item['name'] for item in headers_list}
 
             if cached_columns != cfg_header_cols:
                 diff = cached_columns.symmetric_difference(cfg_header_cols)
                 cls._update_state_in_conn(conn, CacheState.Stale)
                 conn.commit()
                 raise status.CacheInvalidException(
-                    f"Cache column schema mismatch. Difference: {diff}. Sync required."
+                    f'Cache column schema mismatch. Difference: {diff}. Sync required.'
                 )
 
             if not last_sync_raw:
@@ -467,7 +474,7 @@ class DatabaseAPI(QtCore.QObject):
                 conn.commit()
                 raise status.CacheInvalidException(f'Cache stale. Last sync: {last_sync_dt}.')
 
-            count_row = conn.execute(f"SELECT COUNT(*) FROM {Table.Transactions.value}").fetchone()
+            count_row = conn.execute(f"""SELECT COUNT(*) FROM {Table.Transactions.value}""").fetchone()
             if count_row and count_row[0] == 0:
                 cls._update_state_in_conn(conn, CacheState.Empty)
                 conn.commit()
@@ -476,18 +483,18 @@ class DatabaseAPI(QtCore.QObject):
             cls._update_state_in_conn(conn, CacheState.Valid)
             conn.commit()
             logging.debug(
-                f"Cache valid: last_sync={last_sync_dt}, rows={count_row[0] if count_row else 'N/A'}"
+                f'Cache valid: last_sync={last_sync_dt}, rows={count_row[0] if count_row else "N/A"}'
             )
 
         except sqlite3.Error as e:
-            logging.error(f"SQLite error during cache verification: {e}", exc_info=True)
+            logging.error(f'SQLite error during cache verification: {e}', exc_info=True)
             if conn:
                 try:
                     cls._update_state_in_conn(conn, CacheState.Error)
                     conn.commit()
                 except sqlite3.Error:  # Best effort
                     pass
-            raise status.CacheInvalidException(f"SQLite error verifying cache: {e}") from e
+            raise status.CacheInvalidException(f'SQLite error verifying cache: {e}') from e
         finally:
             if conn:
                 conn.close()
@@ -538,28 +545,28 @@ class DatabaseAPI(QtCore.QObject):
         try:
             conn = cls.connection()
             # Ensure metadata schema has required columns; add any missing ones
-            cursor = conn.execute(f"PRAGMA table_info({Table.Meta.value})")
+            cursor = conn.execute(f"""PRAGMA table_info({Table.Meta.value})""")
             existing = {row[1] for row in cursor.fetchall()}
             added: list[str] = []
             if 'spreadsheet_id' not in existing:
                 conn.execute(
-                    f"ALTER TABLE {Table.Meta.value} ADD COLUMN \"spreadsheet_id\" TEXT DEFAULT ''"
+                    f"""ALTER TABLE {Table.Meta.value} ADD COLUMN \"spreadsheet_id\" TEXT DEFAULT ''"""
                 )
                 added.append('spreadsheet_id')
             if 'worksheet' not in existing:
                 conn.execute(
-                    f"ALTER TABLE {Table.Meta.value} ADD COLUMN \"worksheet\" TEXT DEFAULT ''"
+                    f"""ALTER TABLE {Table.Meta.value} ADD COLUMN \"worksheet\" TEXT DEFAULT ''"""
                 )
                 added.append('worksheet')
             if added:
                 conn.commit()
-                logging.info(f"Added missing metadata columns: {added}")
+                logging.info(f'Added missing metadata columns: {added}')
             # Update last sync timestamp and identifiers
             config = lib.settings.get_section('spreadsheet')
             spreadsheet_id = config.get('id', '')
             worksheet = config.get('worksheet', '')
             conn.execute(
-                f"UPDATE {Table.Meta.value} SET last_sync=?, spreadsheet_id=?, worksheet=? WHERE meta_id=1",
+                f"""UPDATE {Table.Meta.value} SET last_sync=?, spreadsheet_id=?, worksheet=? WHERE meta_id=1""",
                 (now_str(), spreadsheet_id, worksheet)
             )
             conn.commit()
@@ -580,7 +587,7 @@ class DatabaseAPI(QtCore.QObject):
                 logging.warning(f"Metatable '{Table.Meta.value}' not found when getting stamp.")
                 return None
 
-            cursor = conn.execute(f"SELECT last_sync FROM {Table.Meta.value} WHERE meta_id=1")
+            cursor = conn.execute(f"""SELECT last_sync FROM {Table.Meta.value} WHERE meta_id=1""")
             row = cursor.fetchone()
             if row and row[0]:
                 try:
@@ -607,7 +614,7 @@ class DatabaseAPI(QtCore.QObject):
                 conn.commit()
                 logging.debug(f'Cache state updated to: {state.value}.')
             else:
-                logging.error(f"Metatable '{Table.Meta.value}' not found when setting state. State not set.")
+                logging.error(f'Metatable "{Table.Meta.value}" not found when setting state. State not set.')
         finally:
             if conn:
                 conn.close()
@@ -626,15 +633,15 @@ class DatabaseAPI(QtCore.QObject):
                 logging.warning(f"Metatable '{Table.Meta.value}' not found when getting state.")
                 return CacheState.Error
 
-            cursor = conn.execute(f"SELECT state FROM {Table.Meta.value} WHERE meta_id=1")
+            cursor = conn.execute(f"""SELECT state FROM {Table.Meta.value} WHERE meta_id=1""")
             row = cursor.fetchone()
             if row and row[0]:
                 try:
                     return CacheState[row[0]]
                 except KeyError:
-                    logging.warning(f"Invalid state value '{row[0]}' found in database.")
+                    logging.warning(f'Invalid state value "{row[0]}" found in database.')
                     return CacheState.Error
-            logging.warning("No state found in metatable or meta_id=1 row missing.")
+            logging.warning('No state found in metatable or meta_id=1 row missing.')
             return CacheState.Error
         finally:
             if conn:
@@ -664,7 +671,10 @@ class DatabaseAPI(QtCore.QObject):
                     cls.set_state(CacheState.Error)
                     return pd.DataFrame()
 
-                df = pd.read_sql_query(f"SELECT * FROM {Table.Transactions.value}", conn)
+                df = pd.read_sql_query(
+                    f"""SELECT * FROM {Table.Transactions.value}""",
+                    conn
+                )
                 logging.debug(f'Loaded {len(df)} rows from "{Table.Transactions.value}".')
                 return df
             except sqlite3.Error as e:
@@ -701,7 +711,8 @@ class DatabaseAPI(QtCore.QObject):
 
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
-                f"SELECT * FROM {Table.Transactions.value} WHERE local_id = ?", (local_id,)
+                f"""SELECT * FROM {Table.Transactions.value} WHERE local_id = ?""",
+                (local_id,)
             )
             row = cursor.fetchone()
             if not row:
@@ -736,7 +747,7 @@ class DatabaseAPI(QtCore.QObject):
                 raise sqlite3.OperationalError(f"Table {Table.Transactions.value} not found.")
 
             conn.execute(
-                f'UPDATE "{Table.Transactions.value}" SET "{column}" = ? WHERE local_id = ?',
+                f"""UPDATE "{Table.Transactions.value}" SET "{column}" = ? WHERE local_id = ?""",
                 (new_value, local_id)
             )
             conn.commit()
@@ -767,24 +778,32 @@ class DatabaseAPI(QtCore.QObject):
         try:
             conn = cls.connection()
             if not cls._table_exists_in_conn(conn, Table.Meta.value):
-                logging.error(f"Metatable '{Table.Meta.value}' missing. Cannot cache data.")
-                raise sqlite3.OperationalError(f"Metatable '{Table.Meta.value}' missing.")
+                logging.error(f'Metatable "{Table.Meta.value}" missing. Cannot cache data.')
+                raise sqlite3.OperationalError(f'Metatable "{Table.Meta.value}" missing. Cannot cache data.')
 
-            conn.execute(f"DROP TABLE IF EXISTS {Table.Transactions.value}")
+            conn.execute(
+                f"""DROP TABLE IF EXISTS {Table.Transactions.value}"""
+            )
             logging.debug(f'Dropped existing table: "{Table.Transactions.value}".')
 
-            cfg_header = lib.settings.get_section('header')
-            if not cfg_header:
-                cls.set_state(CacheState.Error)  # No headers, cannot proceed.
+            # Enforce unified 'headers' list
+            headers_list = lib.settings.get_section('headers')
+            if not headers_list:
+                cls.set_state(CacheState.Error)
                 cls.stamp()
-                raise status.HeadersInvalidException("Cannot cache data: No headers configured.")
-
-            config_column_names = list(cfg_header.keys())
+                raise status.HeadersInvalidException(
+                    'Cannot cache data: No headers configured.'
+                )
+            config_column_names = [item['name'] for item in headers_list]
 
             if df.empty:
-                empty_cols_sql = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT'] + \
-                                 [f'"{col_name}" {get_sql_type(col_name)}' for col_name in config_column_names]
-                conn.execute(f"CREATE TABLE {Table.Transactions.value} ({','.join(empty_cols_sql)})")
+                empty_cols_sql = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT'] + [
+                    f'"{col_name}" {get_sql_type(col_name)}'
+                    for col_name in config_column_names
+                ]
+                conn.execute(
+                    f"""CREATE TABLE {Table.Transactions.value} ({','.join(empty_cols_sql)})"""
+                )
                 conn.commit()
                 cls.set_state(CacheState.Empty)
                 cls.stamp()
@@ -802,9 +821,13 @@ class DatabaseAPI(QtCore.QObject):
                 )
 
             logging.debug(f'DataFrame columns match configuration: {df_columns}')
-            table_cols_sql = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT'] + \
-                             [f'"{col_name}" {get_sql_type(col_name)}' for col_name in config_column_names]
-            conn.execute(f"CREATE TABLE {Table.Transactions.value} ({','.join(table_cols_sql)})")
+            table_cols_sql = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT'] + [
+                f'"{col_name}" {get_sql_type(col_name)}'
+                for col_name in config_column_names
+            ]
+            conn.execute(
+                f"""CREATE TABLE {Table.Transactions.value} ({','.join(table_cols_sql)})"""
+            )
             logging.debug(f'Created new table "{Table.Transactions.value}".')
 
             df_reordered = df[config_column_names]
