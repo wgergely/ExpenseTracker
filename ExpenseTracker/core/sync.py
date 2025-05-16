@@ -20,9 +20,7 @@ from typing import Any, Dict, List, Tuple, Optional
 from PySide6 import QtCore
 from googleapiclient.errors import HttpError
 
-from . import database
-from . import service
-from .service import idx_to_col
+from . import database, service
 from ..settings import lib
 
 
@@ -50,6 +48,8 @@ class SyncAPI(QtCore.QObject):
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self._queue: List[EditOperation] = []
+        # Cache for parsed merge mappings
+        self._parsed_mapping_cache: Dict[str, List[str]] = {}
         self._connect_signals()
 
     def _connect_signals(self) -> None:
@@ -470,7 +470,7 @@ class SyncAPI(QtCore.QObject):
         for logical_field, actual_headers in stable_map.items():
             for actual_header in actual_headers:
                 col_idx = header_to_idx[actual_header]
-                col_letter = idx_to_col(col_idx)
+                col_letter = service.idx_to_col(col_idx)
                 # Fetch data from row 2 to the end
                 sheet_range = f'{self.worksheet}!{col_letter}2:{col_letter}{total_row_count}'
                 ranges_to_fetch.append(sheet_range)
@@ -709,7 +709,7 @@ class SyncAPI(QtCore.QObject):
                 )
             # Determine column index and build update entry
             target_col_idx = header_to_idx[actual_header_to_update]
-            target_col_letter = idx_to_col(target_col_idx)
+            target_col_letter = service.idx_to_col(target_col_idx)
             update_data_list.append({
                 'range': f'{self.worksheet}!{target_col_letter}{sheet_row_num}',
                 'values': [[op.new_value]],
@@ -734,11 +734,12 @@ class SyncAPI(QtCore.QObject):
         logging.debug(f'Applying {len(successfully_updated_ops)} updates to local cache.')
 
         from ..settings import lib
+        # Build role to header name mapping
         headers_list = lib.settings.get_section('headers')
         role_map = {item['role']: item['name'] for item in headers_list}
         for op, _ in successfully_updated_ops:
             try:
-                # op.column is logical role, so find the header name
+                # Determine database column name from logical role
                 db_column_name = role_map.get(op.column)
                 if not db_column_name:
                     raise KeyError(f'Header role "{op.column}" not found for local cache update')
