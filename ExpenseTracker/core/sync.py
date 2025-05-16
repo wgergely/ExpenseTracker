@@ -27,9 +27,10 @@ from .service import (
     start_asynchronous,
     TOTAL_TIMEOUT,  # Implicitly used by start_asynchronous
     _verify_mapping,
+    _fetch_headers as service_fetch_headers,
 )
 from ..settings import lib
-from ..settings.lib import parse_merge_mapping
+from ..settings.lib import HeaderRole
 
 
 @dataclass
@@ -72,7 +73,6 @@ class SyncAPI(QtCore.QObject):
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self._queue: List[EditOperation] = []
-        self._parsed_mapping: Dict[str, List[str]] = {}  # Cache for parsed column mappings
         self._connect_signals()
 
     def _connect_signals(self) -> None:
@@ -127,7 +127,16 @@ class SyncAPI(QtCore.QObject):
         row = DatabaseAPI.get_row(local_id)
         if row is None:
             raise ValueError(f'No local row with id {local_id}')
-
+        # Prevent edits on roles mapped to multiple headers
+        headers_list = lib.settings.get_section('headers')
+        role_to_names: Dict[str, List[str]] = {}
+        for item in headers_list:
+            role_to_names.setdefault(item['role'], []).append(item['name'])
+        names = role_to_names.get(column, [])
+        if len(names) > 1:
+            raise ValueError(
+                f'Cannot queue edit for multi-mapped role "{column}": mapped to headers {names}'
+            )
         stable_keys = self._get_local_stable_keys(row)
         orig_value = self._get_original_value(row, column)
 
@@ -202,7 +211,8 @@ class SyncAPI(QtCore.QObject):
                 self.clear_queue()  # Clear queue as operations are "processed" (failed)
                 return results
 
-            headers = self._fetch_headers(service, col_count)
+            # Fetch header row using shared service helper
+            headers = service_fetch_headers()
             if not headers:
                 logging.error('Remote sheet has no header row. Cannot proceed with commit.')
                 for op in self._queue:
@@ -317,21 +327,6 @@ class SyncAPI(QtCore.QObject):
         )
         self.commitFinished.emit(result if result is not None else {})
 
-    def _get_parsed_mapping(self, key: str) -> List[str]:
-        """Get and cache parsed mapping specification for a logical key.
-
-        Args:
-            key: Logical field name (e.g., 'date', 'description') to retrieve mapping for.
-
-        Returns:
-            List[str]: A list of actual column names parsed from the mapping specification.
-                       Returns an empty list if the key is not found or mapping is empty.
-        """
-        if key not in self._parsed_mapping:
-            raw_spec = lib.settings.get_section('mapping').get(key, '')
-            self._parsed_mapping[key] = parse_merge_mapping(raw_spec)
-        return self._parsed_mapping[key]
-
     def _get_local_stable_keys(self, row: Dict[str, Any]) -> Dict[str, Tuple[Any, ...]]:
         """Extract stable key tuples from a local row dictionary.
 
@@ -349,26 +344,20 @@ class SyncAPI(QtCore.QObject):
         """
         keys: Dict[str, Tuple[Any, ...]] = {}
         # Core stable keys: date, amount, description
-        for logical_key_name in ('date', 'amount', 'description'):
-            candidate_col_names = self._get_parsed_mapping(logical_key_name)
-            present_col_names = [c for c in candidate_col_names if c in row]
-            if not present_col_names:
-                # If the logical key is essential (e.g., part of composite key) and not found, it's an issue.
-                # This error is raised if a mapping exists but none of its target columns are in the row.
+        headers_list = lib.settings.get_section('headers')
+        role_map = {item['role']: item['name'] for item in headers_list}
+        for logical_key_name in (HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Description.value):
+            col_name = role_map.get(logical_key_name)
+            if col_name is None or col_name not in row:
                 raise ValueError(
-                    f'Mapping for stable key "{logical_key_name}" references no column present in the local row.'
+                    f'Header role "{logical_key_name}" not found in local row for stable key lookup.'
                 )
-            keys[logical_key_name] = tuple(row[c] for c in present_col_names)
+            keys[logical_key_name] = (row[col_name],)
 
-        # Optional 'id' stable key
-        id_aliases = {'id', '#', 'number', 'num'}
-        # Check local row's actual column names for an ID alias
-        id_column_in_row = next(
-            (k for k in row.keys() if k.strip().lower() in id_aliases),
-            None,
-        )
-        if id_column_in_row:
-            keys['id'] = (row[id_column_in_row],)  # ID is a single-tuple value
+        # Optional 'id' stable key if configured
+        id_col = role_map.get(HeaderRole.Id.value)
+        if id_col and id_col in row:
+            keys[HeaderRole.Id.value] = (row[id_col],)
         return keys
 
     def _get_original_value(self, row: Dict[str, Any], column_logical_name: str) -> Any:
@@ -385,50 +374,13 @@ class SyncAPI(QtCore.QObject):
             Any: The original value. Returns `None` if the column (after mapping)
                  is not found in the row.
         """
-        mapping_conf = lib.settings.get_section('mapping')
-        # If column_logical_name is in mapping, use its spec; otherwise, use column_logical_name itself as spec
-        raw_spec = mapping_conf.get(column_logical_name, column_logical_name)
-        candidate_col_names = parse_merge_mapping(raw_spec)
-
-        # Find the first candidate column that exists in the local row
-        actual_col_in_row = next((c for c in candidate_col_names if c in row), None)
-
-        return row.get(actual_col_in_row) if actual_col_in_row else row.get(column_logical_name)
-
-    def _fetch_headers(self, service: Any, col_count: int) -> List[str]:
-        """Fetch the header row from the remote sheet.
-
-        Args:
-            service: Authorized Google Sheets API service instance.
-            col_count: Total number of columns in the sheet.
-
-        Returns:
-            List[str]: A list of header strings. Returns empty list if headers can't be fetched.
-        """
-        if col_count == 0:
-            return []
-        last_col_letter = idx_to_col(col_count - 1)
-        header_range = f'{self.worksheet}!A1:{last_col_letter}1'
-        logging.debug(f'Fetching remote headers from range: {header_range}')
-        try:
-            batch_get_result = service.spreadsheets().values().batchGet(
-                spreadsheetId=self.sheet_id,
-                ranges=[header_range],
-                valueRenderOption='UNFORMATTED_VALUE',  # Get raw values
-                fields='valueRanges(values)',
-            ).execute()
-        except HttpError as e:
-            logging.error(f'HttpError fetching headers: {e}')
-            return []
-
-        value_ranges = batch_get_result.get('valueRanges', [])
-        if value_ranges and value_ranges[0].get('values'):
-            # Headers are expected to be in the first (and only) row of the first valueRange
-            headers = [str(cell_value) for cell_value in value_ranges[0]['values'][0]]
-            logging.debug(f'Fetched headers: {headers}')
-            return headers
-        logging.warning('No header data found in remote sheet response.')
-        return []
+        # Resolve original value based on header role
+        headers_list = lib.settings.get_section('headers')
+        role_map = {item['role']: item['name'] for item in headers_list}
+        col_name = role_map.get(column_logical_name)
+        if col_name and col_name in row:
+            return row.get(col_name)
+        return row.get(column_logical_name)
 
     def _determine_stable_fields(self, remote_headers: List[str]) -> List[str]:
         """Determine logical stable fields to use based on remote headers.
@@ -499,16 +451,17 @@ class SyncAPI(QtCore.QObject):
                 # This should be caught by _determine_stable_fields logic path, but defensive check
                 raise ValueError('Logical stable field is "id", but no matching ID column found in remote headers.')
             header_map['id'] = [actual_id_header]
-        else:  # Handling for composite keys like 'date', 'amount', 'description'
+        else:  # Handling for composite keys
+            # Map each logical stable field to its configured header name
+            headers_list = lib.settings.get_section('headers')
+            role_map = {item['role']: item['name'] for item in headers_list}
             for logical_field in logical_stable_fields:
-                candidate_col_names = self._get_parsed_mapping(logical_field)
-                present_headers = [c for c in candidate_col_names if c in remote_headers]
-                if not present_headers:
+                actual_header = role_map.get(logical_field)
+                if not actual_header or actual_header not in remote_headers:
                     raise ValueError(
-                        f'Mapping for stable key "{logical_field}" references no valid remote header. '
-                        f'Candidates: {candidate_col_names}, Remote Headers: {remote_headers}'
+                        f'Logical stable field "{logical_field}" not found in remote headers: {remote_headers}'
                     )
-                header_map[logical_field] = present_headers
+                header_map[logical_field] = [actual_header]
         return header_map
 
     def _fetch_stable_data(
@@ -755,25 +708,34 @@ class SyncAPI(QtCore.QObject):
             Dict[str, Any]: Request body dictionary for `batchUpdate`.
         """
         update_data_list: List[Dict[str, Any]] = []
+        from ..settings import lib  # needed for role_map
+        headers_list = lib.settings.get_section('headers')
+        # Build role->names map to detect ambiguous multi-mapping for non-singleton roles
+        role_to_names: Dict[str, List[str]] = {}
+        for item in headers_list:
+            role_to_names.setdefault(item['role'], []).append(item['name'])
         for op, sheet_row_num in to_update:
-            candidate_col_names = self._get_parsed_mapping(op.column)  # op.column is logical name
-            # Find the first candidate that is an actual remote header
-            actual_header_to_update = next(
-                (c for c in candidate_col_names if c in header_to_idx),
-                None
-            )
-            if not actual_header_to_update:
-                # This should ideally not happen if _verify_mapping and other checks passed
+            # op.column is logical role; ensure exactly one header defined
+            names = role_to_names.get(op.column, [])
+            if not names:
                 raise ValueError(
-                    f'Mapping for column "{op.column}" (candidates: {candidate_col_names}) '
-                    f'references no valid remote header among {list(header_to_idx.keys())}.'
+                    f'Header role "{op.column}" not found among configured headers.'
                 )
-
+            if len(names) > 1:
+                raise ValueError(
+                    f'Ambiguous header mapping for role "{op.column}": multiple headers {names}. Cannot determine which to update.'
+                )
+            actual_header_to_update = names[0]
+            if actual_header_to_update not in header_to_idx:
+                raise ValueError(
+                    f'Actual header "{actual_header_to_update}" for role "{op.column}" not present in remote headers.'
+                )
+            # Determine column index and build update entry
             target_col_idx = header_to_idx[actual_header_to_update]
             target_col_letter = idx_to_col(target_col_idx)
             update_data_list.append({
                 'range': f'{self.worksheet}!{target_col_letter}{sheet_row_num}',
-                'values': [[op.new_value]],  # Value must be in a list of lists
+                'values': [[op.new_value]],
             })
         return {'valueInputOption': 'USER_ENTERED', 'data': update_data_list}
 
@@ -794,28 +756,26 @@ class SyncAPI(QtCore.QObject):
         """
         logging.debug(f'Applying {len(successfully_updated_ops)} updates to local cache.')
 
-        candidate_col_names = []
-
+        from ..settings import lib
+        headers_list = lib.settings.get_section('headers')
+        role_map = {item['role']: item['name'] for item in headers_list}
         for op, _ in successfully_updated_ops:
             try:
-                candidate_col_names = self._get_parsed_mapping(op.column)
-                # Determine the actual database column name. This should be the remote header
-                # that was effectively updated.
-                db_column_name = next(
-                    c for c in candidate_col_names if c in header_to_idx
-                )  # This must succeed if _build_update_payload succeeded for this op.
-
+                # op.column is logical role, so find the header name
+                db_column_name = role_map.get(op.column)
+                if not db_column_name:
+                    raise KeyError(f'Header role "{op.column}" not found for local cache update')
+                # Perform the local cache update
                 DatabaseAPI.update_cell(op.local_id, db_column_name, op.new_value)
                 logging.debug(f'Local cache updated for id {op.local_id}, column "{db_column_name}".')
             except StopIteration:  # Should not happen if logic is consistent
                 logging.error(
-                    f'Critical error: Could not find DB column for op ({op.local_id}, {op.column}) '
-                    f'after successful remote update. Candidates: {candidate_col_names}, Headers: {list(header_to_idx.keys())}. '
-                    f'Local cache for this cell may be inconsistent.'
+                    f'Critical error: Could not update local cache for op ({op.local_id}, {op.column}).'
                 )
             except Exception:  # Catch other DB exceptions
                 logging.exception(
-                    f'Failed to update local cache for id {op.local_id}, column derived from "{op.column}".')
+                    f'Failed to update local cache for id {op.local_id}, column "{op.column}".'
+                )
 
 
 sync = SyncAPI()
