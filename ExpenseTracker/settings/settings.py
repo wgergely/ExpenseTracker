@@ -11,7 +11,7 @@ from PySide6 import QtWidgets, QtCore
 
 from .editors import category_editor
 from .editors import client_editor
-from .editors import data_mapping_editor
+# data_mapping_editor is obsolete; mapping section removed
 from .editors import header_editor
 from .editors import metadata_editor
 from .editors import spreadsheet_editor
@@ -50,7 +50,6 @@ class SettingsWidget(QtWidgets.QWidget):
         self.client_editor = None
         self.spreadsheet_editor = None
         self.header_editor = None
-        self.data_mapping_editor = None
         self.category_editor = None
         self.metadata_editor = None
 
@@ -145,13 +144,7 @@ class SettingsWidget(QtWidgets.QWidget):
             self.header_editor
         )
 
-        self.data_mapping_editor = data_mapping_editor.DataMappingEditor(self)
-        self._add_section(
-            'Column Roles',
-            'Define which spreadsheet column should be used for which data role.',
-            parent,
-            self.data_mapping_editor
-        )
+        # Mapping editor removed; role assignments now part of headers configuration
 
         self.category_editor = category_editor.CategoryEditor(self)
         self._add_section(
