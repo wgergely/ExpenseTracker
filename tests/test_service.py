@@ -149,6 +149,20 @@ class ServiceHelpersTest(ServiceTestBase):
         # verify_sheet_access wrapper
         svc.verify_sheet_access(5)
 
+    def test_idx_to_col_ranges(self):
+        # Single letters
+        self.assertEqual(svc.idx_to_col(0), 'A')
+        self.assertEqual(svc.idx_to_col(25), 'Z')
+        # Double letters
+        self.assertEqual(svc.idx_to_col(26), 'AA')
+        self.assertEqual(svc.idx_to_col(27), 'AB')
+        self.assertEqual(svc.idx_to_col(51), 'AZ')
+        self.assertEqual(svc.idx_to_col(52), 'BA')
+        self.assertEqual(svc.idx_to_col(701), 'ZZ')
+        # Triple letters
+        self.assertEqual(svc.idx_to_col(702), 'AAA')
+        self.assertEqual(svc.idx_to_col(703), 'AAB')
+
 
 class ServiceContractTest(ServiceTestBase):
     """Exhaustive header/mapping contract validation (incl. merge‑mapping)."""
