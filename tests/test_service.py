@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from ExpenseTracker.core import service as svc
 from ExpenseTracker.settings import lib
+from ExpenseTracker.settings.lib import HeaderRole
 from tests.base import BaseServiceTestCase
 
 
@@ -37,8 +38,13 @@ class ServiceTestBase(BaseServiceTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        lib.settings.set_section('header', self.GOOD_HEADER)
-        lib.settings.set_section('mapping', self.GOOD_MAPPING)
+        # Configure unified headers list combining type info and roles
+        headers_list = []
+        for name, type_str in self.GOOD_HEADER.items():
+            # assign role if in GOOD_MAPPING, else unmapped
+            role = next((r for r, n in self.GOOD_MAPPING.items() if n == name), HeaderRole.Unmapped.value)
+            headers_list.append({'name': name, 'type': type_str, 'role': role})
+        lib.settings.set_section('headers', headers_list)
 
         cfg = lib.settings.get_section('spreadsheet')
         self.sheet_id, self.sheet_name = cfg['id'], cfg['worksheet']
@@ -103,6 +109,46 @@ class ServiceHelpersTest(ServiceTestBase):
         self._populate_header_and_rows(rows)
         self.assertEqual(svc._fetch_categories(), ['a‑cat', 'b‑cat'])
 
+    def test_convert_types(self):
+        # None cell -> string
+        self.assertEqual(svc._convert_types(None), 'string')
+        # Date formats
+        cell_date = {'userEnteredFormat': {'numberFormat': {'type': 'DATE'}}}
+        self.assertEqual(svc._convert_types(cell_date), 'date')
+        # Integer numbers
+        cell_int = {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER'}}, 'effectiveValue': {'numberValue': 5.0}}
+        self.assertEqual(svc._convert_types(cell_int), 'int')
+        # Float numbers
+        cell_float = {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER'}}, 'effectiveValue': {'numberValue': 5.5}}
+        self.assertEqual(svc._convert_types(cell_float), 'float')
+        # Non-numeric and other types default to string
+        cell_other = {'userEnteredFormat': {'numberFormat': {'type': 'UNKNOWN'}}}
+        self.assertEqual(svc._convert_types(cell_other), 'string')
+    def test_query_sheet_size(self):
+        # Populate header and two rows: total rows=3 (including header)
+        rows = [['2021-01-01', 'Desc', 'Cat', '', 'Acc', 1.0, 'N'] for _ in range(2)]
+        self._populate_header_and_rows(rows)
+        service = svc.get_service()
+        # Should return row_count including header and data rows, and column_count equal to headers
+        row_count, col_count = svc._query_sheet_size(service, self.sheet_id, self.sheet_name)
+        self.assertEqual(row_count, 3)
+        self.assertEqual(col_count, len(self.headers))
+    def test_async_wrappers(self):
+        # fetch_headers should mirror _fetch_headers
+        self._populate_header()
+        self.assertEqual(svc.fetch_headers(5), self.headers)
+        # verify_headers should not raise
+        svc.verify_headers(5)
+        # verify_mapping should not raise
+        svc.verify_mapping(5)
+        # fetch_categories should mirror _fetch_categories
+        rows = [['2021-01-01', 'Desc', 'CatA', '', 'Acc', 2.0, '']
+                for _ in range(1)]
+        self._populate_header_and_rows(rows)
+        self.assertEqual(svc.fetch_categories(5), ['CatA'])
+        # verify_sheet_access wrapper
+        svc.verify_sheet_access(5)
+
 
 class ServiceContractTest(ServiceTestBase):
     """Exhaustive header/mapping contract validation (incl. merge‑mapping)."""
@@ -122,77 +168,68 @@ class ServiceContractTest(ServiceTestBase):
         self._populate_header(dup)
         self.assertTrue(set(self.headers).issubset(svc._verify_headers()))
 
-    def testverify_mapping_success(self):
+    def test_verify_mapping_success(self):
         self._populate_header()
         svc._verify_mapping()
 
-    def _install_mapping(self, mapping: Dict[str, str]):
-        lib.settings.set_section('mapping', mapping)
-
-    def testverify_mapping_missing_date_key(self):
-        # Missing required mapping key should be rejected by settings
-        mapping = dict(self.GOOD_MAPPING)
-        mapping.pop('date')
-        with self.assertRaises(ValueError):
-            self._install_mapping(mapping)
-
-    def testverify_mapping_missing_amount_key(self):
-        # Missing required mapping key should be rejected by settings
-        mapping = dict(self.GOOD_MAPPING)
-        mapping.pop('amount')
-        with self.assertRaises(ValueError):
-            self._install_mapping(mapping)
-
-    def testverify_mapping_missing_account_key(self):
-        # Missing required mapping key should be rejected by settings
-        mapping = dict(self.GOOD_MAPPING)
-        mapping.pop('account')
-        with self.assertRaises(ValueError):
-            self._install_mapping(mapping)
-
-    def testverify_mapping_unknown_column_reference(self):
-        bad_map = {**self.GOOD_MAPPING, 'account': 'NonExistent'}
-        self._install_mapping(bad_map)
+    # New header-based mapping tests: missing singleton roles and wrong types
+    def test_verify_mapping_missing_date(self):
+        # Remove 'date' role entry
+        headers = lib.settings.get_section('headers')
+        headers = [h for h in headers if h['role'] != HeaderRole.Date.value]
+        lib.settings.set_section('headers', headers)
         self._populate_header()
         with self.assertRaises(svc.status.HeaderMappingInvalidException):
             svc._verify_mapping()
 
-    def testverify_mapping_wrong_amount_type(self):
-        bad_header = {**self.GOOD_HEADER, 'Amount': 'string'}
-        lib.settings.set_section('header', bad_header)
-        self._populate_header(list(bad_header.keys()))
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
-
-    def test_merge_mapping_on_description_success(self):
-        # Only 'description' may map to multiple columns
-        merge_map = dict(self.GOOD_MAPPING)
-        merge_map['description'] = 'Description|Notes'
-        self._install_mapping(merge_map)
-        self._populate_header()
-        svc._verify_mapping()
-
-    def test_merge_mapping_on_description_missing_remote_column(self):
-        merge_map = dict(self.GOOD_MAPPING)
-        merge_map['description'] = 'Description|NonExistent'
-        self._install_mapping(merge_map)
+    def test_verify_mapping_missing_amount(self):
+        # Remove 'amount' role entry
+        headers = lib.settings.get_section('headers')
+        headers = [h for h in headers if h['role'] != HeaderRole.Amount.value]
+        lib.settings.set_section('headers', headers)
         self._populate_header()
         with self.assertRaises(svc.status.HeaderMappingInvalidException):
             svc._verify_mapping()
 
-    def test_merge_mapping_on_other_key_disallowed(self):
-        # Multi-mapping on any key other than 'description' should be rejected by settings
-        bad_map = dict(self.GOOD_MAPPING)
-        bad_map['category'] = 'Category|SubCategory'
-        with self.assertRaises(ValueError):
-            self._install_mapping(bad_map)
+    def test_verify_mapping_missing_account(self):
+        # Remove 'account' role entry
+        headers = lib.settings.get_section('headers')
+        headers = [h for h in headers if h['role'] != HeaderRole.Account.value]
+        lib.settings.set_section('headers', headers)
+        self._populate_header()
+        with self.assertRaises(svc.status.HeaderMappingInvalidException):
+            svc._verify_mapping()
 
-    def test_mapping_duplicate_values_disallowed(self):
-        # Mapping must not contain extra keys or duplicate references
-        dup_map = dict(self.GOOD_MAPPING)
-        dup_map['amount_copy'] = 'Amount'
-        with self.assertRaises(ValueError):
-            self._install_mapping(dup_map)
+    def test_verify_mapping_wrong_date_type(self):
+        # Change 'date' header to wrong type
+        headers = lib.settings.get_section('headers')
+        for h in headers:
+            if h['role'] == HeaderRole.Date.value:
+                h['type'] = 'string'
+        lib.settings.set_section('headers', headers)
+        self._populate_header()
+        with self.assertRaises(svc.status.HeaderMappingInvalidException):
+            svc._verify_mapping()
+
+    def test_verify_mapping_wrong_amount_type(self):
+        # Change 'amount' header to wrong type
+        headers = lib.settings.get_section('headers')
+        for h in headers:
+            if h['role'] == HeaderRole.Amount.value:
+                h['type'] = 'string'
+        lib.settings.set_section('headers', headers)
+        self._populate_header()
+        with self.assertRaises(svc.status.HeaderMappingInvalidException):
+            svc._verify_mapping()
+
+    def test_verify_headers_extra_configured(self):
+        # Add a configured header not present in the remote sheet
+        self._populate_header()
+        headers = lib.settings.get_section('headers')
+        headers.append({'name': 'ExtraCol', 'type': 'string', 'role': HeaderRole.Unmapped.value})
+        lib.settings.set_section('headers', headers)
+        with self.assertRaises(svc.status.HeadersInvalidException):
+            svc._verify_headers()
 
 
 class ServiceDataIntegrityTest(ServiceTestBase):
@@ -213,7 +250,8 @@ class ServiceDataIntegrityTest(ServiceTestBase):
 
     def test_fetch_categories_no_data_raises(self):
         self._populate_header()
-        with self.assertRaises(svc.status.UnknownException):
+        # No data rows beyond header should raise SpreadsheetEmptyException
+        with self.assertRaises(svc.status.SpreadsheetEmptyException):
             svc._fetch_categories()
 
     def test_fetch_data_with_missing_and_mixed_values(self):
