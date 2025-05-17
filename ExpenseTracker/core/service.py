@@ -514,15 +514,15 @@ def _fetch_data(
     if not spreadsheet_id:
         raise status.SpreadsheetIdNotConfiguredException
 
-    worksheet_name: Optional[str] = config.get('worksheet', None)
-    if not worksheet_name:
+    sheet_name: Optional[str] = config.get('sheet', None)
+    if not sheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
 
     service: Any = _verify_sheet_access()
 
-    row_count, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
+    row_count, col_count = _query_sheet_size(service, spreadsheet_id, sheet_name)
     if row_count < 2:
-        logging.warning(f'No data rows found in "{worksheet_name}".')
+        logging.warning(f'No data rows found in "{sheet_name}".')
         return pd.DataFrame()
 
     last_col: str = idx_to_col(col_count - 1)
@@ -530,7 +530,7 @@ def _fetch_data(
     data_start: int = 1
     while data_start <= row_count:
         data_end: int = min(data_start + BATCH_SIZE - 1, row_count)
-        data_ranges.append(f'{worksheet_name}!A{data_start}:{last_col}{data_end}')
+        data_ranges.append(f'{sheet_name}!A{data_start}:{last_col}{data_end}')
         data_start = data_end + 1
 
     logging.debug(f'Fetching data rows 1-{row_count} in batches.')
@@ -551,7 +551,7 @@ def _fetch_data(
     header: List[Any] = data_rows.pop(0) if data_rows else []
     df: pd.DataFrame = pd.DataFrame(data_rows, columns=header)
 
-    logging.debug(f'Constructed DataFrame: {df.shape[0]} rows x {df.shape[1]} columns from sheet "{worksheet_name}".')
+    logging.debug(f'Constructed DataFrame: {df.shape[0]} rows x {df.shape[1]} columns from sheet "{sheet_name}".')
 
     _verify_mapping()
     _verify_headers(remote_headers=header)
@@ -590,15 +590,15 @@ def _fetch_headers(
     if not spreadsheet_id:
         raise status.SpreadsheetIdNotConfiguredException
 
-    worksheet_name: Optional[str] = config.get('worksheet', None)
-    if not worksheet_name:
+    sheet_name: Optional[str] = config.get('sheet', None)
+    if not sheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
 
     service: Any = _verify_sheet_access()
 
-    _, col_count = _query_sheet_size(service, spreadsheet_id, worksheet_name)
+    _, col_count = _query_sheet_size(service, spreadsheet_id, sheet_name)
     end_col: str = idx_to_col(col_count - 1)
-    range_ = f'{worksheet_name}!A1:{end_col}1'
+    range_ = f'{sheet_name}!A1:{end_col}1'
 
     logging.debug(f'Fetching headers from range "{range_}".')
     batch_result: Dict[str, Any] = service.spreadsheets().values().batchGet(
