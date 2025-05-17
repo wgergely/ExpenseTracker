@@ -733,6 +733,9 @@ class SettingsAPI(ConfigPaths):
         Raises:
             KeyError: If section_name is not in ledger_data.
         """
+        # Aliases support: 'header' → 'headers'
+        if section_name == 'header':
+            section_name = 'headers'
         if section_name == 'client_secret':
             return self.client_secret_data.copy()
 
@@ -750,6 +753,9 @@ class SettingsAPI(ConfigPaths):
             TypeError: If new_data type is invalid for the metadata section.
             ValueError: If required metadata keys are missing or section_name is unrecognized.
         """
+        # Support legacy 'header' alias
+        if section_name == 'header':
+            section_name = 'headers'
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
@@ -819,6 +825,9 @@ class SettingsAPI(ConfigPaths):
             JSONDecodeError: If parsing ledger.json fails.
             status.LedgerConfigInvalidException: If reloaded data fails validation.
         """
+        # Support legacy 'header' alias
+        if section_name == 'header':
+            section_name = 'headers'
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
@@ -853,6 +862,9 @@ class SettingsAPI(ConfigPaths):
         Raises:
             ValueError: If section_name is invalid or not present in the template.
         """
+        # Support legacy 'header' alias
+        if section_name == 'header':
+            section_name = 'headers'
         from ..ui.actions import signals
 
         if section_name == 'client_secret':
@@ -891,6 +903,9 @@ class SettingsAPI(ConfigPaths):
             ValueError: If section_name is not recognized.
             Exception: For I/O or validation errors when writing to file.
         """
+        # Support legacy 'header' alias
+        if section_name == 'header':
+            section_name = 'headers'
 
         if section_name == 'client_secret':
             logging.debug(f'Saving client_secret to "{self.client_secret_path}"')
