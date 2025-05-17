@@ -76,13 +76,9 @@ class SyncAPI(QtCore.QObject):
 
     @property
     def worksheet(self) -> str:
-        """Worksheet name from settings.
-
-        Returns:
-            The name of the worksheet (tab) within the spreadsheet.
-        """
+        """Worksheet name from settings.  Returns the name of the worksheet (tab) within the spreadsheet."""
         config = lib.settings.get_section('spreadsheet')
-        return config.get('worksheet', '')
+        return config.get('sheet', '')
 
     def queue_edit(self, local_id: int, column: str, new_value: Any) -> None:
         """Add an edit to the queue, recording original and stable key values.
@@ -625,7 +621,7 @@ class SyncAPI(QtCore.QObject):
                 A list of tuples, each containing an `EditOperation` that matched uniquely
                 (or was disambiguated) and its corresponding 1-based sheet row number.
         """
-        to_update: List[Tuple<EditOperation, int]] = []
+        to_update: List[Tuple[EditOperation, int]] = []
         for op in self._queue:
             # Construct the key for this operation using its stored stable_keys,
             # ordered by logical_stable_fields.
@@ -666,7 +662,7 @@ class SyncAPI(QtCore.QObject):
 
     def _build_update_payload(
             self,
-            to_update: List[Tuple<EditOperation, int]],  # (EditOperation, 1-based_sheet_row_number)
+            to_update: List[Tuple[EditOperation, int]],  # (EditOperation, 1-based_sheet_row_number)
             header_to_idx: Dict[str, int],  # Actual remote header -> column index
     ) -> Dict[str, Any]:
         """Construct the request body for Google Sheets API `batchUpdate` values.
@@ -715,7 +711,7 @@ class SyncAPI(QtCore.QObject):
 
     def _apply_local_updates(
             self,
-            successfully_updated_ops: List[Tuple<EditOperation, int]],  # (EditOperation, sheet_row_number)
+            successfully_updated_ops: List[Tuple[EditOperation, int]],  # (EditOperation, sheet_row_number)
             header_to_idx: Dict[str, int],  # Actual remote header -> column index
     ) -> None:
         """Update the local cache database for successfully committed edits.
