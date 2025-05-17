@@ -278,7 +278,7 @@ class DatabaseAPI(QtCore.QObject):
 
                 config = lib.settings.get_section('spreadsheet')
                 cfg_id = config.get('id', '')
-                cfg_sheet = config.get('worksheet', '')
+                cfg_sheet = config.get('sheet', '')
 
                 conn.execute(
                     f"""INSERT INTO {Table.Meta.value} (meta_id, state, last_sync, spreadsheet_id, sheet) VALUES (1, ?, ?, ?, ?)""",
@@ -417,7 +417,7 @@ class DatabaseAPI(QtCore.QObject):
             db_id, db_sheet, last_sync_raw = meta_row
             config = lib.settings.get_section('spreadsheet')
             cfg_id = config.get('id', '')
-            cfg_sheet = config.get('worksheet', '')
+            cfg_sheet = config.get('sheet', '')
 
             if db_id != cfg_id or db_sheet != cfg_sheet:
                 logging.debug(
@@ -564,7 +564,7 @@ class DatabaseAPI(QtCore.QObject):
             # Update last sync timestamp and identifiers
             config = lib.settings.get_section('spreadsheet')
             spreadsheet_id = config.get('id', '')
-            sheet = config.get('worksheet', '')
+            sheet = config.get('sheet', '')
             conn.execute(
                 f"""UPDATE {Table.Meta.value} SET last_sync=?, spreadsheet_id=?, sheet=? WHERE meta_id=1""",
                 (now_str(), spreadsheet_id, sheet)
@@ -786,7 +786,7 @@ class DatabaseAPI(QtCore.QObject):
             )
             logging.debug(f'Dropped existing table: "{Table.Transactions.value}".')
 
-            # Enforce unified 'headers' list
+            # Enforce unified 'headers' list (supports legacy dict or list-of-dicts)
             headers_list = lib.settings.get_section('headers')
             if not headers_list:
                 cls.set_state(CacheState.Error)
@@ -794,7 +794,11 @@ class DatabaseAPI(QtCore.QObject):
                 raise status.HeadersInvalidException(
                     'Cannot cache data: No headers configured.'
                 )
-            config_column_names = [item['name'] for item in headers_list]
+            # Determine column names
+            if isinstance(headers_list, dict):
+                config_column_names = list(headers_list.keys())
+            else:
+                config_column_names = [item['name'] for item in headers_list]
 
             if df.empty:
                 empty_cols_sql = ['"local_id" INTEGER PRIMARY KEY AUTOINCREMENT'] + [
