@@ -127,14 +127,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
             logging.warning('No data found in the spreadsheet section.')
 
         for k in data.keys():
-            # Map 'sheet' key to sheet_editor
-            editor = None
-            if k == 'id':
-                editor = self.id_editor
-            elif k == 'sheet':
-                editor = self.sheet_editor
-            else:
-                editor = getattr(self, f'{k}_editor', None)
+            editor = getattr(self, f'{k}_editor', None)
             if not editor:
                 logging.warning(f'Editor for "{k}" not found.')
                 continue
