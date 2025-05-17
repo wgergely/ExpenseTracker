@@ -1,4 +1,3 @@
-# tests/test_settings.py
 """
 Comprehensive unit‑tests for ExpenseTracker.settings.lib
 (covers helpers, validators, ConfigPaths, and SettingsAPI).
@@ -22,17 +21,12 @@ from ExpenseTracker.settings.lib import (
     _validate_header,
     is_valid_hex_color,
     parse_merge_mapping,
+    HeaderRole,
+    HeaderType,
 )
 from ExpenseTracker.status import status
-from tests.base import BaseTestCase  # (your helper from the previous messages)
+from tests.base import BaseTestCase  # (your helper from the previous messages)f
 
-HEADER_FIXTURE = {
-    "Date": "date",
-    "Amount": "float",
-    "Description": "string",
-    "Category": "string",
-    "Account": "string",
-}
 META_FIXTURE: Dict[str, Any] = {
     "name": "",
     "description": "",
@@ -69,6 +63,7 @@ def minimal_ledger() -> Dict[str, Any]:
             {"name": "Amount", "role": "amount", "type": "float"},
             {"name": "Account", "role": "account", "type": "string"},
             {"name": "Description", "role": "description", "type": "string"},
+            {"name": "Category", "role": "category", "type": "string"},
         ],
         "metadata": META_FIXTURE.copy(),
         "categories": {
@@ -103,39 +98,67 @@ class ValidatorTests(unittest.TestCase):
     def test_validate_header_list_good(self):
         # Contains all singleton roles exactly once
         headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "DateCol", "role": "date", "type": "date"},
-            {"name": "AmountCol", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
-            {"name": "DescCol", "role": "description", "type": "string"},
-            {"name": "NotesCol", "role": "notes", "type": "string"},
-            {"name": "CatCol", "role": "category", "type": "string"},
+            {"name": "IdCol", "role": HeaderRole.Id.value, "type": HeaderType.Int.value},
+            {"name": "DateCol", "role": HeaderRole.Date.value, "type": HeaderType.Date.value},
+            {"name": "AmountCol", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "AccountCol", "role": HeaderRole.Account.value, "type": HeaderType.String.value},
+            {"name": "DescCol", "role": HeaderRole.Description.value, "type": HeaderType.String.value},
+            {"name": "NotesCol", "role": HeaderRole.Notes.value, "type": HeaderType.String.value},
+            {"name": "CatCol", "role": HeaderRole.Category.value, "type": HeaderType.String.value},
         ]
         _validate_header(headers)  # should not raise
 
     def test_validate_header_missing_singleton(self):
         # Missing date role
         headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "AmountCol", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
+            {"name": "IdCol", "role": HeaderRole.Id.value, "type": HeaderType.Int.value},
+            {"name": "AmountCol", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "AccountCol", "role": HeaderRole.Account.value, "type": HeaderType.String.value},
         ]
         with self.assertRaises(Exception) as cm:
             _validate_header(headers)
-        self.assertIn("Role \"date\" must be mapped to exactly one header", str(cm.exception))
+        self.assertIn(f'Role "{HeaderRole.Date.value}" must be mapped to exactly one header', str(cm.exception))
 
     def test_validate_header_duplicate_singleton(self):
         # Duplicate amount role
         headers = [
-            {"name": "IdCol", "role": "id", "type": "int"},
-            {"name": "DateCol", "role": "date", "type": "date"},
-            {"name": "Amount1", "role": "amount", "type": "float"},
-            {"name": "Amount2", "role": "amount", "type": "float"},
-            {"name": "AccountCol", "role": "account", "type": "string"},
+            {"name": "IdCol", "role": HeaderRole.Id.value, "type": HeaderType.Int.value},
+            {"name": "DateCol", "role": HeaderRole.Date.value, "type": HeaderType.Date.value},
+            {"name": "Amount1", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "Amount2", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "AccountCol", "role": HeaderRole.Account.value, "type": HeaderType.String.value},
         ]
         with self.assertRaises(Exception) as cm:
             _validate_header(headers)
-        self.assertIn("Role \"amount\" must be mapped to exactly one header", str(cm.exception))
+        self.assertIn(f'Role "{HeaderRole.Amount.value}" must be mapped to exactly one header', str(cm.exception))
+
+    def test_validate_header_missing_category(self):
+        # Missing category role
+        headers = [
+            {"name": "IdCol", "role": HeaderRole.Id.value, "type": HeaderType.Int.value},
+            {"name": "DateCol", "role": HeaderRole.Date.value, "type": HeaderType.Date.value},
+            {"name": "AmountCol", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "AccountCol", "role": HeaderRole.Account.value, "type": HeaderType.String.value},
+            {"name": "DescCol", "role": HeaderRole.Description.value, "type": HeaderType.String.value},
+        ]
+        with self.assertRaises(Exception) as cm:
+            _validate_header(headers)
+        self.assertIn(f'Role "{HeaderRole.Category.value}" must be mapped to exactly one header', str(cm.exception))
+
+    def test_validate_header_duplicate_category(self):
+        # Duplicate category role
+        headers = [
+            {"name": "IdCol", "role": HeaderRole.Id.value, "type": HeaderType.Int.value},
+            {"name": "DateCol", "role": HeaderRole.Date.value, "type": HeaderType.Date.value},
+            {"name": "AmountCol", "role": HeaderRole.Amount.value, "type": HeaderType.Float.value},
+            {"name": "AccountCol", "role": HeaderRole.Account.value, "type": HeaderType.String.value},
+            {"name": "DescCol", "role": HeaderRole.Description.value, "type": HeaderType.String.value},
+            {"name": "Cat1", "role": HeaderRole.Category.value, "type": HeaderType.String.value},
+            {"name": "Cat2", "role": HeaderRole.Category.value, "type": HeaderType.String.value},
+        ]
+        with self.assertRaises(Exception) as cm:
+            _validate_header(headers)
+        self.assertIn(f'Role "{HeaderRole.Category.value}" must be mapped to exactly one header', str(cm.exception))
 
     def test_validate_header_invalid_structure(self):
         # None input is not a list
@@ -321,7 +344,8 @@ class SettingsAPIBehaviour(BaseTestCase):
     def test_client_secret_revert(self):
         # wipe file and ensure revert restores it
         self.api.client_secret_path.unlink()
-        with self.assertRaises(FileNotFoundError):
+        # Expect a ClientSecretInvalidException when the client secret file is missing
+        with self.assertRaises(status.ClientSecretInvalidException):
             self.api.load_client_secret()
 
         self.api.revert_client_secret_to_template()
