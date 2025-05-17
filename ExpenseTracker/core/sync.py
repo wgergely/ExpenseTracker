@@ -21,6 +21,7 @@ from PySide6 import QtCore
 from googleapiclient.errors import HttpError
 
 from . import database, service
+from ..status import status
 from ..settings import lib
 
 
@@ -228,9 +229,9 @@ class SyncAPI(QtCore.QObject):
                 return results
 
             payload = self._build_update_payload(to_update, header_to_idx)
-            svc.spreadsheets().values().batchUpdate(
-                spreadsheetId=self.sheet_id, body=payload
-            ).execute()
+            # Push batch update via service API helper
+            service.batch_update_values(self.sheet_id, payload)
+
             logging.info(
                 f'Successfully pushed {len(to_update)} edit(s) to remote sheet.'
             )
@@ -239,19 +240,14 @@ class SyncAPI(QtCore.QObject):
                 results[(op.local_id, op.column)] = (True, 'Committed successfully')
 
 
-        except HttpError as ex:
-            status = getattr(ex.resp, 'status', 'Unknown')
-            details = getattr(ex, 'error_details', str(ex))
-            logging.error(
-                f'Batch update HTTPError: status={status} detail={details}'
-            )
-            # Mark all operations that were intended for update as failed due to HttpError
-            # Operations already marked as failed (e.g. no match) should retain their status.
-            for op in self._queue:  # Check all ops in original queue
+        except status.BaseStatusException as ex:
+            # Unified service exceptions (including rate limits) are already logged
+            logging.error(f'Service error during commit: {ex}')
+            # Fail all pending ops
+            for op in self._queue:
                 key = (op.local_id, op.column)
-                if key not in results or results[key][0]:  # If not already failed or was part of to_update
-                    results[key] = (False, f'Sheet API HTTPError: {status}')
-            # It's safer to clear the queue after such a broad error
+                if key not in results or results[key][0]:
+                    results[key] = (False, str(ex))
             self.clear_queue()
             return results
         except ValueError as ve:  # Catch specific ValueErrors from helpers (e.g. mapping issues)
@@ -288,7 +284,8 @@ class SyncAPI(QtCore.QObject):
             return
 
         logging.debug('Starting asynchronous commit_queue')
-        # start_asynchronous is expected to handle the actual threading and error reporting
+        from .service import batch_get_values, batch_update_values
+        # Use same unified handler for sync-level asynchronous commit
         result = service.start_asynchronous(
             self.commit_queue,
             total_timeout=service.TOTAL_TIMEOUT,  # This constant comes from .service
@@ -480,13 +477,13 @@ class SyncAPI(QtCore.QObject):
             return {}
 
         logging.debug(f'Fetching stable data from ranges: {ranges_to_fetch}')
-        batch_get_result = svc.spreadsheets().values().batchGet(
-            spreadsheetId=self.sheet_id,
-            ranges=ranges_to_fetch,
+        # Execute batchGet with unified error handling
+        batch_get_result = service.batch_get_values(
+            self.sheet_id,
+            ranges_to_fetch,
             valueRenderOption='UNFORMATTED_VALUE',  # Get raw, unformatted values
             dateTimeRenderOption='SERIAL_NUMBER',  # Get dates as serial numbers
-            fields='valueRanges(values)',
-        ).execute()
+        )
 
         value_ranges_response = batch_get_result.get('valueRanges', [])
         column_values_map: Dict[Tuple[str, str], List[Any]] = {}
@@ -628,7 +625,7 @@ class SyncAPI(QtCore.QObject):
                 A list of tuples, each containing an `EditOperation` that matched uniquely
                 (or was disambiguated) and its corresponding 1-based sheet row number.
         """
-        to_update: List[Tuple[EditOperation, int]] = []
+        to_update: List[Tuple<EditOperation, int]] = []
         for op in self._queue:
             # Construct the key for this operation using its stored stable_keys,
             # ordered by logical_stable_fields.
@@ -669,7 +666,7 @@ class SyncAPI(QtCore.QObject):
 
     def _build_update_payload(
             self,
-            to_update: List[Tuple[EditOperation, int]],  # (EditOperation, 1-based_sheet_row_number)
+            to_update: List[Tuple<EditOperation, int]],  # (EditOperation, 1-based_sheet_row_number)
             header_to_idx: Dict[str, int],  # Actual remote header -> column index
     ) -> Dict[str, Any]:
         """Construct the request body for Google Sheets API `batchUpdate` values.
@@ -718,7 +715,7 @@ class SyncAPI(QtCore.QObject):
 
     def _apply_local_updates(
             self,
-            successfully_updated_ops: List[Tuple[EditOperation, int]],  # (EditOperation, sheet_row_number)
+            successfully_updated_ops: List[Tuple<EditOperation, int]],  # (EditOperation, sheet_row_number)
             header_to_idx: Dict[str, int],  # Actual remote header -> column index
     ) -> None:
         """Update the local cache database for successfully committed edits.
