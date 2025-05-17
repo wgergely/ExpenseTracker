@@ -254,18 +254,59 @@ class SyncInternalHelperTest(BaseTestCase):
         ]
         lib.settings.set_section('headers', headers_list)
 
-    # _get_parsed_mapping -----------------------------------------------------
-    def test_parsed_mapping_split_and_cache(self):
-        first = self.sync._get_parsed_mapping('description')
-        self.assertEqual(first, ['Description', 'Notes'])
+    # queue_edit should reject roles mapped to multiple headers
+    def test_queue_edit_multi_mapped_role_fails(self):
+        # Stub get_row to return a valid row
+        from ExpenseTracker.core import database as db_mod
+        stub_row = {
+            'ID': 1, 'Date': '2025-01-01', 'Amount': 10.0,
+            'Description': 'Desc', 'Notes': 'Note',
+            'Category': 'Cat', 'Account': 'Acc'
+        }
+        db_mod.database.get_row = lambda local_id: stub_row
 
-        # update mapping but keep required keys so validator passes
-        mapping = lib.settings.get_section('mapping')
-        mapping['description'] = 'X'
-        lib.settings.set_section('mapping', mapping)
+        # Configure headers with multi-mapping for 'description'
+        headers_list = [
+            {'name': 'Date', 'role': HeaderRole.Date.value, 'type': HeaderType.Date.value},
+            {'name': 'Amount', 'role': HeaderRole.Amount.value, 'type': HeaderType.Float.value},
+            {'name': 'Description', 'role': HeaderRole.Description.value, 'type': HeaderType.String.value},
+            {'name': 'Notes', 'role': HeaderRole.Description.value, 'type': HeaderType.String.value},
+            {'name': 'Category', 'role': HeaderRole.Category.value, 'type': HeaderType.String.value},
+            {'name': 'Account', 'role': HeaderRole.Account.value, 'type': HeaderType.String.value},
+        ]
+        lib.settings.set_section('headers', headers_list)
 
-        # cache should still return the original parsed list
-        self.assertIs(first, self.sync._get_parsed_mapping('description'))
+        with self.assertRaises(ValueError):
+            self.sync.queue_edit(1, 'description', 'NewDesc')
+
+    # queue_edit should accept roles mapped to a single header
+    def test_queue_edit_single_mapped_role_succeeds(self):
+        from ExpenseTracker.core import database as db_mod
+        stub_row = {
+            'ID': 2, 'Date': '2025-02-01', 'Amount': 20.0,
+            'Description': 'Orig', 'Category': 'Cat', 'Account': 'Acc'
+        }
+        db_mod.database.get_row = lambda local_id: stub_row
+
+        # Configure headers with single mapping for 'description'
+        headers_list = [
+            {'name': 'Date', 'role': HeaderRole.Date.value, 'type': HeaderType.Date.value},
+            {'name': 'Amount', 'role': HeaderRole.Amount.value, 'type': HeaderType.Float.value},
+            {'name': 'Description', 'role': HeaderRole.Description.value, 'type': HeaderType.String.value},
+            {'name': 'Category', 'role': HeaderRole.Category.value, 'type': HeaderType.String.value},
+            {'name': 'Account', 'role': HeaderRole.Account.value, 'type': HeaderType.String.value},
+        ]
+        lib.settings.set_section('headers', headers_list)
+
+        # Queue an edit for description
+        self.sync.clear_queue()
+        self.sync.queue_edit(2, 'description', 'Updated')
+        ops = self.sync.get_queued_ops()
+        self.assertEqual(len(ops), 1)
+        op = ops[0]
+        self.assertEqual(op.column, 'description')
+        self.assertEqual(op.orig_value, 'Orig')
+        self.assertEqual(op.new_value, 'Updated')
 
     # _get_local_stable_keys --------------------------------------------------
     def test_local_stable_keys_extraction(self):
