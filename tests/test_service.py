@@ -12,39 +12,28 @@ from typing import Any, Dict, List, Optional
 
 from ExpenseTracker.core import service as svc
 from ExpenseTracker.settings import lib
-from ExpenseTracker.settings.lib import HeaderRole
+from ExpenseTracker.settings.lib import HeaderRole, HeaderType
 from tests.base import BaseServiceTestCase
 
 
 class ServiceTestBase(BaseServiceTestCase):
     """Common helpers and canonical valid schema."""
 
-    GOOD_HEADER: Dict[str, str] = {
-        'Date': 'date',
-        'Description': 'string',
-        'Category': 'string',
-        'SubCategory': 'string',  # needed for merge‑mapping tests
-        'Account': 'string',
-        'Amount': 'float',
-        'Notes': 'string',
-    }
-    GOOD_MAPPING: Dict[str, str] = {
-        'date': 'Date',
-        'description': 'Description',
-        'category': 'Category',
-        'account': 'Account',
-        'amount': 'Amount',
-    }
+    # A valid headers list reflecting the current ledger schema
+    GOOD_HEADERS: List[Dict[str, str]] = [
+        {'name': 'ID', 'role': HeaderRole.Id.value, 'type': HeaderType.Int.value},
+        {'name': 'Date', 'role': HeaderRole.Date.value, 'type': HeaderType.Date.value},
+        {'name': 'Description', 'role': HeaderRole.Description.value, 'type': HeaderType.String.value},
+        {'name': 'Notes', 'role': HeaderRole.Notes.value, 'type': HeaderType.String.value},
+        {'name': 'Category', 'role': HeaderRole.Category.value, 'type': HeaderType.String.value},
+        {'name': 'Account', 'role': HeaderRole.Account.value, 'type': HeaderType.String.value},
+        {'name': 'Amount', 'role': HeaderRole.Amount.value, 'type': HeaderType.Float.value},
+    ]
 
     def setUp(self) -> None:
         super().setUp()
-        # Configure unified headers list combining type info and roles
-        headers_list = []
-        for name, type_str in self.GOOD_HEADER.items():
-            # assign role if in GOOD_MAPPING, else unmapped
-            role = next((r for r, n in self.GOOD_MAPPING.items() if n == name), HeaderRole.Unmapped.value)
-            headers_list.append({'name': name, 'type': type_str, 'role': role})
-        lib.settings.set_section('headers', headers_list)
+        # Configure unified headers list matching the ledger schema
+        lib.settings.set_section('headers', self.GOOD_HEADERS)
 
         cfg = lib.settings.get_section('spreadsheet')
         self.sheet_id, self.sheet_name = cfg['id'], cfg['worksheet']
@@ -52,7 +41,7 @@ class ServiceTestBase(BaseServiceTestCase):
 
         self._wipe_remote_sheet()
 
-        self.headers: List[str] = list(self.GOOD_HEADER.keys())
+        self.headers: List[str] = [h['name'] for h in self.GOOD_HEADERS]
 
     def tearDown(self) -> None:
         try:
@@ -188,53 +177,43 @@ class ServiceContractTest(ServiceTestBase):
 
     # New header-based mapping tests: missing singleton roles and wrong types
     def test_verify_mapping_missing_date(self):
-        # Remove 'date' role entry
+        # Removing the 'date' role must be rejected by settings validation
         headers = lib.settings.get_section('headers')
         headers = [h for h in headers if h['role'] != HeaderRole.Date.value]
-        lib.settings.set_section('headers', headers)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(svc.status.LedgerConfigInvalidException):
+            lib.settings.set_section('headers', headers)
 
     def test_verify_mapping_missing_amount(self):
-        # Remove 'amount' role entry
+        # Removing the 'amount' role must be rejected by settings validation
         headers = lib.settings.get_section('headers')
         headers = [h for h in headers if h['role'] != HeaderRole.Amount.value]
-        lib.settings.set_section('headers', headers)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(svc.status.LedgerConfigInvalidException):
+            lib.settings.set_section('headers', headers)
 
     def test_verify_mapping_missing_account(self):
-        # Remove 'account' role entry
+        # Removing the 'account' role must be rejected by settings validation
         headers = lib.settings.get_section('headers')
         headers = [h for h in headers if h['role'] != HeaderRole.Account.value]
-        lib.settings.set_section('headers', headers)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(svc.status.LedgerConfigInvalidException):
+            lib.settings.set_section('headers', headers)
 
     def test_verify_mapping_wrong_date_type(self):
-        # Change 'date' header to wrong type
+        # Assigning the wrong type to the 'date' role must be rejected by settings validation
         headers = lib.settings.get_section('headers')
         for h in headers:
             if h['role'] == HeaderRole.Date.value:
                 h['type'] = 'string'
-        lib.settings.set_section('headers', headers)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(svc.status.LedgerConfigInvalidException):
+            lib.settings.set_section('headers', headers)
 
     def test_verify_mapping_wrong_amount_type(self):
-        # Change 'amount' header to wrong type
+        # Assigning the wrong type to the 'amount' role must be rejected by settings validation
         headers = lib.settings.get_section('headers')
         for h in headers:
             if h['role'] == HeaderRole.Amount.value:
                 h['type'] = 'string'
-        lib.settings.set_section('headers', headers)
-        self._populate_header()
-        with self.assertRaises(svc.status.HeaderMappingInvalidException):
-            svc._verify_mapping()
+        with self.assertRaises(svc.status.LedgerConfigInvalidException):
+            lib.settings.set_section('headers', headers)
 
     def test_verify_headers_extra_configured(self):
         # Add a configured header not present in the remote sheet
