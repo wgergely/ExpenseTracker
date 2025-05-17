@@ -7,6 +7,7 @@ Provides:
     - Constants for column names and data schemas.
 """
 import copy
+import enum
 import json
 import logging
 import pathlib
@@ -14,7 +15,6 @@ import re
 import shutil
 import tempfile
 from typing import Dict, Any, Optional, List
-import enum
 
 from PySide6 import QtCore, QtWidgets
 
@@ -60,6 +60,9 @@ METADATA_KEYS: List[str] = [
     'negative_span',
 ]
 
+CLIENT_ID_KEYS: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
+
+
 class HeaderRole(str, enum.Enum):
     Id = 'id'
     Date = 'date'
@@ -70,11 +73,13 @@ class HeaderRole(str, enum.Enum):
     Account = 'account'
     Unmapped = 'unmapped'
 
+
 class HeaderType(str, enum.Enum):
     String = 'string'
     Int = 'int'
     Float = 'float'
     Date = 'date'
+
 
 LEDGER_SCHEMA: Dict[str, Any] = {
     'spreadsheet': {
@@ -150,7 +155,6 @@ def is_merge_mapped(key: str) -> bool:
     return (len(parse_merge_mapping(key)) > 1)
 
 
-
 def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str, Any]) -> None:
     """Validate the 'categories' section of the ledger configuration.
 
@@ -169,18 +173,22 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
         msg: str = '"categories" must be a dict.'
         logging.error(msg)
         raise TypeError(msg)
+
     for cat_name, cat_info in categories_dict.items():
         if not isinstance(cat_info, dict):
             msg = f'Category "{cat_name}" must be a dict.'
             logging.error(msg)
             raise TypeError(msg)
+
         for field, field_specs in item_schema.items():
             if field_specs['required'] and field not in cat_info:
                 msg = f'Category "{cat_name}" missing "{field}".'
                 logging.error(msg)
                 raise ValueError(msg)
+
             if field not in cat_info:
                 continue
+
             if not isinstance(cat_info[field], field_specs['type']):
                 msg = (
                     f'Category "{cat_name}" field "{field}" must be {field_specs["type"]}, '
@@ -188,6 +196,7 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
                 )
                 logging.error(msg)
                 raise TypeError(msg)
+
             if field_specs.get('format') == 'hexcolor':
                 if not is_valid_hex_color(cat_info[field]):
                     msg = (
@@ -201,56 +210,98 @@ def _validate_categories(categories_dict: Dict[str, Any], item_schema: Dict[str,
 def _validate_header(headers_list: List[Dict[str, Any]]) -> None:
     """Validate the 'headers' section of the ledger configuration."""
     logging.debug('Validating "headers" section.')
+
     if not isinstance(headers_list, list):
         msg = '"headers" must be a list.'
         logging.error(msg)
         raise status.LedgerConfigInvalidException(msg)
+
     # Allow empty headers (template load) without enforcing singleton roles
     if len(headers_list) == 0:
         logging.debug('No headers configured; skipping header validation.')
         return
+
     for idx, item in enumerate(headers_list):
         if not isinstance(item, dict):
             msg = f'Header entry at index {idx} must be an object.'
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
+
         for key in ('name', 'role', 'type'):
             if key not in item:
                 msg = f'Header entry missing "{key}" at index {idx}.'
                 logging.error(msg)
                 raise status.LedgerConfigInvalidException(msg)
+
         if not isinstance(item['name'], str):
             msg = f'Header.name at index {idx} must be a string.'
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
+
         if item['role'] not in [r.value for r in HeaderRole]:
             msg = (
                 f'Header.role at index {idx} must be one of {[r.value for r in HeaderRole]}.')
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
+
         if item['type'] not in [t.value for t in HeaderType]:
             msg = (
                 f'Header.type at index {idx} must be one of {[t.value for t in HeaderType]}.')
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
-    # Enforce singleton roles: date, amount, account must appear exactly once
+
+    # Enforce singleton roles: date, amount, account, category must appear exactly once
     role_counts: Dict[str, int] = {}
     for item in headers_list:
         role = item['role']
         role_counts[role] = role_counts.get(role, 0) + 1
+
     # Required singleton roles
-    for required_role in [HeaderRole.Date.value, HeaderRole.Amount.value, HeaderRole.Account.value]:
+    for required_role in [
+        HeaderRole.Date.value,
+        HeaderRole.Amount.value,
+        HeaderRole.Account.value,
+        HeaderRole.Category.value,
+    ]:
         count = role_counts.get(required_role, 0)
         if count != 1:
             msg = f'Role "{required_role}" must be mapped to exactly one header, found {count}.'
             logging.error(msg)
             raise status.LedgerConfigInvalidException(msg)
+
     # Id role is optional but must not be duplicated
     id_count = role_counts.get(HeaderRole.Id.value, 0)
     if id_count > 1:
         msg = f'Role "{HeaderRole.Id.value}" must be mapped to at most one header, found {id_count}.'
         logging.error(msg)
         raise status.LedgerConfigInvalidException(msg)
+
+    # Enforce type constraints for required singleton roles
+    for item in headers_list:
+        role = item.get('role')
+        typ = item.get('type')
+        name = item.get('name')
+
+        # Date must be a date type
+        if role == HeaderRole.Date.value:
+            if typ != HeaderType.Date.value:
+                msg = f'Date header "{name}" must be type "{HeaderType.Date.value}", got "{typ}".'
+                logging.error(msg)
+                raise status.LedgerConfigInvalidException(msg)
+
+        # Amount must be numeric (int or float)
+        elif role == HeaderRole.Amount.value:
+            if typ not in (HeaderType.Int.value, HeaderType.Float.value):
+                msg = f'Amount header "{name}" must be type "{HeaderType.Int.value}" or "{HeaderType.Float.value}", got "{typ}".'
+                logging.error(msg)
+                raise status.LedgerConfigInvalidException(msg)
+
+        # Category must be a string type
+        elif role == HeaderRole.Category.value:
+            if typ != HeaderType.String.value:
+                msg = f'Category header "{name}" must be type "{HeaderType.String.value}", got "{typ}".'
+                logging.error(msg)
+                raise status.LedgerConfigInvalidException(msg)
 
 
 class ConfigPaths:
@@ -393,9 +444,10 @@ class SettingsAPI(ConfigPaths):
     Provides an interface to get/set/revert/save ledger.json sections and client_secret.json.
     Also supports presets for these files.
     """
-    required_client_secret_keys: List[str] = ['client_id', 'project_id', 'client_secret', 'auth_uri', 'token_uri']
 
-    def __init__(self, ledger_path: Optional[str] = None, client_secret_path: Optional[str] = None) -> None:
+    def __init__(self,
+                 ledger_path: Optional[str] = None,
+                 client_secret_path: Optional[str] = None) -> None:
         """Initialize SettingsAPI and load ledger and client_secret data.
 
         Args:
@@ -421,7 +473,6 @@ class SettingsAPI(ConfigPaths):
         self.client_secret_data: Dict[str, Any] = {}
 
         self._connect_signals()
-
         self.init_data()
 
     def __getitem__(self, key: str) -> Any:
@@ -528,8 +579,17 @@ class SettingsAPI(ConfigPaths):
     @QtCore.Slot()
     def init_data(self) -> None:
         """Reload ledger and client_secret data, emitting UI update signals."""
-        self.load_ledger()
-        self.load_client_secret()
+        try:
+            self.load_ledger()
+            self.load_client_secret()
+        except (
+                status.LedgerConfigNotFoundException,
+                status.LedgerConfigInvalidException,
+                status.ClientSecretInvalidException
+        ) as e:
+            logging.error(f'Failed to load ledger or client_secret data. {e}', exc_info=True)
+
+
 
         from ..ui.actions import signals
         signals.configSectionChanged.emit('client_secret')
@@ -552,18 +612,21 @@ class SettingsAPI(ConfigPaths):
             status.LedgerConfigInvalidException: If JSON parsing or validation fails.
         """
         logging.debug(f'Loading ledger from "{self.ledger_path}"')
+
         if not self.ledger_path.exists():
             raise status.LedgerConfigNotFoundException
 
-        try:
-            with self.ledger_path.open('r', encoding='utf-8') as f:
+        with self.ledger_path.open('r', encoding='utf-8') as f:
+            try:
                 data: Dict[str, Any] = json.load(f)
-            self.ledger_data = data
-            self.validate_ledger_data()
-            return self.ledger_data
+            except json.JSONDecodeError as ex:
+                logging.error(f'Failed to parse ledger.json: {ex}', exc_info=True)
+                data = {}
 
-        except Exception as ex:
-            raise status.LedgerConfigInvalidException from ex
+        self.ledger_data = data
+        self.validate_data()
+
+        return self.ledger_data
 
     def load_client_secret(self) -> Dict[str, Any]:
         """Load client_secret.json from disk and validate required OAuth fields.
@@ -572,14 +635,14 @@ class SettingsAPI(ConfigPaths):
             The loaded client secret data dictionary.
 
         Raises:
-            FileNotFoundError: If client_secret.json file is missing.
-            status.ClientSecretInvalidException: If JSON parsing or required fields are missing.
+            status.ClientSecretInvalidException: if JSON parsing or validation fails.
         """
         logging.debug(f'Loading client_secret from "{self.client_secret_path}"')
+
         if not self.client_secret_path.exists():
             msg: str = f'Client secret file not found: {self.client_secret_path}'
-            logging.error(msg)
-            raise FileNotFoundError(msg)
+            raise status.ClientSecretInvalidException(msg)
+
         try:
             with self.client_secret_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
@@ -606,7 +669,6 @@ class SettingsAPI(ConfigPaths):
             data = self.client_secret_data
 
         # Determine which section to use: prefer 'installed', then 'web'
-
         key = next((k for k in ('installed', 'web') if k in data), None)
         if not key:
             raise status.ClientSecretInvalidException('Missing "installed" or "web" section in client_secret.')
@@ -614,14 +676,14 @@ class SettingsAPI(ConfigPaths):
         logging.debug(f'Found "{key}" section in client_secret.')
 
         config_section: Dict[str, Any] = data[key]
-        missing: List[str] = [k for k in self.required_client_secret_keys if k not in config_section]
+        missing: List[str] = [k for k in CLIENT_ID_KEYS if k not in config_section]
         if missing:
             raise status.ClientSecretInvalidException(
                 f'Missing required fields in the \'{key}\' section: {missing}.'
             )
         return key
 
-    def validate_ledger_data(self, data: Dict[str, Any] = None) -> None:
+    def validate_data(self, data: Dict[str, Any] = None) -> None:
         """Validate ledger data against the defined LEDGER_SCHEMA.
 
         Checks each section for required presence, correct types, and nested schema constraints.
@@ -633,13 +695,13 @@ class SettingsAPI(ConfigPaths):
             RuntimeError: If data is empty.
             status.LedgerConfigInvalidException: If a required section is missing or validation fails.
         """
-        # Use provided data if any, else use loaded ledger_data
         if data is None:
             data = self.ledger_data
-        if not data:
-            raise RuntimeError('Ledger data is empty.')
 
-        logging.debug('Validating ledger data against schema.')
+        if not data:
+            raise status.LedgerConfigInvalidException('Data is empty.')
+
+        logging.debug('Validating data against schema.')
         for field, specs in LEDGER_SCHEMA.items():
             if specs.get('required') and field not in data:
                 msg: str = f'Missing required field: {field}'
@@ -731,7 +793,7 @@ class SettingsAPI(ConfigPaths):
 
         self.ledger_data[section_name] = new_data
         try:
-            self.validate_ledger_data()
+            self.validate_data()
             self.save_section(section_name)
             signals.configSectionChanged.emit(section_name)
 
@@ -773,7 +835,7 @@ class SettingsAPI(ConfigPaths):
         try:
             with self.ledger_path.open('r', encoding='utf-8') as f:
                 data: Dict[str, Any] = json.load(f)
-            self.validate_ledger_data(data=data)
+            self.validate_data(data=data)
             self.ledger_data[section_name] = data[section_name]
 
             signals.configSectionChanged.emit(section_name)
@@ -873,7 +935,7 @@ class SettingsAPI(ConfigPaths):
         logging.debug('Saving all settings.')
         original_ledger_data: Dict[str, Any] = copy.deepcopy(self.ledger_data)
         try:
-            self.validate_ledger_data()
+            self.validate_data()
             with self.ledger_path.open('w', encoding='utf-8') as f:
                 json.dump(self.ledger_data, f, indent=4, ensure_ascii=False)
         except (ValueError, TypeError) as e:
