@@ -382,18 +382,18 @@ def _verify_sheet_access() -> Any:
         # No response from Sheets API: service unavailable
         raise status.ServiceUnavailableException('No result returned from the Sheets API.')
 
-    worksheet_name: Optional[str] = config.get('worksheet', None)
-    if not worksheet_name:
+    sheet_name: Optional[str] = config.get('sheet', None)
+    if not sheet_name:
         raise status.SpreadsheetWorksheetNotConfiguredException
 
     sheet: Optional[Dict[str, Any]] = next(
         (s for s in result.get('sheets', [])
-         if s.get('properties', {}).get('title', '') == worksheet_name), None)
+         if s.get('properties', {}).get('title', '') == sheet_name), None)
     if not sheet:
         raise status.WorksheetNotFoundException(
-            f'Worksheet "{worksheet_name}" not found in spreadsheet "{spreadsheet_id}".')
+            f'Sheet "{sheet_name}" not found in spreadsheet "{spreadsheet_id}".')
 
-    logging.debug(f'Worksheet "{worksheet_name}" found in spreadsheet "{spreadsheet_id}".')
+    logging.debug(f'Sheet "{sheet_name}" found in spreadsheet "{spreadsheet_id}".')
     return service
 
 
