@@ -4,6 +4,7 @@ Provides methods to authenticate, fetch, and verify Google Sheets data (headers,
 using asynchronous workers and progress dialogs.
 """
 
+import functools
 import logging
 import socket
 import ssl
@@ -360,6 +361,14 @@ def _verify_sheet_access() -> Any:
                 f'Access denied (HTTP 403) for spreadsheet "{spreadsheet_id}". '
                 'Please share the sheet with your authenticated Google account.'
             ) from ex
+        elif stat == 401:
+            raise status.AuthenticationExceptionException(
+                f'Authentication error (HTTP 401) for spreadsheet "{spreadsheet_id}".'
+            ) from ex
+        elif stat == 429:
+            raise status.ServiceUnavailableException(
+                f'Rate limit exceeded (HTTP 429) for spreadsheet "{spreadsheet_id}".'
+            ) from ex
         else:
             raise status.ServiceUnavailableException(
                 f'Error accessing spreadsheet "{spreadsheet_id}": {ex}'
@@ -689,6 +698,59 @@ def fetch_categories(total_timeout: int = TOTAL_TIMEOUT) -> List[str]:
     """
     return start_asynchronous(_fetch_categories, total_timeout=total_timeout, status_text='Fetching categories.')
 
+
+def service_request(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Decorator to wrap Google Sheets API calls and map errors uniformly.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except HttpError as ex:
+            code = ex.resp.status if ex.resp else None
+            if code == 401:
+                raise status.AuthenticationExceptionException(str(ex)) from ex
+            if code in (403, 404):
+                raise status.ServiceUnavailableException(str(ex)) from ex
+            if code == 429:
+                raise status.ServiceUnavailableException("Rate limit exceeded",) from ex
+            # Other HttpError codes
+            raise status.ServiceUnavailableException(str(ex)) from ex
+        except (socket.timeout, ssl.SSLError) as ex:
+            raise status.ServiceUnavailableException(str(ex)) from ex
+        except Exception as ex:
+            raise status.UnknownException(str(ex)) from ex
+    return wrapper
+
+# Helper to execute any Sheets API request with uniform error handling
+@service_request
+def _execute_request(callable_fn: Callable[[], Any]) -> Any:
+    """Executes a Sheets API call and applies uniform error handling via the service_request decorator."""
+    return callable_fn()
+
+# Batch-get and batch-update helpers using unified error handling
+@service_request
+def batch_get_values(spreadsheet_id: str, ranges: List[str], valueRenderOption: str = 'UNFORMATTED_VALUE',
+                     dateTimeRenderOption: str = 'SERIAL_NUMBER', fields: str = 'valueRanges(values)') -> Dict[str, Any]:
+    """Fetch multiple ranges from a sheet with uniform error handling."""
+    svc = get_service()
+    return svc.spreadsheets().values().batchGet(
+        spreadsheetId=spreadsheet_id,
+        ranges=ranges,
+        valueRenderOption=valueRenderOption,
+        dateTimeRenderOption=dateTimeRenderOption,
+        fields=fields
+    ).execute()
+
+@service_request
+def batch_update_values(spreadsheet_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Update multiple cells in a sheet with uniform error handling."""
+    svc = get_service()
+    return svc.spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body=body
+    ).execute()
 
 def start_asynchronous(func: Callable[..., Any], *args: Any, total_timeout: int = TOTAL_TIMEOUT,
                        status_text: str = 'Fetching data.', **kwargs: Any) -> Any:
