@@ -22,7 +22,7 @@ def open_spreadsheet() -> None:
 
     try:
         spreadsheet_id: str = config['id']
-        sheet_name: str = config['worksheet']
+        sheet_name: str = config.get('sheet', '')
     except Exception as ex:
         logging.error(f'Error retrieving spreadsheet config: {ex}')
         QtWidgets.QMessageBox.critical(None, 'Error', 'Invalid spreadsheet configuration.')
