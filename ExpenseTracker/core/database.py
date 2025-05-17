@@ -38,7 +38,7 @@ META_SCHEMA: Dict[str, str] = {
     'last_sync': 'TEXT',
     'state': 'TEXT',
     'spreadsheet_id': 'TEXT',
-    'worksheet': 'TEXT',
+    'sheet': 'TEXT',
 }
 
 
@@ -281,8 +281,8 @@ class DatabaseAPI(QtCore.QObject):
                 cfg_sheet = config.get('worksheet', '')
 
                 conn.execute(
-                    f"""INSERT INTO {Table.Meta.value} (meta_id, state, last_sync, spreadsheet_id, worksheet) VALUES (1, ?, ?, ?, ?)""",
-                    # meta_id=1, last_sync, spreadsheet_id, worksheet
+                    f"""INSERT INTO {Table.Meta.value} (meta_id, state, last_sync, spreadsheet_id, sheet) VALUES (1, ?, ?, ?, ?)""",
+                    # meta_id=1, last_sync, spreadsheet_id, sheet
                     (CacheState.Uninitialized.name, now_str(), cfg_id, cfg_sheet)
                 )
                 conn.commit()
@@ -395,7 +395,7 @@ class DatabaseAPI(QtCore.QObject):
             # Attempt to read metadata; catch missing columns in older schemas
             try:
                 meta_row = conn.execute(
-                    f"""SELECT spreadsheet_id, worksheet, last_sync FROM {Table.Meta.value} WHERE meta_id=1"""
+                    f"""SELECT spreadsheet_id, sheet, last_sync FROM {Table.Meta.value} WHERE meta_id=1"""
                 ).fetchone()
             except sqlite3.OperationalError as e:
                 logging.warning(f'Metadata table schema outdated or missing columns {e}' )
@@ -553,21 +553,21 @@ class DatabaseAPI(QtCore.QObject):
                     f"""ALTER TABLE {Table.Meta.value} ADD COLUMN \"spreadsheet_id\" TEXT DEFAULT ''"""
                 )
                 added.append('spreadsheet_id')
-            if 'worksheet' not in existing:
+            if 'sheet' not in existing:
                 conn.execute(
-                    f"""ALTER TABLE {Table.Meta.value} ADD COLUMN \"worksheet\" TEXT DEFAULT ''"""
+                    f"""ALTER TABLE {Table.Meta.value} ADD COLUMN \"sheet\" TEXT DEFAULT ''"""
                 )
-                added.append('worksheet')
+                added.append('sheet')
             if added:
                 conn.commit()
                 logging.info(f'Added missing metadata columns: {added}')
             # Update last sync timestamp and identifiers
             config = lib.settings.get_section('spreadsheet')
             spreadsheet_id = config.get('id', '')
-            worksheet = config.get('worksheet', '')
+            sheet = config.get('worksheet', '')
             conn.execute(
-                f"""UPDATE {Table.Meta.value} SET last_sync=?, spreadsheet_id=?, worksheet=? WHERE meta_id=1""",
-                (now_str(), spreadsheet_id, worksheet)
+                f"""UPDATE {Table.Meta.value} SET last_sync=?, spreadsheet_id=?, sheet=? WHERE meta_id=1""",
+                (now_str(), spreadsheet_id, sheet)
             )
             conn.commit()
         finally:
