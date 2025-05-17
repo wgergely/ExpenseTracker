@@ -5,8 +5,8 @@
   },
   "headers": [],
   "metadata": {
-    "name": "Default Ledger",
-    "description": "Default ledger configuration",
+    "name": "",
+    "description": "",
     "locale": "en_GB",
     "summary_mode": "total",
     "hide_empty_categories": true,
