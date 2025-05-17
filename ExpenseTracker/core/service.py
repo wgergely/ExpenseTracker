@@ -300,19 +300,25 @@ def _query_sheet_size(service: Any, spreadsheet_id: str, worksheet_name: str) ->
     Raises:
         WorksheetNotFoundException: If the worksheet doesn't exist.
     """
-    result: Dict[str, Any] = service.spreadsheets().get(
-        spreadsheetId=spreadsheet_id,
-        fields='sheets(properties(title,gridProperties(rowCount,columnCount)))'
-    ).execute()
+    # Retrieve only populated values to determine actual dimensions
+    try:
+        resp: Dict[str, Any] = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=worksheet_name,
+            valueRenderOption='UNFORMATTED_VALUE'
+        ).execute()
+    except Exception as ex:
+        raise status.ServiceUnavailableException(f'Error querying sheet values: {ex}') from ex
 
-    sheet: Optional[Dict[str, Any]] = next(
-        (s for s in result.get('sheets', [])
-         if s.get('properties', {}).get('title', '') == worksheet_name), None)
-    if not sheet:
-        raise status.WorksheetNotFoundException(f'Worksheet "{worksheet_name}" not found.')
-    grid_props: Dict[str, Any] = sheet.get('properties', {}).get('gridProperties', {})
-    row_count: int = grid_props.get('rowCount', 0)
-    column_count: int = grid_props.get('columnCount', 0)
+    data_rows: list = resp.get('values', []) or []
+    if not data_rows:
+        # No data at all: treat as empty sheet
+        return 0, 0
+
+    # Number of rows includes header and data rows
+    row_count: int = len(data_rows)
+    # Number of columns is the width of the first row (header)
+    column_count: int = len(data_rows[0])
     return row_count, column_count
 
 
@@ -395,7 +401,6 @@ def _verify_headers(remote_headers: List[str] = None) -> Set[str]:
     Verify the headers of the remote spreadsheet against the local configuration.
     """
     from ..settings import lib
-    from ..settings.lib import HeaderRole
 
     # Load configured headers list
     headers_list = lib.settings.get_section('headers')
