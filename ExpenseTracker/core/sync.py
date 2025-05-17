@@ -172,9 +172,9 @@ class SyncAPI(QtCore.QObject):
 
         logging.info(f'Starting commit of {len(self._queue)} queued edit(s)')
         try:
-            service = service._verify_sheet_access()
+            svc = service._verify_sheet_access()
             row_count, col_count = service._query_sheet_size(
-                service, self.sheet_id, self.worksheet
+                svc, self.sheet_id, self.worksheet
             )
             # Sheet row_count includes header, data_rows is just data
             data_rows = max(row_count - 1, 0)
@@ -228,13 +228,13 @@ class SyncAPI(QtCore.QObject):
                 return results
 
             payload = self._build_update_payload(to_update, header_to_idx)
-            service.spreadsheets().values().batchUpdate(
+            svc.spreadsheets().values().batchUpdate(
                 spreadsheetId=self.sheet_id, body=payload
             ).execute()
             logging.info(
                 f'Successfully pushed {len(to_update)} edit(s) to remote sheet.'
             )
-            # Record successful update for each matched operation
+            # Record a successful update for each matched operation
             for op, _ in to_update:
                 results[(op.local_id, op.column)] = (True, 'Committed successfully')
 
@@ -443,7 +443,7 @@ class SyncAPI(QtCore.QObject):
 
     def _fetch_stable_data(
             self,
-            service: Any,  # Google Sheets API service instance
+            svc: Any,  # Google Sheets API service instance
             stable_map: Dict[str, List[str]],  # Logical field -> list of actual remote headers
             header_to_idx: Dict[str, int],  # Actual remote header -> column index
             total_row_count: int,  # Total rows in sheet (incl. header)
@@ -452,7 +452,7 @@ class SyncAPI(QtCore.QObject):
         """Fetch and normalize data for stable key columns from the remote sheet.
 
         Args:
-            service: Authorized Google Sheets API service instance.
+            svc: Authorized Google Sheets API service instance.
             stable_map: Mapping from logical stable field to list of its actual remote header names.
             header_to_idx: Mapping from actual remote header name to its zero-based column index.
             total_row_count: Total number of rows in the sheet, including the header.
@@ -480,7 +480,7 @@ class SyncAPI(QtCore.QObject):
             return {}
 
         logging.debug(f'Fetching stable data from ranges: {ranges_to_fetch}')
-        batch_get_result = service.spreadsheets().values().batchGet(
+        batch_get_result = svc.spreadsheets().values().batchGet(
             spreadsheetId=self.sheet_id,
             ranges=ranges_to_fetch,
             valueRenderOption='UNFORMATTED_VALUE',  # Get raw, unformatted values
