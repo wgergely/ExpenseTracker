@@ -21,7 +21,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         super().__init__(parent=parent)
 
         self.id_editor = None
-        self.worksheet_editor = None
+        self.sheet_editor = None
 
         self.text_changed_timer = QtCore.QTimer(self)
         self.text_changed_timer.setSingleShot(True)
@@ -47,9 +47,9 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         self.id_editor.setPlaceholderText('e.g. "1a2b3c4d5e6f7g8h9i0j"')
         self.layout().addRow('Spreadsheet Id', self.id_editor)
 
-        self.worksheet_editor = QtWidgets.QLineEdit(self)
-        self.worksheet_editor.setPlaceholderText('e.g. "Sheet1"')
-        self.layout().addRow('Worksheet', self.worksheet_editor)
+        self.sheet_editor = QtWidgets.QLineEdit(self)
+        self.sheet_editor.setPlaceholderText('e.g. "Sheet1"')
+        self.layout().addRow('Sheet', self.sheet_editor)
 
         self.layout().setAlignment(QtCore.Qt.AlignTop)
 
@@ -98,7 +98,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         signals.configSectionChanged.connect(on_section_changed)
 
         self.id_editor.textChanged.connect(self.text_changed_timer.start)
-        self.worksheet_editor.textChanged.connect(self.text_changed_timer.start)
+        self.sheet_editor.textChanged.connect(self.text_changed_timer.start)
 
         self.text_changed_timer.timeout.connect(self.verify_id)
         self.text_changed_timer.timeout.connect(self.save_section)
@@ -114,7 +114,7 @@ class SpreadsheetEditor(QtWidgets.QWidget):
     def get_current_section_data(self):
         return {
             'id': self.id_editor.text(),
-            'worksheet': self.worksheet_editor.text(),
+            'sheet': self.sheet_editor.text(),
         }
 
     @QtCore.Slot()
@@ -127,7 +127,14 @@ class SpreadsheetEditor(QtWidgets.QWidget):
             logging.warning('No data found in the spreadsheet section.')
 
         for k in data.keys():
-            editor = getattr(self, f'{k}_editor', None)
+            # Map 'sheet' key to sheet_editor
+            editor = None
+            if k == 'id':
+                editor = self.id_editor
+            elif k == 'sheet':
+                editor = self.sheet_editor
+            else:
+                editor = getattr(self, f'{k}_editor', None)
             if not editor:
                 logging.warning(f'Editor for "{k}" not found.')
                 continue
@@ -151,5 +158,6 @@ class SpreadsheetEditor(QtWidgets.QWidget):
         if not result:
             return
 
-        logging.debug(f'Extracted ID: {result}')
         self.id_editor.setText(result)
+         
+        logging.debug(f'Extracted ID: {result}')
