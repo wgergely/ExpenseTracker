@@ -12,11 +12,15 @@ This package provides:
 Use :func:`ExpenseTracker.exec_` to launch the application.
 """
 
-import logging
 import os
 import pathlib
+import sys
 
 from PySide6 import QtCore
+
+# Fail on Python < 3.11
+if not (sys.version_info.major == 3 and sys.version_info.minor >= 11):
+    raise RuntimeError('ExpenseTracker requires Python 3.11 or higher.')
 
 __version__ = '0.0.0'
 __author__ = 'Gergely Wootsch'
